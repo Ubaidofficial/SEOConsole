@@ -10,6 +10,8 @@
 	const tabOf = (t: string) => SITE_TABS.find(([p]) => p === t)!;
 	import Delta from '$lib/components/Delta.svelte';
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
+	import AuthorityBadges from '$lib/components/AuthorityBadges.svelte';
+	import AuthorityCredit from '$lib/components/AuthorityCredit.svelte';
 	import { fmtInt, fmtPct, fmtPos, ago } from '$lib/format';
 
 	let { data, children } = $props();
@@ -52,12 +54,13 @@
 	<SiteAvatar name={data.site.label || data.site.name} siteId={data.site.id} class="pii mt-1 !size-9 !rounded-lg !text-sm" />
 	<div class="min-w-0">
 		<div class="text-xs text-muted-foreground"><a href="/" class="hover:underline">All sites</a> / <span class="pii">{data.account.label ?? data.account.email}</span></div>
-		<h1 class="pii truncate text-lg font-semibold">{data.site.label || data.site.name}</h1>
+		<div class="flex min-w-0 items-center gap-2"><h1 class="pii truncate text-lg font-semibold">{data.site.label || data.site.name}</h1><AuthorityBadges authority={data.site.authority} /></div>
 		<div class="text-xs text-muted-foreground">
 			<span class="pii">{data.site.url}</span> · {data.period.start} → {data.period.end}
 			· {#if data.site.syncStatus === 'running' || data.site.syncStatus === 'queued'}{data.site.syncStatus}…{:else if data.site.syncStatus === 'error'}<span class="text-bad">sync error: {data.site.syncMessage}</span>{:else}synced {ago(data.site.lastSync)}{/if}
 			{#if !data.site.backfillDone && data.site.syncedThrough} · backfilling history (back to {data.site.backfilledTo}){/if}
 		</div>
+		{#if data.site.authority.dr || data.site.authority.da}<div class="text-[11px] text-muted-foreground"><AuthorityCredit dr={!!data.site.authority.dr} da={!!data.site.authority.da} /></div>{/if}
 	</div>
 	<div class="ml-auto flex flex-wrap items-center gap-3">
 		<PeriodPicker days={data.days} />

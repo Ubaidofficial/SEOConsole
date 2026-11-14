@@ -496,3 +496,21 @@ export function demoCruxFetch(): typeof fetch {
 		);
 	}) as typeof fetch;
 }
+
+/** Demo Ahrefs: a fetch stand-in answering the free Domain Rating batch shape, like the real service with a trailing slash on each target. */
+export function demoAhrefsFetch(): typeof fetch {
+	return (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const { targets = [] } = JSON.parse(String(init?.body ?? '{}')) as { targets?: string[] };
+		const rows = targets.map((t) => ({ target: `${t.replace(/\/+$/, '')}/`, domain_rating: Math.round((8 + h01(hostKey(t), 'dr') * 77) * 10) / 10 }));
+		return new Response(JSON.stringify({ domain_rating: { targets: rows, license: 'http://ahrefs.com/legal/domain-rating-license' } }), { status: 200, headers: { 'content-type': 'application/json' } });
+	}) as typeof fetch;
+}
+
+/** Demo Moz: a fetch stand-in answering the url_metrics shape, with a steady made-up score per domain. */
+export function demoMozFetch(): typeof fetch {
+	return (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const { targets = [] } = JSON.parse(String(init?.body ?? '{}')) as { targets?: string[] };
+		const results = targets.map((t) => ({ page: `${t.replace(/\/+$/, '')}/`, domain_authority: Math.round(5 + h01(hostKey(t), 'da') * 80) }));
+		return new Response(JSON.stringify({ results }), { status: 200, headers: { 'content-type': 'application/json' } });
+	}) as typeof fetch;
+}
