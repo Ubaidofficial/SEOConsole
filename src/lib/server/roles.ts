@@ -93,6 +93,7 @@ export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
 	'/sites/[id]/settings': { save: A, resync: A, removeProperty: A },
 	'/sites/[id]/queries': { oseoVolumes: E },
 	'/sites/[id]/opportunities': { oseoPreview: E, oseoTrack: E },
+	'/sites/[id]/tags': { repairPlan: E, repairApply: A },
 	'/sites/[id]/sitemaps': { lastmodCompare: E, check: E, robotsCheck: E, submit: E, delete: E },
 	'/sites/[id]/submit': { preset: E, submit: E, sitemapSubmit: E, sitemapResubmit: E, sitemapCheck: E, refreshQuota: E, clearQueue: E, check: E },
 	'/sites/[id]/tests': { create: E, remove: E }

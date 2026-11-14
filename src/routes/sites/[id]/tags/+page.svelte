@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ago } from '$lib/format';
-	let { data } = $props();
+	import TagIdRepair from '$lib/components/TagIdRepair.svelte';
+	let { data, form } = $props();
 	const tone = { critical: 'text-bad', warning: 'text-warn', info: 'text-muted-foreground' } as const;
 	const icon = { critical: '✕', warning: '⚠', info: 'ℹ' } as const;
 </script>
@@ -20,6 +21,7 @@
 		· GA4 organic sessions: <b>{data.window.ga4 == null ? 'not available' : data.window.ga4.toLocaleString('en-US')}</b>.
 		These are prompts to look, not proof of a problem.
 	</p>
+	<TagIdRepair repair={data.repair} {form} />
 	{#if data.findings.length}
 		<ul class="space-y-2 text-sm">
 			{#each data.findings as f (f.id)}

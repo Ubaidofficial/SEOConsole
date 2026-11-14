@@ -12,6 +12,10 @@ import { claritySnippet } from '../clarityinstall';
 export const DEMO_CLARITY_ID = 'gl4demo7x2';
 /** Demo containers that "installed" Clarity through SEOConsole (container path -> project ID), until the server restarts. */
 export const demoInstalled = new Map<string, string>();
+/** Containers whose malformed Google tag the demo Tag ID repair has fixed, and the ID it was given. */
+export const demoRepaired = new Map<string, string>();
+/** The planted demo problem: a whole pasted gtag.js snippet where a Google tag's ID belongs (coffeelab). */
+export const DEMO_PASTED_TAG = `<!-- Google tag (gtag.js) --> <script async src="https://www.googletagmanager.com/gtag/js?id=G-DEMOCOFFEE1"></script> <script>   window.dataLayer = window.dataLayer || [];   function gtag(){dataLayer.push(arguments);}   gtag('js', new Date());    gtag('config', 'G-DEMOCOFFEE1'); </script>`;
 /** What the demo "Set up GA4 & Tag Manager" created, until the server restarts: properties, containers, and the GA4 tag put in a container (path -> measurement ID). */
 export const demoSetup = { ga4: [] as { accountSub: string; prop: Ga4Property; url: string }[], containers: [] as GtmContainer[], ga4Tags: new Map<string, string>() };
 
@@ -89,7 +93,8 @@ const hostOfDemo = (siteUrl: string) => (siteUrl.startsWith('sc-domain:') ? site
 /**
  * Demo Tag Manager containers, one per demo site except northwind (no container, so the "unmatched" path is visible).
  * Planted problems, like the other demo data: pixelforge sends to the wrong GA4 ID and has a paused tag, trailmaps was
- * never published, ledgerly still has a Universal Analytics tag and no GA4 tag, coffeelab has a tag with no trigger.
+ * never published, ledgerly still has a Universal Analytics tag and no GA4 tag, coffeelab has a tag with no trigger and a Google tag whose
+ * Tag ID field holds a whole pasted snippet (the Tag ID repair fixes that one).
  */
 export function demoGtmContainers(): GtmContainer[] {
 	return [...demoBaseContainers(), ...demoSetup.containers];
@@ -130,11 +135,15 @@ export function demoGtmLive(containerPath: string): GtmLive | null {
 		{ id: '3', name: 'Form submit', type: 'formSubmission' }
 	];
 	const tag = (id: string, name: string, type: string, o: Partial<GtmLive['tags'][number]> = {}) => ({ id, name, type, paused: false, firing: ['All Pages'], blocking: [], measurementId: null, eventName: null, ...o });
+	const fixedId = demoRepaired.get(containerPath);
+	const googleTag = brand === 'coffeelab' && !fixedId
+		? tag('1', 'Google tag', 'googtag', { measurementId: null, badTagId: DEMO_PASTED_TAG.replace(/\s+/g, ' ').trim().slice(0, 120), suggestedId: 'G-DEMOCOFFEE1' })
+		: tag('1', 'Google tag', 'googtag', { measurementId: fixedId ?? mid });
 	const tags: GtmLive['tags'] =
 		brand === 'ledgerly'
 			? [tag('1', 'UA - pageview', 'ua'), tag('2', 'Cookie banner', 'html')]
 			: [
-					tag('1', 'Google tag', 'googtag', { measurementId: mid }),
+					googleTag,
 					tag('2', 'GA4 - outbound click', 'gaawe', { firing: ['Click: outbound link'], measurementId: mid, eventName: 'outbound_click' }),
 					tag('3', 'GA4 - lead form', 'gaawe', { firing: ['Form submit'], measurementId: mid, eventName: 'generate_lead' }),
 					...(brand === 'pixelforge' ? [tag('4', 'Old remarketing', 'sp', { paused: true })] : []),

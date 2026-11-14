@@ -110,6 +110,10 @@ const MEASUREMENT_ID = /^G-[A-Z0-9]{4,}$/;
 /** Every kind of ID a Google tag's ID field may legitimately hold (measurement, Google tag, Ads, Floodlight, old Analytics). */
 const ID_LIKE = /^(G|GT|AW|DC|UA)-[A-Z0-9-]{3,}$/i;
 const VARIABLE_REF = /^\{\{.+\}\}$/;
+/** The ID parameters a Google tag / GA4 tag may keep its ID in, in the order the reader tries them. */
+export const GA_ID_KEYS = ['tagId', 'measurementId', 'measurementIdOverride'] as const;
+/** True for a value that is neither an ID nor a variable reference: text that cannot work as an ID (for example a pasted snippet). */
+export const isBadTagIdValue = (v: string) => !VARIABLE_REF.test(v.trim()) && !ID_LIKE.test(v.trim());
 export const GA4_TAG_TYPES = new Set(['googtag', 'gaawc', 'gaawe']);
 
 const param = (item: RawItem, ...keys: string[]) => {
@@ -140,8 +144,8 @@ export function summarizeVersion(v: RawVersion): GtmLive {
 		// Community templates are identified by name only: their parameter names are the template author's choice.
 		const clarity = html ? html.clarityLoader : type.startsWith('cvt_') && /clarity/i.test(t.name ?? '');
 		const templateId = clarity && !html ? (t.parameter ?? []).map((p) => p.value ?? '').find((v) => /^[a-z0-9]{8,12}$/.test(v)) ?? null : null;
-		const rawId = ga ? param(t, 'tagId', 'measurementId', 'measurementIdOverride') : null;
-		const bad = rawId && !VARIABLE_REF.test(rawId.trim()) && !ID_LIKE.test(rawId.trim()) ? rawId : null;
+		const rawId = ga ? param(t, ...GA_ID_KEYS) : null;
+		const bad = rawId && isBadTagIdValue(rawId) ? rawId : null;
 		return {
 			id: t.tagId ?? '',
 			name: t.name ?? t.tagId ?? '(unnamed)',
