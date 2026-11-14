@@ -4,7 +4,8 @@ import { config } from './config';
 import { linksFor } from './links';
 import { gtmSourceFor } from './channels';
 import { claritySnippet, parseClarityId } from '../clarityinstall';
-import { demoInstalled } from './demo-channels';
+import { DEMO_PASTED_TAG, demoInstalled, demoRepaired } from './demo-channels';
+import { GA_ID_KEYS, isBadTagIdValue, type GtmSource } from './gtm';
 
 /**
  * Writing to Tag Manager: adding Microsoft Clarity (this file's plan/install pair), and, for "Set up GA4 & Tag Manager" (setup.ts), creating
@@ -17,9 +18,13 @@ import { demoInstalled } from './demo-channels';
  * container's newest version is the live one (otherwise publishing would also push someone else's unpublished version).
  * Every change is shown first and needs a confirming click.
  *
- * The Tag Manager API v2 calls below (workspaces.create, tags.create, workspaces.create_version, versions.publish,
+ * A third write, "Fix the Tag ID" (planTagIdRepair / repairTagIdViaGtm), edits ONE parameter of an existing Google tag whose Tag ID field holds
+ * something that is not an ID (a whole pasted gtag.js snippet is the usual case): same new workspace, same publish rule, same preview and confirmation.
+ * It changes nothing else in the tag, and refuses if the tag no longer has a malformed ID when it is read inside the new workspace.
+ *
+ * The Tag Manager API v2 calls below (workspaces.create, tags.create, tags.get, tags.update, workspaces.create_version, versions.publish,
  * version_headers.latest) and the built-in All Pages trigger ID are from my knowledge of the API and were NOT checked against a
- * live account here; check the first real install in Tag Manager.
+ * live account here; check the first real use in Tag Manager.
  */
 const BASE = 'https://tagmanager.googleapis.com/tagmanager/v2';
 export const SCOPE_GTM_EDIT = 'https://www.googleapis.com/auth/tagmanager.edit.containers';
@@ -41,7 +46,16 @@ export interface GtmWriter {
 	publish(version: string): Promise<{ versionId: string; compilerError: boolean }>;
 }
 
-export function realGtmWriter(accountId: number, http: HttpOptions = {}): GtmWriter {
+/** A tag as the Tag Manager API returns it. Only `parameter` is read here; everything else is sent back untouched. */
+export interface RawTag { tagId?: string; name?: string; type?: string; fingerprint?: string; parameter?: { type?: string; key?: string; value?: string }[]; [k: string]: unknown }
+
+/** What the Tag ID repair needs on top of a writer: read one tag from a workspace and write it back. (Separate so the install flows' writers stay as they were.) */
+export interface GtmTagEditor extends GtmWriter {
+	getTag(workspace: string, tagId: string): Promise<RawTag>;
+	updateTag(workspace: string, tagId: string, tag: RawTag): Promise<void>;
+}
+
+export function realGtmWriter(accountId: number, http: HttpOptions = {}): GtmTagEditor {
 	const call = <T>(url: string, init?: RequestInit) => googleJson<T>(() => accessToken(accountId), url, init, http);
 	const post = <T>(url: string, body: object) => call<T>(url, { method: 'POST', body: JSON.stringify(body) });
 	return {
@@ -69,19 +83,30 @@ export function realGtmWriter(accountId: number, http: HttpOptions = {}): GtmWri
 		async publish(version) {
 			const r = await post<{ compilerError?: boolean; containerVersion?: { containerVersionId?: string } }>(`${BASE}/${version}:publish`, {});
 			return { versionId: r.containerVersion?.containerVersionId ?? '', compilerError: !!r.compilerError };
+		},
+		async getTag(workspace, tagId) {
+			return call<RawTag>(`${BASE}/${workspace}/tags/${encodeURIComponent(tagId)}`);
+		},
+		async updateTag(workspace, tagId, tag) {
+			// tags.update is a PUT of the whole tag; the fingerprint query parameter makes Tag Manager refuse the write if the tag changed since it was read.
+			const q = tag.fingerprint ? `?fingerprint=${encodeURIComponent(tag.fingerprint)}` : '';
+			await call<RawTag>(`${BASE}/${workspace}/tags/${encodeURIComponent(tagId)}${q}`, { method: 'PUT', body: JSON.stringify(tag) });
 		}
 	};
 }
 
 /** Demo: pretends to succeed; demoInstalled remembers the tag, so the demo container shows it afterwards. */
-export function demoGtmWriter(): GtmWriter {
+export function demoGtmWriter(): GtmTagEditor {
 	let n = 0;
 	return {
 		latestVersionId: async () => '12',
 		createWorkspace: async (c) => ({ path: `${c}/workspaces/${90 + ++n}`, workspaceId: String(90 + n) }),
 		createTag: async () => ({ tagId: '99' }),
 		createVersion: async (w) => ({ path: w.replace(/workspaces\/\d+$/, 'versions/13'), versionId: '13', compilerError: false }),
-		publish: async () => ({ versionId: '13', compilerError: false })
+		publish: async () => ({ versionId: '13', compilerError: false }),
+		// the demo's malformed tag: a Google tag with a whole pasted snippet where the ID belongs
+		getTag: async (_w, tagId) => ({ tagId, name: 'Google tag', type: 'googtag', fingerprint: 'demo', parameter: [{ type: 'template', key: 'tagId', value: DEMO_PASTED_TAG }] }),
+		updateTag: async (w, _id, tag) => void demoRepaired.set(w.replace(/\/workspaces\/\d+$/, ''), tag.parameter?.find((p) => p.key === 'tagId')?.value ?? '')
 	};
 }
 
@@ -209,7 +234,10 @@ export interface WorkspaceInstall {
 	isDemo: boolean;
 	container: string;
 	publicId: string;
-	tag: object;
+	/** The tag to add. Not used when `apply` is given. */
+	tag?: object;
+	/** Instead of adding a tag: change what is in the new workspace (the Tag ID repair edits an existing tag here). */
+	apply?: (ws: { path: string; workspaceId: string }) => Promise<void>;
 	/** Names the audit entries: `${audit}_prepared`, `${audit}_published`, `${audit}_failed`. */
 	audit: string;
 	workspaceName: string;
@@ -228,7 +256,8 @@ export async function installTagViaWorkspace(writer: GtmWriter, w: WorkspaceInst
 	const ui = (ws: string) => `https://tagmanager.google.com/#/container/accounts/${accountNum}/containers/${containerNum}/workspaces/${ws}`;
 	try {
 		const ws = await writer.createWorkspace(w.container, w.workspaceName, w.workspaceDescription);
-		await writer.createTag(ws.path, w.tag);
+		if (w.apply) await w.apply(ws);
+		else await writer.createTag(ws.path, w.tag!);
 		w.onTag?.();
 		if (mode === 'workspace') {
 			audit(`${w.audit}_prepared`, { siteId: w.siteId, accountId: w.accountId, detail: `${w.publicId}: tag in workspace ${ws.workspaceId}, not published` });
@@ -276,6 +305,130 @@ export async function installClarityViaGtm(siteId: number, input: string, mode: 
 			onTag: () => {
 				if (ctx.acc.is_demo) demoInstalled.set(plan.container!.path, plan.projectId!);
 			}
+		},
+		mode
+	);
+}
+
+
+// ── Fix a Google tag's Tag ID ────────────────────────────────────────────────
+const MEASUREMENT_ID = /^G-[A-Z0-9]{4,}$/;
+
+/**
+ * The tag with its one malformed ID parameter replaced by `newId`; every other parameter, and everything else on the tag, is left exactly as
+ * it was. The parameter changed is the one the container reader sees (the first of tagId, measurementId, measurementIdOverride that has a
+ * value). Throws, without changing anything, when that value is a real ID or a variable after all: the tag was edited since it was checked.
+ */
+export function repairedTag(tag: RawTag, newId: string): { tag: RawTag; key: string; was: string } {
+	const params = tag.parameter ?? [];
+	let i = -1;
+	for (const key of GA_ID_KEYS) {
+		i = params.findIndex((p) => p.key === key && !!p.value);
+		if (i >= 0) break;
+	}
+	if (i < 0 || !isBadTagIdValue(params[i].value!)) throw new Error('This tag no longer has a malformed ID, so it was changed after it was checked. Nothing was edited.');
+	return { tag: { ...tag, parameter: params.map((p, j) => (j === i ? { ...p, value: newId } : p)) }, key: params[i].key!, was: params[i].value! };
+}
+
+export interface RepairTag {
+	/** Tag Manager's own ID for the tag (not the measurement ID) */
+	tagId: string;
+	name: string;
+	type: string;
+	/** what is in the ID field now, whitespace squashed and cut to 120 characters */
+	current: string;
+	paused: boolean;
+	firing: string[];
+	/** IDs the tag could be given: the one found inside the pasted text, and the linked GA4 property's */
+	candidates: { id: string; from: 'inside' | 'property' }[];
+	/** The one to preselect, or null when the choice is not obvious (the ID inside differs from the linked property's). */
+	recommended: string | null;
+}
+export interface RepairPlan {
+	ok: boolean;
+	error?: string;
+	needsGrant?: boolean;
+	container?: { path: string; publicId: string; name: string };
+	tags?: RepairTag[];
+	canPublish?: boolean;
+	publishBlocked?: string;
+}
+
+/** Why publishing is or is not safe: only when the newest version is the live one, otherwise it would put someone else's unpublished version live too. */
+const publishGuard = (liveId: string | null, latest: string | null) => {
+	const canPublish = !!liveId && latest === liveId;
+	return { canPublish, publishBlocked: canPublish ? undefined : !liveId ? 'The container has never been published, so publishing now would put everything in it live for the first time.' : `The container has a newer version (${latest}) than the live one (${liveId}). Publishing would put that version live too, so SEOConsole only prepares the fix for you to publish.` };
+};
+
+/** What the repair would change and which IDs it could use, read live from Tag Manager, without changing anything. */
+export async function planTagIdRepair(siteId: number, o: { writer?: GtmWriter; source?: GtmSource; ga4Ids?: string[] } = {}): Promise<RepairPlan> {
+	if (config.readOnly) return { ok: false, error: 'This server runs with READ_ONLY=1, so it never changes Tag Manager.' };
+	const ctx = context(siteId);
+	if ('error' in ctx) return { ok: false, error: ctx.error };
+	if (!hasGtmWrite(ctx.acc)) return { ok: false, needsGrant: true, error: 'SEOConsole can read this container but not edit it yet.' };
+	const src = o.source ?? gtmSourceFor(ctx.acc.id);
+	const [containers, live] = await Promise.all([src.listContainers(), src.liveVersion(ctx.link.external_id)]);
+	const c = containers.find((x) => x.path === ctx.link.external_id);
+	const container = { path: ctx.link.external_id, publicId: c?.publicId ?? ctx.link.label ?? ctx.link.external_id, name: c?.name ?? '' };
+	if (!live) return { ok: false, error: 'The container has never been published, so there is no live tag to fix.', container };
+	const bad = live.tags.filter((t) => ['googtag', 'gaawc', 'gaawe'].includes(t.type) && t.badTagId);
+	if (!bad.length) return { ok: false, error: 'No Google tag in the live container has a malformed Tag ID (it may already be fixed).', container };
+	const snap = db().prepare('SELECT ga4_measurement_ids g FROM gtm_snapshots WHERE site_id = ?').get(siteId) as { g: string } | undefined;
+	const propIds = (o.ga4Ids ?? (snap ? (JSON.parse(snap.g) as string[]) : [])).map((x) => x.toUpperCase()).filter((x) => MEASUREMENT_ID.test(x));
+	const tags: RepairTag[] = bad.map((t) => {
+		const candidates: RepairTag['candidates'] = [];
+		if (t.suggestedId) candidates.push({ id: t.suggestedId, from: 'inside' });
+		for (const id of propIds) if (!candidates.some((x) => x.id === id)) candidates.push({ id, from: 'property' });
+		// Preselect only when it is clear: the ID inside the text is the linked property's (or there is no property to compare with), or there is no ID inside and one property.
+		const recommended = t.suggestedId ? (!propIds.length || propIds.includes(t.suggestedId) ? t.suggestedId : null) : propIds.length === 1 ? propIds[0] : null;
+		return { tagId: t.id, name: t.name, type: t.type, current: t.badTagId ?? '', paused: t.paused, firing: t.firing, candidates, recommended };
+	});
+	const writer = o.writer ?? (ctx.acc.is_demo ? demoGtmWriter() : realGtmWriter(ctx.acc.id));
+	const latest = await writer.latestVersionId(ctx.link.external_id);
+	return { ok: true, container, tags, ...publishGuard(live.versionId ?? null, latest) };
+}
+
+/**
+ * The confirmed change: a new workspace, the one malformed ID parameter replaced, then (if asked, and only when the newest version is the live one)
+ * a version and publish. Re-plans first, so what is changed is what is live now, and refuses an ID that is not a measurement ID.
+ */
+export async function repairTagIdViaGtm(siteId: number, choice: { tagId: string; newId: string }, mode: 'publish' | 'workspace', o: { writer?: GtmTagEditor; source?: GtmSource; ga4Ids?: string[] } = {}): Promise<InstallResult> {
+	const newId = choice.newId.trim().toUpperCase();
+	if (!MEASUREMENT_ID.test(newId)) return { ok: false, error: 'The new Tag ID must be a measurement ID such as G-ABC123XYZ.', published: false };
+	const plan = await planTagIdRepair(siteId, o);
+	if (!plan.ok) return { ok: false, error: plan.error, published: false };
+	const tag = plan.tags!.find((t) => t.tagId === choice.tagId);
+	if (!tag) return { ok: false, error: 'That tag no longer has a malformed ID in the live container, so nothing was changed.', published: false };
+	if (mode === 'publish' && !plan.canPublish) return { ok: false, error: plan.publishBlocked, published: false };
+	const ctx = context(siteId);
+	if ('error' in ctx) return { ok: false, error: ctx.error, published: false };
+	const editor = o.writer ?? (ctx.acc.is_demo ? demoGtmWriter() : realGtmWriter(ctx.acc.id));
+	const workspaceName = `SEOConsole fix Tag ID ${new Date().toISOString().slice(0, 10)}`;
+	return installTagViaWorkspace(
+		editor,
+		{
+			siteId,
+			accountId: ctx.acc.id,
+			isDemo: !!ctx.acc.is_demo,
+			container: plan.container!.path,
+			publicId: plan.container!.publicId,
+			apply: async (ws) => {
+				try {
+					const t = await editor.getTag(ws.path, tag.tagId);
+					const r = repairedTag(t, newId);
+					await editor.updateTag(ws.path, tag.tagId, r.tag);
+				} catch (e) {
+					// The workspace was already created: say so, because standard containers allow only three.
+					throw new Error(`${e instanceof Error ? e.message : String(e)} (SEOConsole had already created the empty workspace "${workspaceName}"; delete it in Tag Manager if you do not need it)`);
+				}
+			},
+			audit: 'gtm.tagid',
+			// no colon: Tag Manager rejects ":" in a name
+			workspaceName,
+			workspaceDescription: `Sets the Tag ID of "${tag.name}" to ${newId}. Created from SEOConsole.`,
+			versionName: 'Fix Google tag ID (SEOConsole)',
+			versionNotes: `The Tag ID of "${tag.name}" held text that is not an ID; it is now ${newId}.`,
+			what: `Tag ID of "${tag.name}" set to ${newId}`
 		},
 		mode
 	);

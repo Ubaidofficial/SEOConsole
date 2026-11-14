@@ -547,6 +547,16 @@ CREATE TABLE IF NOT EXISTS link_done (              -- internal-link suggestions
 	at INTEGER NOT NULL,
 	PRIMARY KEY (site_id, key)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS link_checks (            -- link targets that were not crawled but were fetched to see what they answer (newest check per URL)
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	norm TEXT NOT NULL,                 -- normalised URL (host without www + path)
+	url TEXT NOT NULL,
+	status INTEGER NOT NULL,
+	final_url TEXT,
+	error TEXT,
+	checked_at INTEGER NOT NULL,
+	PRIMARY KEY (site_id, norm)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS clarity_scans (          -- is Clarity's script on the site's pages? (newest check only)
 	site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
 	checked_at INTEGER NOT NULL,
@@ -574,6 +584,14 @@ CREATE TABLE IF NOT EXISTS oseo_audits (            -- OpenSEO's latest site aud
 	fetched_at INTEGER NOT NULL,
 	payload TEXT NOT NULL                -- JSON AuditSnapshot (src/lib/server/openseolink.ts)
 );
+CREATE TABLE IF NOT EXISTS oseo_research (          -- results of the OpenSEO-backed analyses run from here (SERP format, competitor gap, backlinks): newest per kind
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL,                 -- serp | gap | backlinks
+	fetched_at INTEGER NOT NULL,
+	credits REAL,                       -- an ESTIMATE from OpenSEO's stated prices for what was asked (not what was charged), when it states one
+	payload TEXT NOT NULL,              -- JSON; shape per kind in src/lib/server/openseoresearch.ts
+	PRIMARY KEY (site_id, kind)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS chat_threads (           -- "Ask your data": one conversation, private to the person who started it
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	owner TEXT NOT NULL,                 -- 'owner', or 'user:<users.id>'

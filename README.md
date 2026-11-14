@@ -10,6 +10,7 @@ A self-hosted dashboard for **all your Google Search Console properties across m
 
 - **A ranked to-do list**: what to fix first and why, per site and across sites.
 - **History and analysis**: queries, pages, trends, decay, cannibalization, anomalies, Core Web Vitals.
+- **Check before you publish or panic**: why clicks changed (and whether to wait for an update to finish), whether new pages are being shown, what the site actually wins, broken links, and, with OpenSEO, results pages, competitors and links to dead pages.
 - **One-click GA4 & Tag Manager setup**: per site, find or create the GA4 property and Tag Manager container, link both and add the Google tag, after showing the plan and with its own opt-in permission. SEOConsole cannot put the Tag Manager code on your site, so it shows it with a copy button.
 - **Sign in with Google, and self-service accounts**: team members can sign in with Google, change their own name, email and password, and an admin can hand out one-time reset links (there is no email sending).
 - **Light and a dim dark theme**: a sun/moon button in the header switches, and the choice is remembered per browser. Light is the default.

@@ -24,6 +24,8 @@ import { hiddenReport } from './hidden';
 import { groupByTarget, linkReport } from './internallinks';
 import { CHANGE_REVIEW_DAYS, ERROR_STREAK, robotsBlockedPages, robotsChanges, robotsHosts } from './robotswatch';
 import { auditFindings, storedAudit } from './openseolink';
+import { linkHealthFor } from './linkhealth';
+import { publishingFor } from './publishing';
 
 type Site = SiteRow;
 const r0 = (n: number) => Math.round(n);
@@ -38,7 +40,7 @@ const pathOf = (u: string) => {
 	}
 };
 const pct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(0)}%`;
-const VERSION = 'a9';
+const VERSION = 'b0';
 
 /** No successful Search Console download for this long means something is failing: the app tries every 6 hours. */
 export const STALE_AFTER_MS = 48 * 3600_000;
@@ -95,6 +97,7 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 		const h = trackingHealth(site, days);
 		const how: Record<string, string> = {
 			'gtm-unpublished': 'Open the container in Tag Manager, review the workspace and publish a version. Until then none of its tags run.',
+			'gtm-tag-id-malformed': 'In Tag Manager open the Google tag, put only the measurement ID (G-…) in the Tag ID field, then Save, Submit and Publish. The Tag Manager tab shows which tag and what it holds now.',
 			'ga4-id-mismatch': 'Make the GA4 tag use the measurement ID of the property you report on, or link the right property on the Connect page.',
 			'ga4-no-organic': 'Check the GA4 tag fires on the site (Tag Assistant, GA4 Realtime), that the data stream URL is right and that consent settings are not blocking it.',
 			'ga4-gap': 'Check the GA4 tag fires on every template, and consent or ad-blocker losses; compare with Search Console over a longer window.',
@@ -165,14 +168,14 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 			const why = upd.length ? `Clicks fell ${pct(change)} (${n0(prevTotal)} → ${n0(total)}), and Google's ${upd.map((u) => u.name).join(' and ')} overlapped this period.` : `Clicks fell ${pct(change)} (${n0(prevTotal)} → ${n0(total)}) against the previous ${days} days.`;
 			const how = upd.length
 				? `This lines up with a Google update. Do not make sweeping changes while it rolls out; let it finish and give it about two weeks, then compare. Meanwhile make sure tracking, indexing and the blocking items above are clean. Look at which sections lost most on the Groups tab.`
-				: 'Rule out the mechanical causes first: tracking (above), indexing events, a recent site change (the change log), seasonality (same weeks last year on the Trends tab). Then see which sections lost most on the Groups tab.';
-			add({ key: 'sitewide', type: 'sitewide', title: `Site-wide traffic is down ${Math.abs(Math.round(change * 100))}%`, why, how, impact: prevTotal - total, confidence: 'medium', effort: 'high', blocking: change <= -0.25, href: `${base}/groups`, evidence: upd.map((u) => `${u.name} (${u.begin}${u.end ? ' to ' + u.end : ', rolling out'})`) });
+				: 'The Diagnose tab runs these checks in order. Rule out the mechanical causes first: tracking (above), indexing events, a recent site change (the change log), seasonality (same weeks last year on the Trends tab). Then see which sections lost most on the Groups tab.';
+			add({ key: 'sitewide', type: 'sitewide', title: `Site-wide traffic is down ${Math.abs(Math.round(change * 100))}%`, why, how, impact: prevTotal - total, confidence: 'medium', effort: 'high', blocking: change <= -0.25, href: `${base}/diagnose`, evidence: upd.map((u) => `${u.name} (${u.begin}${u.end ? ' to ' + u.end : ', rolling out'})`) });
 		}
 	}
 	try {
 		const series = dailySeries(id, addDays(p.end, -(days + 90)), p.end).map((d) => ({ date: d.date, value: d.clicks }));
 		for (const a of detectAnomalies(series).filter((x) => x.direction === 'drop' && x.date > addDays(p.end, -8))) {
-			add({ key: `anomaly:${a.date}`, type: 'anomaly', title: `Clicks dropped ${Math.abs(Math.round(a.deltaPct * 100))}% on ${a.date}`, why: `${n0(a.value)} clicks against about ${n0(a.expected)} expected for that weekday.`, how: 'Check tracking and indexing events first, then whether a Google update started that day (Updates page). A one-day dip that recovers is usually noise or an outage.', impact: null /* one day's loss is not a 28-day figure */, confidence: 'medium', effort: 'low', blocking: a.deltaPct <= -0.4 && a.date >= addDays(p.end, -3), href: base, evidence: [] });
+			add({ key: `anomaly:${a.date}`, type: 'anomaly', title: `Clicks dropped ${Math.abs(Math.round(a.deltaPct * 100))}% on ${a.date}`, why: `${n0(a.value)} clicks against about ${n0(a.expected)} expected for that weekday.`, how: 'Open the Diagnose tab. Check tracking and indexing events first, then whether a Google update started that day (Updates page). A one-day dip that recovers is usually noise or an outage.', impact: null /* one day's loss is not a 28-day figure */, confidence: 'medium', effort: 'low', blocking: a.deltaPct <= -0.4 && a.date >= addDays(p.end, -3), href: `${base}/diagnose`, evidence: [] });
 		}
 	} catch {
 		/* not enough history */
@@ -297,6 +300,41 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 		for (const g of groupByTarget(lr.suggestions).slice(0, 3)) {
 			const top = g.rows[0];
 			add({ key: `links:${normalizeUrl(g.target)}`, type: 'internal-link', title: `Link to ${pathOf(g.target)} from ${g.rows.length} page${g.rows.length === 1 ? '' : 's'} that already mention its searches`, why: `It ranks ${top.position.toFixed(1)} for “${top.query}”, and reaching position 3 would be worth about ${n0(g.prize)} more clicks on your own CTR curve. ${g.rows.length === 1 ? 'A crawled page mentions' : `${g.rows.length} crawled pages mention`} it in their text but do not link to it. A link is one push, not a guarantee of the prize.`, how: 'Turn the words shown into a link to the page, in the sentence where they already appear. The Internal links tab has each sentence and a copy button.', impact: g.prize, confidence: 'low', effort: 'low', blocking: false, href: `${base}/links`, evidence: g.rows.slice(0, 5).map((r) => `${pathOf(r.source)}: “${r.anchor}”`) });
+		}
+	} catch {
+		/* no crawl yet */
+	}
+
+	// ── what was published: sections of the sitemap that Google shows almost none of ──
+	try {
+		const pub = publishingFor(site, 90);
+		// While the history is still downloading, "not shown" only means "not downloaded yet".
+		for (const sec of pub.historyComplete ? pub.sections.filter((x) => x.verdict === 'stalled').slice(0, 2) : []) {
+			const idx = sec.inspected ? ` Of ${n0(sec.inspected)} checked with Google, ${n0(sec.indexed)} are indexed${sec.noindex ? ` and ${n0(sec.noindex)} are excluded by a noindex tag` : ''}.` : '';
+			add({
+				key: `publishing:${sec.folder}`, type: 'publishing',
+				title: `${n0(sec.shown)} of ${n0(sec.urls)} pages in ${sec.folder} have been shown in Search in 90 days`,
+				why: `${Math.round(sec.shownShare * 100)}% of this section's sitemap pages had at least one impression.${idx} Search Console's query data leaves out rare and anonymised searches, so treat this as a list to inspect, not proof of non-indexing.${sec.ageUnknown ? ' Page age could not be judged, so some of these may simply be new.' : ''}`,
+				how: sec.advice, impact: null, confidence: sec.ageUnknown ? 'low' : 'medium', effort: 'high', blocking: false, href: `${base}/health#publishing`,
+				evidence: sec.reasons.slice(0, 3).map((r) => `${r.reason}: ${n0(r.count)} pages`)
+			});
+		}
+	} catch {
+		/* no sitemap read yet */
+	}
+
+	// ── broken internal links, from the crawl and the checked link targets ──
+	try {
+		const lh = linkHealthFor(site);
+		if (lh.broken.length) {
+			add({
+				key: `brokenlinks:${keyHash(lh.broken.map((b) => b.target))}`, type: 'broken-links',
+				title: `${n0(lh.broken.length)} broken internal link target${lh.broken.length === 1 ? '' : 's'} found`,
+				why: `${lh.broken.length === 1 ? 'An address' : 'Addresses'} on your own site that pages link to ${lh.broken.length === 1 ? 'answers' : 'answer'} with an error. ${n0(lh.checked)} of ${n0(lh.targets)} link targets were checked${lh.unchecked.length ? `; the other ${n0(lh.unchecked.length)} have not been, so there may be more` : ''}.`,
+				how: 'Update or remove each link, or redirect the old address to the closest live page. The Content health tab lists every broken target with the pages that link to it.',
+				impact: null, confidence: 'high', effort: 'low', blocking: false, href: `${base}/health#links`,
+				evidence: lh.broken.slice(0, 5).map((b) => `${pathOf(b.target)} (${b.status || 'no answer'}), linked from ${n0(b.sources.length)} page${b.sources.length === 1 ? '' : 's'}`)
+			});
 		}
 	} catch {
 		/* no crawl yet */

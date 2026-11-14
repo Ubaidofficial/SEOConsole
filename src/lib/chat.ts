@@ -58,7 +58,7 @@ const SPECIAL: Record<string, string> = {
 	list_sites: 'Listed your sites', get_action_queue: 'Read the to-do list', get_quick_wins: 'Found quick wins', get_opportunities: 'Looked for opportunities',
 	get_portfolio: 'Compared all sites', get_overview: 'Read the overview', get_performance: 'Queried search performance', get_trends: 'Checked trends',
 	get_history: 'Read the history', get_page_insights: 'Joined page data', inspect_url: 'Inspected a URL with Google', show_chart: 'Drew a chart',
-	get_ai_visibility: 'Read AI answers', get_ai_traffic: 'Read AI assistant traffic', get_bing_performance: 'Read Bing data'
+	get_ai_visibility: 'Read AI answers', get_drop_diagnosis: 'Diagnosed a traffic change', get_publishing_health: 'Checked what publishing achieved', get_niche_fit: 'Checked niche fit', get_link_health: 'Checked internal links', get_research_findings: 'Read stored OpenSEO research', get_ai_traffic: 'Read AI assistant traffic', get_bing_performance: 'Read Bing data'
 };
 /** A short, human label for a tool call ("Found quick wins · greenleaf.example"), shown while it runs and in the history. */
 export function toolLabel(name: string, input: Record<string, unknown> = {}, siteName?: (ref: unknown) => string | null): string {

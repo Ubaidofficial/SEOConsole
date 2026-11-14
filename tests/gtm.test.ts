@@ -299,3 +299,52 @@ describe('Tag Manager end to end (demo data)', () => {
 	});
 });
 
+
+// The value found in a real published container on 2026-11-14: the whole snippet pasted where the Tag ID belongs.
+const PASTED = `<!-- Google tag (gtag.js) --> <script async src="https://www.googletagmanager.com/gtag/js?id=G-PCTSPWJHR2"></script> <script>   window.dataLayer = window.dataLayer || [];   function gtag(){dataLayer.push(arguments);}   gtag('js', new Date());    gtag('config', 'G-PCTSPWJHR2'); </script>`;
+
+describe('a Google tag whose Tag ID is not an ID', () => {
+	const sum = (value: string, type = 'googtag', key = 'tagId') => summarizeVersion({ containerVersionId: '2', tag: [{ tagId: '1', name: 'GA4', type, firingTriggerId: ['2'], parameter: [{ key, value }] }], trigger: [{ triggerId: '2', name: 'All Pages' }] }).tags[0];
+
+	it('is spotted when a whole pasted snippet sits in the field, and the ID inside it is offered', () => {
+		const t = sum(PASTED);
+		expect(t.measurementId).toBeNull();
+		expect(t.badTagId).toMatch(/^<!-- Google tag \(gtag\.js\) --> <script async src="https:\/\/www\.googletagmanager\.com\/gtag\/js\?id=G-PCTSPWJHR2/);
+		expect(t.badTagId!.length).toBeLessThanOrEqual(120);
+		expect(t.badTagId).not.toMatch(/\s{2,}/);
+		expect(t.suggestedId).toBe('G-PCTSPWJHR2');
+	});
+	it('offers nothing when the junk holds no ID', () => {
+		expect(sum('my analytics id')).toMatchObject({ badTagId: 'my analytics id', suggestedId: null });
+	});
+	it('does not flag real IDs of any kind, variable references (even unreadable ones), or tags that are not Google tags', () => {
+		for (const ok of ['G-ABC12345', ' g-abc12345 ', 'GT-ABC1234', 'AW-1234567890', 'DC-1234567', '{{Some variable}}']) expect(sum(ok).badTagId, ok).toBeNull();
+		expect(sum(PASTED, 'html').badTagId).toBeNull(); // Custom HTML may legitimately hold a snippet
+		expect(sum(PASTED, 'gaawc', 'measurementId').badTagId).toContain('Google tag'); // the older GA4 configuration tag has the same problem
+	});
+});
+
+describe('auditTracking: malformed Tag ID', () => {
+	const bad = tag({ name: 'GA4', type: 'googtag', measurementId: null, badTagId: '<!-- Google tag (gtag.js) --> <script async src="https://www.googletagmanager.com/gtag/js?id=G-GOOD1234"></script>', suggestedId: 'G-GOOD1234' });
+	const run = (t = bad, ga4 = { measurementIds: ['G-GOOD1234'] }) => auditTracking(base({ ga4, gtm: { publicId: 'GTM-X', published: true, tags: [t] } }));
+
+	it('is critical, names the tag, quotes what is there, and gives the exact fix with the ID that was inside', () => {
+		const f = run();
+		expect(f.map((x) => x.id)).toEqual(['gtm-tag-id-malformed']); // and not also the vague "IDs could not be read"
+		expect(f[0].severity).toBe('critical');
+		expect(f[0].detail).toContain('“GA4”');
+		expect(f[0].detail).toContain('<!-- Google tag (gtag.js)');
+		expect(f[0].detail).toContain('set the Tag ID to only G-GOOD1234, then Save, Submit and Publish');
+		expect(f[0].detail).not.toMatch(/Note:/); // the ID inside is the linked property's
+	});
+	it('warns when the ID inside is not the linked property\'s', () => {
+		expect(run(bad, { measurementIds: ['G-OTHER999'] })[0].detail).toMatch(/Note: G-GOOD1234 is not the linked property's measurement ID \(G-OTHER999\)/);
+	});
+	it('still gives the fix when no ID could be found inside', () => {
+		const f = run({ ...bad, suggestedId: null, badTagId: 'oops' });
+		expect(f[0].detail).toContain('set the Tag ID to only the measurement ID (G-…)');
+	});
+	it('older snapshots without the new fields behave as before', () => {
+		expect(ids(base({ gtm: { publicId: 'GTM-X', published: true, tags: [tag({ type: 'googtag', measurementId: null })] } }))).toEqual(['ga4-id-hidden']);
+	});
+});

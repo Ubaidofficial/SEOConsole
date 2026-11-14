@@ -10,7 +10,7 @@ export const TYPE_LABEL: Record<ActionType, string> = {
 	'not-indexed': 'Not indexed', update: 'Google update', cannibalization: 'Cannibalization', 'ctr-gap': 'CTR gap', decay: 'Decay',
 	striking: 'Striking distance', onpage: 'On-page', sitemap: 'Sitemap', lastmod: 'Sitemap dates', submitted: 'Sent, not indexed', request: 'Request indexing', vitals: 'Web vitals', test: 'Test',
 	'lost-query': 'Lost searches', rising: 'Rising searches', 'page-edge': 'Page on the edge', gem: 'Hidden gem', questions: 'Unanswered questions',
-	bing: 'Bing', device: 'Phone gap', engagement: 'Visitors leave', friction: 'Friction', 'internal-link': 'Internal links', audit: 'OpenSEO audit'
+	bing: 'Bing', device: 'Phone gap', engagement: 'Visitors leave', friction: 'Friction', 'internal-link': 'Internal links', audit: 'OpenSEO audit', 'broken-links': 'Broken links', publishing: 'Publishing'
 };
 
 export const TYPE_EXPLAIN: Record<ActionType, string> = {
@@ -46,6 +46,8 @@ export const TYPE_EXPLAIN: Record<ActionType, string> = {
 	friction: 'Microsoft Clarity recorded many visits with rage clicks or dead clicks (repeated clicks on things that do nothing) on a page that Google sends visitors to.',
 	'internal-link': 'A page close to ranking better (positions 4 to 20) that other pages of yours already mention in their text without linking to it. A link from those words helps Google find the page and understand what it is about.',
 	audit: 'OpenSEO\'s latest site audit found a problem (rated critical or warning there) on pages that earn clicks in Search Console. Those pages are listed first because a fault on them costs real traffic; the fix is OpenSEO\'s own advice.',
+	'broken-links': 'Pages of your own site link to addresses that answer with an error (404, 410 or a server error). Visitors hit a dead end and crawlers waste time. Update or remove the link, or redirect the old address to the closest live page.',
+	publishing: 'A section of your site that has many pages in the sitemap, of which Google has shown almost none in 90 days. Publishing more of the same will not change that; the pages that exist need to be made worth showing, or removed.',
 };
 
 export const BLOCKING_EXPLAIN = 'This stops the site earning traffic or stops you measuring it, so it is listed before everything else, however large the other items look.';
@@ -102,6 +104,9 @@ export const SITE_TABS = [
 	['/indexing', 'Indexing', 'Watch whether Google has indexed your pages, using a rotating sample of URL inspections.'],
 	['/indexnow', 'IndexNow', 'Tell Bing and other IndexNow search engines the moment a page changes.'],
 	['/onpage', 'On-page', 'Checks pages for common on-page problems, such as a missing title or description.'],
+	['/diagnose', 'Diagnose', 'Why clicks changed, checked in order before you touch a page: noise, impressions versus click rate, which searches lost most, an update still rolling out, last year.'],
+	['/health', 'Content health', 'Whether what you publish is being shown, which topics you actually win, and broken or detoured internal links.'],
+	['/research', 'Research', 'Results pages, competitors and backlinks from OpenSEO\'s paid data, run only after a preview of what will be asked.'],
 	['/links', 'Internal links', 'Which of your pages should link to pages close to ranking better, with the anchor text already on the page, and pages nothing links to.'],
 	['/sitemaps', 'Sitemaps', 'Your sitemaps as Google sees them, with a check that each can be fetched and read.'],
 	['/inspect', 'Inspect', 'Look up Google\'s index status for specific URLs (URL Inspection).'],
@@ -127,7 +132,7 @@ export const SITE_PRIMARY_TABS = ['', '/quickwins', '/actions', '/opportunities'
 
 export const SITE_TAB_GROUPS = [
 	['Traffic', ['', '/queries', '/pages', '/trends', '/groups', '/segments', '/types']],
-	['Findings', ['/quickwins', '/actions', '/opportunities', '/cannibalization', '/decay', '/onpage', '/links', '/vitals', '/tests']],
+	['Findings', ['/quickwins', '/actions', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests']],
 	['Indexing', ['/submit', '/request', '/indexing', '/indexnow', '/sitemaps', '/inspect']],
 	['Other sources', ['/bing', '/analytics', '/tags', '/clarity', '/ai']],
 	['Site', ['/settings']]
