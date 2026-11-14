@@ -90,7 +90,7 @@ describe('OpenSEO research (demo OpenSEO)', () => {
 	});
 	it('serp: a search that failed at the provider is kept as "could not tell", not dropped', async () => {
 		const api: OseoApi = { callTool: async () => ({ results: [{ keyword: 'x', ok: false, error: 'boom' }] }) };
-		const out = await runSerp(1, [{ keyword: 'x', page: null, position: 5, impressions: 100, clicks: 0, missing: 3 }], { api });
+		const out = await runSerp(1, [{ keyword: 'x', page: null, position: 5, impressions: 100, clicks: 0, missing: 3 }], { api, force: true });
 		expect(out.checks[0].verdict).toBe('unclear');
 		expect(out.failed).toBe(1);
 	});
@@ -161,3 +161,67 @@ describe('MCP: the five new read-only tools', () => {
 		expect(none.serp).toBeNull();
 	});
 });
+
+describe('paid runs cannot be repeated by accident', () => {
+	const kw = [{ keyword: 'x', page: null, position: 5, impressions: 100, clicks: 0, missing: 3 }];
+	it('refuses the same analysis again within half an hour, and says how long to wait', async () => {
+		let calls = 0;
+		const api: OseoApi = { callTool: async () => { calls++; return { results: [{ keyword: 'x', ok: true, items: [{ type: 'organic', rank: 1, organicRank: 1, title: 't' }] }] }; } };
+		const t0 = 1_800_000_000_000;
+		await runSerp(1, kw, { api, now: t0, force: true });
+		await expect(runSerp(1, kw, { api, now: t0 + 5 * 60_000 })).rejects.toThrow(/5 minutes ago .* try again in 25 minutes/);
+		expect(calls).toBe(1); // the second never reached OpenSEO
+		await runSerp(1, kw, { api, now: t0 + 31 * 60_000 }); // after the cooldown it runs
+		expect(calls).toBe(2);
+	});
+	it('hands the claim back when OpenSEO fails, so a provider error does not lock you out', async () => {
+		const bad: OseoApi = { callTool: async () => { throw new Error('Internal SE Server Error'); } };
+		const t0 = 1_900_000_000_000;
+		await expect(runSerp(1, kw, { api: bad, now: t0, force: true })).rejects.toThrow(/OpenSEO: Internal SE Server Error/);
+		const ok: OseoApi = { callTool: async () => ({ results: [] }) };
+		await expect(runSerp(1, kw, { api: ok, now: t0 + 60_000 })).resolves.toBeTruthy(); // immediately again: allowed
+	});
+	it('each analysis has its own cooldown', async () => {
+		const api: OseoApi = { callTool: async (name) => (name === 'get_backlinks_profile' ? { backlinks: { rows: [], totalCount: 0 } } : { competitors: [] }) };
+		const t0 = 2_000_000_000_000;
+		await runBacklinks(1, { api, now: t0, force: true });
+		await expect(runBacklinks(1, { api, now: t0 + 1000 })).rejects.toThrow(/ago/);
+		await expect(runGap(1, ['a b c'], { api, now: t0 + 1000 })).resolves.toBeTruthy(); // gap is a different analysis
+	});
+});
+
+describe('the new findings reach the action queue', () => {
+	it('a stalled section and broken internal links become ranked, explained items', async () => {
+		const { db } = await import('../src/lib/server/db');
+		const { buildActions } = await import('../src/lib/server/actions');
+		const { TYPE_EXPLAIN, TYPE_LABEL } = await import('../src/lib/explain');
+		const d = db();
+		// 60 sitemap pages under /stalled/, none of which Search Console has ever shown
+		const put = d.prepare('INSERT OR REPLACE INTO sitemap_urls (site_id, url, norm, lastmod, lastmod_bad, sitemap) VALUES (1, ?, ?, ?, 0, ?)');
+		for (let i = 0; i < 60; i++) put.run(`https://greenleaf.example/stalled/p${i}`, `greenleaf.example/stalled/p${i}`, `2026-0${(i % 6) + 1}-0${(i % 8) + 1}`, 'https://greenleaf.example/sitemap.xml');
+		// a link target the crawl found broken, linked from a crawled page
+		const page = crawled()[0];
+		d.prepare('UPDATE link_pages SET links = ? WHERE site_id = 1 AND url = ?').run(JSON.stringify([{ url: 'https://greenleaf.example/gone-forever', anchor: 'gone', chrome: false }]), page.url);
+		d.prepare('INSERT OR REPLACE INTO link_checks (site_id, norm, url, status, final_url, error, checked_at) VALUES (1, ?, ?, 404, NULL, ?, ?)').run('greenleaf.example/gone-forever', 'https://greenleaf.example/gone-forever', 'The page answered 404.', Date.now());
+
+		const items = buildActions(site(), 28);
+		const pub = items.find((i) => i.type === 'publishing');
+		expect(pub, 'publishing item').toBeTruthy();
+		expect(pub!.title).toMatch(/0 of 60 pages in \/stalled\//);
+		expect(pub!.href).toBe('/sites/1/health#publishing');
+		expect(pub!.impact).toBeNull();
+		const links = items.find((i) => i.type === 'broken-links');
+		expect(links, 'broken-links item').toBeTruthy();
+		expect(links!.title).toMatch(/1 broken internal link target found/);
+		expect(links!.evidence[0]).toMatch(/gone-forever \(404\), linked from 1 page/);
+		expect(links!.href).toBe('/sites/1/health#links');
+		for (const t of ['publishing', 'broken-links'] as const) { expect(TYPE_LABEL[t].length).toBeGreaterThan(2); expect(TYPE_EXPLAIN[t].length).toBeGreaterThan(40); }
+	});
+	it('the traffic-drop items open the Diagnose tab', async () => {
+		const { buildActions } = await import('../src/lib/server/actions');
+		for (const i of buildActions(site(), 28).filter((x) => x.type === 'sitewide' || x.type === 'anomaly')) expect(i.href).toBe('/sites/1/diagnose');
+	});
+});
+
+import { crawledPages } from '../src/lib/server/internallinks';
+const crawled = () => crawledPages(1);

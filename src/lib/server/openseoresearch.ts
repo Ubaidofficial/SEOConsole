@@ -40,6 +40,24 @@ const needOpenSeo = (siteId: number, o: { api?: OseoApi }) => {
 	return os;
 };
 
+/**
+ * Each analysis spends OpenSEO credits, so the same one cannot be started again for the same site within this long (a double click, a
+ * loop in a script). The claim is made before the call and handed back if the call fails, so a provider error does not lock you out.
+ * `force` exists for tests; no button or tool passes it.
+ */
+export const RUN_COOLDOWN_MS = 30 * 60_000;
+function claim(siteId: number, kind: ResearchKind, o: { force?: boolean; now?: number }): () => void {
+	const key = `research-run:${kind}:${siteId}`;
+	const now = o.now ?? Date.now();
+	const last = Number((db().prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined)?.value ?? 0);
+	if (!o.force && now - last < RUN_COOLDOWN_MS) {
+		const mins = Math.max(1, Math.ceil((RUN_COOLDOWN_MS - (now - last)) / 60_000));
+		throw new Error(`This was run ${Math.floor((now - last) / 60_000)} minutes ago and every run spends OpenSEO credits. The stored result is below; try again in ${mins} minute${mins === 1 ? '' : 's'}.`);
+	}
+	db().prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(now));
+	return () => void db().prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(last));
+}
+
 // ── storage ──────────────────────────────────────────────────────────────────
 export interface Stored<T> { fetchedAt: number; credits: number | null; data: T }
 export function storedResearch<T>(siteId: number, kind: ResearchKind): Stored<T> | null {
@@ -83,10 +101,11 @@ export function serpPlan(siteId: number, n = 10): SerpPlan {
 }
 export interface SerpResult { checks: SerpCheck[]; asked: number; failed: number; depth: number; summary: { crowded: number; mismatch: number; both: number; ok: number; unclear: number } }
 
-export async function runSerp(siteId: number, keywords: SerpCandidate[], o: { api?: OseoApi } = {}): Promise<SerpResult> {
+export async function runSerp(siteId: number, keywords: SerpCandidate[], o: { api?: OseoApi; force?: boolean; now?: number } = {}): Promise<SerpResult> {
 	const os = needOpenSeo(siteId, o);
 	const list = keywords.slice(0, SERP_MAX);
 	if (!list.length) throw new Error('No searches to look up.');
+	const release = claim(siteId, 'serp', o);
 	const api = await os.api();
 	const checks: SerpCheck[] = [];
 	try {
@@ -100,6 +119,7 @@ export async function runSerp(siteId: number, keywords: SerpCandidate[], o: { ap
 			}
 		}
 	} catch (e) {
+		release();
 		throw new Error(`OpenSEO: ${message(e)}`);
 	}
 	const summary = { crowded: 0, mismatch: 0, both: 0, ok: 0, unclear: 0 };
@@ -131,11 +151,12 @@ export function gapPlan(siteId: number, n = 30): GapPlan {
 }
 export interface GapResult { keywordsUsed: number; competitors: Competitor[]; studied: string[]; rows: GapRow[]; fitted: boolean }
 
-export async function runGap(siteId: number, keywords: string[], o: { api?: OseoApi } = {}): Promise<GapResult> {
+export async function runGap(siteId: number, keywords: string[], o: { api?: OseoApi; force?: boolean; now?: number } = {}): Promise<GapResult> {
 	const site = getSite(siteId)!;
 	const os = needOpenSeo(siteId, o);
 	const kws = [...new Set(keywords.map((k) => k.trim().toLowerCase()).filter(Boolean))].slice(0, GAP_KEYWORDS_MAX);
 	if (!kws.length) throw new Error('No searches to compare on.');
+	const release = claim(siteId, 'gap', o);
 	const own = hostKey(site.site_url);
 	const api = await os.api();
 	let competitors: Competitor[];
@@ -158,6 +179,7 @@ export async function runGap(siteId: number, keywords: string[], o: { api?: Oseo
 			rows.push(...computeGap(c.domain, ranked, own2, { limit: 25 }));
 		}
 	} catch (e) {
+		release();
 		throw new Error(`OpenSEO: ${message(e)}`);
 	}
 	// A keyword two competitors both rank for is listed once, under the one that ranks better.
@@ -187,9 +209,10 @@ function deadPages(siteId: number): Map<string, string> {
 	return dead;
 }
 
-export async function runBacklinks(siteId: number, o: { api?: OseoApi } = {}): Promise<BacklinkResult> {
+export async function runBacklinks(siteId: number, o: { api?: OseoApi; force?: boolean; now?: number } = {}): Promise<BacklinkResult> {
 	const site = getSite(siteId)!;
 	const os = needOpenSeo(siteId, o);
+	const release = claim(siteId, 'backlinks', o);
 	const target = hostKey(site.site_url);
 	let rows: Backlink[] = [];
 	let total = 0;
@@ -198,6 +221,7 @@ export async function runBacklinks(siteId: number, o: { api?: OseoApi } = {}): P
 		const out = parseBacklinks(await (await os.api()).callTool('get_backlinks_profile', { projectId: os.projectId, target, scope: 'subdomains', mode: 'as_is', pageSize: BACKLINK_ROWS, page: 1, hideSpam: false, filters: { hideBroken: false, hideLost: false } }));
 		rows = out.rows; total = out.total; partial = out.hasMore;
 	} catch (e) {
+		release();
 		throw new Error(`OpenSEO: ${message(e)}`);
 	}
 	const dead = deadPages(siteId);

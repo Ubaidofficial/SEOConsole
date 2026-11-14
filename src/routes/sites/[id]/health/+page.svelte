@@ -18,7 +18,7 @@
 
 <section class="card mb-4 p-4" id="publishing">
 	<h2 class="font-medium">Publishing: is it being shown?</h2>
-	<p class="mt-1 text-sm">{pub.headline}</p>
+	<p class="pii mt-1 text-sm">{pub.headline}</p>
 	{#if pub.buildStamp}<p class="mt-1 text-xs text-warn">{fmtPct(pub.buildStamp.share, 0)} of the dated sitemap URLs share the date {pub.buildStamp.date}: that is a build stamp, so page age below is unknown for them and "too new" is never granted to them.</p>{/if}
 	{#if pub.sections.length}
 		<div class="mt-3 overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="th">Section</th><th class="th text-right">Pages</th><th class="th text-right">Shown</th><th class="th text-right">Clicks</th><th class="th text-right">Clicks / page</th><th class="th text-right" title="From the stored URL Inspection sample">Indexed of checked</th><th class="th text-right">noindex</th><th class="th">Verdict</th></tr></thead><tbody>
@@ -27,7 +27,7 @@
 			{/each}
 		</tbody></table></div>
 		<details class="mt-2 text-xs text-muted-foreground"><summary class="cursor-pointer">What to do about each verdict</summary>
-			<ul class="mt-1 space-y-1">{#each pub.sections.filter((s) => s.verdict === 'stalled' || s.verdict === 'slow') as s}<li><b class="text-foreground">{s.folder}</b>: {s.advice}{#if s.reasons.length} Google's reasons in the sample: {s.reasons.map((r) => `${r.reason} (${r.count})`).join(', ')}.{/if}</li>{/each}</ul>
+			<ul class="mt-1 space-y-1">{#each pub.sections.filter((s) => s.verdict === 'stalled' || s.verdict === 'slow') as s}<li class="pii"><b class="text-foreground">{s.folder}</b>: {s.advice}{#if s.reasons.length} Google's reasons in the sample: {s.reasons.map((r) => `${r.reason} (${r.count})`).join(', ')}.{/if}</li>{/each}</ul>
 		</details>
 		<h3 class="mb-1 mt-4 text-sm font-medium">By age of page</h3>
 		<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="th">Age</th><th class="th text-right">Pages</th><th class="th text-right">Shown</th><th class="th text-right">Clicks</th></tr></thead><tbody>
@@ -39,7 +39,7 @@
 
 <section class="card mb-4 p-4" id="niche">
 	<h2 class="font-medium">Niche: what you actually win</h2>
-	<p class="mt-1 text-sm">{n.headline}</p>
+	<p class="pii mt-1 text-sm">{n.headline}</p>
 	{#if n.topics.length}
 		<div class="mt-3 overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="th">Topic</th><th class="th">Status</th><th class="th text-right">Searches</th><th class="th text-right">Clicks</th><th class="th text-right">Impressions</th><th class="th text-right">Position</th><th class="th">Examples</th></tr></thead><tbody>
 			{#each n.topics as t (t.topic)}
@@ -64,7 +64,7 @@
 		<h2 class="font-medium">Links: broken or detoured</h2>
 		<form method="POST" action="?/verifyLinks" use:enhance class="ml-auto"><button class="btn !h-8 text-xs" disabled={!l.uncheckedTotal} title="Fetches up to {data.verifyMax} link targets from your own site">Check {Math.min(l.uncheckedTotal, data.verifyMax)} unchecked link targets</button></form>
 	</div>
-	<p class="mt-1 text-sm">{l.headline}</p>
+	<p class="pii mt-1 text-sm">{l.headline}</p>
 	{#if !l.pagesCrawled}<p class="mt-1 text-xs text-muted-foreground">The crawl is on the <a class="underline" href="links">Internal links</a> tab.</p>{/if}
 	{#if form?.ok}<p class="mt-2 text-xs text-good">{form.ok}</p>{/if}
 	{#if form?.error}<p class="mt-2 text-xs text-bad">{form.error}</p>{/if}

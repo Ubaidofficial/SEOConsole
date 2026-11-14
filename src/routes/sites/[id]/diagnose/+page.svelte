@@ -16,7 +16,7 @@
 
 <section class="card mb-4 p-4">
 	<div class="flex flex-wrap items-center gap-2">
-		<h2 class="font-medium">{d.headline}</h2>
+		<h2 class="pii font-medium">{d.headline}</h2>
 		{#if d.hold}<span class="chip text-warn">wait before changing anything</span>{/if}
 	</div>
 	<p class="mt-1 text-xs text-muted-foreground">{d.period.start} to {d.period.end}, against {d.period.prevStart} to {d.period.prevEnd}.</p>
@@ -35,7 +35,7 @@
 	<h2 class="mb-2 font-medium">The checks, in order</h2>
 	<ol class="space-y-2 text-sm">
 		{#each d.steps as s (s.n)}
-			<li class="flex gap-3"><span class="w-20 shrink-0 text-xs font-medium {tone[s.status]}">{mark[s.status]}</span><div><div class="font-medium">{s.question}</div><div class="text-muted-foreground">{s.detail}</div></div></li>
+			<li class="flex gap-3"><span class="w-20 shrink-0 text-xs font-medium {tone[s.status]}">{mark[s.status]}</span><div><div class="font-medium">{s.question}</div><div class="pii text-muted-foreground">{s.detail}</div></div></li>
 		{/each}
 	</ol>
 </section>

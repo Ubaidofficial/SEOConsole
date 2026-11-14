@@ -51,7 +51,7 @@
 			<p class="mt-1 text-xs text-muted-foreground">{data.gap.note}</p>
 		{:else}<p class="mt-2 text-xs text-muted-foreground">No searches at positions 4 to 40 with enough impressions yet.</p>{/if}
 		{#if s.gap}
-			<p class="mt-3 text-xs text-muted-foreground">Studied: {s.gap.studied.length ? s.gap.studied.join(', ') : 'none (every competitor found was a platform)'}. Compared on {s.gap.keywordsUsed} of your searches.</p>
+			<p class="pii mt-3 text-xs text-muted-foreground">Studied: {s.gap.studied.length ? s.gap.studied.join(', ') : 'none (every competitor found was a platform)'}. Compared on {s.gap.keywordsUsed} of your searches.</p>
 			{#if s.gap.rows.length}
 				<div class="mt-2 overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="th">Keyword</th><th class="th">Kind</th><th class="th text-right">Volume</th><th class="th text-right">KD</th><th class="th text-right">Their rank</th><th class="th text-right">Yours</th><th class="th">Fits your niche</th><th class="th">Competitor</th></tr></thead><tbody>
 					{#each s.gap.rows as r}
@@ -70,7 +70,7 @@
 			<form method="POST" action="?/backlinks" use:enhance={run('backlinks')} class="mt-2"><button class="btn btn-primary !h-8 text-xs" disabled={busy === 'backlinks'}>{busy === 'backlinks' ? 'Reading…' : `Read ${data.backlinks.target}'s backlinks, about ${data.backlinks.credits} credits`}</button></form>
 		{/if}
 		{#if s.backlinks}
-			<p class="mt-3 text-sm">{s.backlinks.profile.headline}</p>
+			<p class="pii mt-3 text-sm">{s.backlinks.profile.headline}</p>
 			<p class="text-xs text-muted-foreground">{s.backlinks.profile.dofollow} followed, {s.backlinks.profile.nofollow} nofollow, {s.backlinks.profile.spammy} scored as spam, {s.backlinks.profile.lost} lost{#if s.backlinks.partial}; only the first {s.backlinks.sample.length ? '200' : ''} were read{/if}. {s.backlinks.deadKnown} dead pages were known when this ran (run the link crawl and check on the Content health tab first for a fuller list).</p>
 			{#if s.backlinks.reclaim.length}
 				<div class="mt-2 overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="th">Dead page</th><th class="th text-right">Links</th><th class="th text-right">Followed</th><th class="th">Redirect it to</th><th class="th">Why it counts as dead</th></tr></thead><tbody>

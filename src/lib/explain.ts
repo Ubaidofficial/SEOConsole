@@ -10,7 +10,7 @@ export const TYPE_LABEL: Record<ActionType, string> = {
 	'not-indexed': 'Not indexed', update: 'Google update', cannibalization: 'Cannibalization', 'ctr-gap': 'CTR gap', decay: 'Decay',
 	striking: 'Striking distance', onpage: 'On-page', sitemap: 'Sitemap', lastmod: 'Sitemap dates', submitted: 'Sent, not indexed', request: 'Request indexing', vitals: 'Web vitals', test: 'Test',
 	'lost-query': 'Lost searches', rising: 'Rising searches', 'page-edge': 'Page on the edge', gem: 'Hidden gem', questions: 'Unanswered questions',
-	bing: 'Bing', device: 'Phone gap', engagement: 'Visitors leave', friction: 'Friction', 'internal-link': 'Internal links', audit: 'OpenSEO audit'
+	bing: 'Bing', device: 'Phone gap', engagement: 'Visitors leave', friction: 'Friction', 'internal-link': 'Internal links', audit: 'OpenSEO audit', 'broken-links': 'Broken links', publishing: 'Publishing'
 };
 
 export const TYPE_EXPLAIN: Record<ActionType, string> = {
@@ -46,6 +46,8 @@ export const TYPE_EXPLAIN: Record<ActionType, string> = {
 	friction: 'Microsoft Clarity recorded many visits with rage clicks or dead clicks (repeated clicks on things that do nothing) on a page that Google sends visitors to.',
 	'internal-link': 'A page close to ranking better (positions 4 to 20) that other pages of yours already mention in their text without linking to it. A link from those words helps Google find the page and understand what it is about.',
 	audit: 'OpenSEO\'s latest site audit found a problem (rated critical or warning there) on pages that earn clicks in Search Console. Those pages are listed first because a fault on them costs real traffic; the fix is OpenSEO\'s own advice.',
+	'broken-links': 'Pages of your own site link to addresses that answer with an error (404, 410 or a server error). Visitors hit a dead end and crawlers waste time. Update or remove the link, or redirect the old address to the closest live page.',
+	publishing: 'A section of your site that has many pages in the sitemap, of which Google has shown almost none in 90 days. Publishing more of the same will not change that; the pages that exist need to be made worth showing, or removed.',
 };
 
 export const BLOCKING_EXPLAIN = 'This stops the site earning traffic or stops you measuring it, so it is listed before everything else, however large the other items look.';
