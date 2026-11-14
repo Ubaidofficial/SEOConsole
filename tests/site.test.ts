@@ -180,7 +180,7 @@ describe('site: the product visuals and their motion', () => {
 	it('the hero shows the ranked queue from the demo data, described for screen readers, with decorative floats hidden', () => {
 		expect(html).toMatch(/<figure class="hx rv" aria-labelledby="hx-cap">/);
 		expect(html).toMatch(/<figcaption id="hx-cap" class="sr">Example from the demo data/);
-		expect(html.match(/<div class="hx-float [^"]*" aria-hidden="true">/g)).toHaveLength(2);
+		expect(html.match(/<div class="hx-float [^"]*" aria-hidden="true">/g)).toHaveLength(3); // the chart, the search result, and the agent's proposal waiting for a click
 		expect(html.match(/<li class="hx-row /g)).toHaveLength(5);
 		expect(html).toContain('<span class="w">Find the</span>');
 		expect(html).toContain('SEO <span class="hl">wins</span> hiding');
