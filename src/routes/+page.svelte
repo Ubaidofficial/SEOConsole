@@ -10,6 +10,7 @@
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
 	import AuthorityBadges from '$lib/components/AuthorityBadges.svelte';
 	import AuthorityCredit from '$lib/components/AuthorityCredit.svelte';
+	import { BANDS_TEXT } from '$lib/authority';
 	import Delta from '$lib/components/Delta.svelte';
 	import GetStarted from '$lib/components/GetStarted.svelte';
 	import { privacy } from '$lib/privacy.svelte';
@@ -218,7 +219,7 @@
 		Periods end at each site's newest synced day (Search Console data lags ~2 days; days are Pacific time). Green line = clicks growing, red = falling (vs the previous period); dashed end = the last 2 days, which Google may still revise.
 		<a class="underline underline-offset-2" href="?days={data.days}&hidden={data.showHidden ? 0 : 1}">{data.showHidden ? 'Hide' : 'Show'} hidden sites</a>
 	</p>
-	{#if data.cards.some((c) => c.authority.dr || c.authority.da)}<p class="mt-1 text-xs text-muted-foreground"><AuthorityCredit dr={data.cards.some((c) => c.authority.dr)} da={data.cards.some((c) => c.authority.da)} /> Circles show DR and DA out of 100.</p>{/if}
+	{#if data.cards.some((c) => c.authority.dr || c.authority.da)}<p class="mt-1 text-xs text-muted-foreground"><AuthorityCredit dr={data.cards.some((c) => c.authority.dr)} da={data.cards.some((c) => c.authority.da)} /> Circles show DR and DA out of 100: {BANDS_TEXT} (this app's own bands, not Ahrefs' or Moz's).</p>{/if}
 {/if}
 {#if data.onboarding?.hidden}
 	<form method="POST" action="?/showOnboarding" use:enhance class="mt-2 text-xs text-muted-foreground"><button class="underline underline-offset-2">Set-up guide{data.onboarding.progress.complete ? '' : ` (${data.onboarding.progress.done} of ${data.onboarding.progress.total} done)`}</button></form>
