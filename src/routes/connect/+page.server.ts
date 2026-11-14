@@ -8,13 +8,14 @@ import { listAccounts } from '$lib/server/accounts';
 import { allLinks, integrationMeta, linksFor, listIntegrations, removeIntegration, removeLink, setLink, type LinkKind } from '$lib/server/links';
 import { autoMatchGa4, autoMatchGtm, connectBingKey, connectClarity, connectCrux, connectOpenSeo, hasGa4Scope, hasGtmScope, linkGtmManually } from '$lib/server/connect';
 import { callsLeft } from '$lib/server/clarity';
-import { enqueueDrAll, enqueueLinkSync } from '$lib/server/jobs';
+import { enqueueDaAll, enqueueDrAll, enqueueLinkSync } from '$lib/server/jobs';
 import { gtmSnapshot } from '$lib/server/tracking';
 import { GA4_TAG_TYPES } from '$lib/server/gtm';
 import { checkClarityNow } from '$lib/server/clarityscan';
 import { gtmOnSite, planSetup, runSetup, startGa4Account, type SetupChoices } from '$lib/server/setup';
 import { intParam } from '$lib/server/params';
 import { env } from '$lib/server/config';
+import { MozError, connectMoz, disconnectMoz, mozIntegration, mozStatus } from '$lib/server/moz';
 import { AhrefsError, ahrefsIntegration, ahrefsStatus, connectAhrefs, disconnectAhrefs } from '$lib/server/ahrefs';
 import { SWITCHES, applyToAll, available, counts, getDefaults, isSwitchKey, setDefault } from '$lib/server/automation';
 
@@ -49,6 +50,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		setupOnSite: setupSite && setupContainer ? gtmOnSite(setupSite.id, setupContainer) : null,
 		readOnly: config.readOnly,
 		ahrefs: ahrefsStatus(),
+		moz: mozStatus(),
 		automation: (() => {
 			const c = counts();
 			const defaults = getDefaults();
@@ -82,6 +84,26 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 export const actions: Actions = {
+	/** Moz Domain Authority: check the credentials (one lookup), keep them encrypted, and fetch the sites within the monthly row budget. */
+	mozKeys: async ({ request }) => {
+		const f = await request.formData();
+		try {
+			await connectMoz(String(f.get('accessId') ?? ''), String(f.get('secretKey') ?? ''));
+			enqueueDaAll(true);
+			return { ok: "Moz connected. Domain Authority is being looked up for your sites, within the monthly row budget; it appears next to each site's name shortly.", section: 'moz' };
+		} catch (e) {
+			return fail(e instanceof MozError && e.status === 400 ? 400 : 502, { error: msg(e), section: 'moz' });
+		}
+	},
+	mozRemove: async () => {
+		disconnectMoz();
+		return { ok: 'Moz disconnected. The Domain Authority values already stored stay on the dashboard.', section: 'moz' };
+	},
+	mozRefresh: async () => {
+		if (!mozIntegration()) return fail(400, { error: 'The credentials are not active. Replace them below first.', section: 'moz' });
+		enqueueDaAll(true);
+		return { ok: "Looking up Domain Authority again. It uses Moz rows, within this month's budget.", section: 'moz' };
+	},
 	/** Ahrefs Domain Rating: check the key (free), keep it encrypted, and fetch every site's value. */
 	ahrefsKey: async ({ request }) => {
 		try {

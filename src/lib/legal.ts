@@ -61,6 +61,7 @@ export function privacySections(c: LegalContext): LegalSection[] {
 				'An AI model provider, only if the operator has switched on the Ask chat: when you ask a question there, your question and the data the service looks up to answer it (for example queries, pages, clicks, positions and the to-do list for the sites you choose) are sent to Anthropic, the company behind Claude, using the operator’s own API key, to write the answer. Nothing is sent unless someone uses Ask. Anthropic handles it under its own terms and privacy policy.',
 				'AI answer providers, only if the operator has switched on AI answer tracking: the questions you write to track are sent to the AI services that answer them (OpenAI, Anthropic and Perplexity, or DataForSEO, which runs some of them for the service) to see whether your brand or site is mentioned. This is not data from Google.',
 				'Ahrefs, only if the operator has connected it: the domain names of the sites you manage are sent to Ahrefs, once a week, to look up their Domain Rating. Nothing else about your sites, and none of your Google data, is sent.',
+				'Moz, only if the operator has connected it: the domain names of the sites you manage are sent to Moz, about once a month, to look up their Domain Authority. Nothing else about your sites, and none of your Google data, is sent.',
 				'The company that hosts the server and its backups, as our service provider.',
 				'Authorities, if the law requires it.'
 			]

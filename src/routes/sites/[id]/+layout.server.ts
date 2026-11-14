@@ -9,7 +9,7 @@ import { config } from '$lib/server/config';
 import { linksFor } from '$lib/server/links';
 import { openSeoProjectUrl } from '$lib/server/connect';
 import { queueFor } from '$lib/server/actions';
-import { drBadge, drFor } from '$lib/server/ahrefs';
+import { authorityOf } from '$lib/server/authority';
 
 export const load: LayoutServerLoad = ({ params, url }) => {
 	const site = getSite(Number(params.id));
@@ -38,7 +38,7 @@ export const load: LayoutServerLoad = ({ params, url }) => {
 			id: site.id,
 			url: site.site_url,
 			name: displayName(site.site_url),
-			dr: drBadge(drFor(site.id)),
+			authority: authorityOf(site.id),
 			label: site.label,
 			tags: site.tags,
 			brandTerms: site.brand_terms,

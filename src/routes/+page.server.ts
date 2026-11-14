@@ -13,7 +13,7 @@ import { onboardingFor, setOnboardingHidden } from '$lib/server/onboarding';
 import { enqueueIndexMonitor } from '$lib/server/jobs';
 import { getSite } from '$lib/server/clients';
 import { audit } from '$lib/server/db';
-import { drBadge, drRows } from '$lib/server/ahrefs';
+import { authorityMap } from '$lib/server/authority';
 import { hasRole } from '$lib/server/roles';
 
 export const load: PageServerLoad = ({ url, locals }) => {
@@ -21,7 +21,7 @@ export const load: PageServerLoad = ({ url, locals }) => {
 	const showHidden = url.searchParams.get('hidden') === '1';
 	// A team member limited to some sites sees only those, and the totals cover only those.
 	const scope = locals?.user?.siteIds ?? null;
-	const drBySite = new Map(drRows().map((r) => [r.site_id, r]));
+	const authBySite = authorityMap();
 	const cards = siteCards(days, { includeHidden: showHidden }).filter((c) => scope === null || scope.includes(c.site.id));
 	const totals = portfolioTotals(cards.filter((c) => !c.site.hidden && c.site.permission !== 'none'));
 	const links = allLinks();
@@ -52,7 +52,7 @@ export const load: PageServerLoad = ({ url, locals }) => {
 		cards: cards.map((c) => ({
 			id: c.site.id,
 			name: displayName(c.site.site_url),
-			dr: drBadge(drBySite.get(c.site.id)),
+			authority: authBySite.get(c.site.id) ?? { dr: null, da: null },
 			href: c.site.site_url.startsWith('sc-domain:') ? `https://${c.site.site_url.slice(10)}/` : c.site.site_url,
 			label: c.site.label,
 			tags: c.site.tags ? c.site.tags.split(',').filter(Boolean) : [],

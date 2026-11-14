@@ -119,9 +119,9 @@ describe('looking every site up in one request', () => {
 		expect(f.calls).toHaveLength(1);
 		expect([...f.calls[0].body.targets].sort()).toEqual(['alpha.com', 'beta.io']); // not hidden.net or gone.net; alpha.com once
 		expect(r).toEqual({ stored: 3, missing: 0 });
-		expect(drBadge(drFor(1))).toEqual({ dr: 12.3, date: '2026-11-14' });
-		expect(drBadge(drFor(3))).toEqual({ dr: 12.3, date: '2026-11-14' });
-		expect(drBadge(drFor(2))).toEqual({ dr: 0, date: '2026-11-14' }); // zero is a value, not "none"
+		expect(drBadge(drFor(1))).toEqual({ value: 12.3, date: '2026-11-14' });
+		expect(drBadge(drFor(3))).toEqual({ value: 12.3, date: '2026-11-14' });
+		expect(drBadge(drFor(2))).toEqual({ value: 0, date: '2026-11-14' }); // zero is a value, not "none"
 		expect(drFor(4)).toBeUndefined();
 	});
 
@@ -129,9 +129,9 @@ describe('looking every site up in one request', () => {
 		await syncDrAll({ fetchImpl: fakeAhrefs({ 'alpha.com': 40, 'beta.io': 7 }).impl, now: T0 });
 		const r = await syncDrAll({ fetchImpl: fakeAhrefs({ 'alpha.com': 41 }).impl, now: T0 + 8 * DAY });
 		expect(r).toMatchObject({ stored: 2, missing: 1 });
-		expect(drFor(2)).toMatchObject({ dr: 7, error: expect.stringContaining('beta.io') });
-		expect(drBadge(drFor(2))).toEqual({ dr: 7, date: '2026-11-14' });
-		expect(drBadge(drFor(1))?.dr).toBe(41);
+		expect(drFor(2)).toMatchObject({ value: 7, error: expect.stringContaining('beta.io') });
+		expect(drBadge(drFor(2))).toEqual({ value: 7, date: '2026-11-14' });
+		expect(drBadge(drFor(1))?.value).toBe(41);
 	});
 
 	it('a rejected key stops further asking until it is replaced', async () => {
@@ -159,15 +159,21 @@ describe('looking every site up in one request', () => {
 });
 
 describe('how it is shown', () => {
-	it('every chip carries the credit the licence requires, with Ahrefs linked to ahrefs.com and not hidden', () => {
-		const chip = readFileSync('src/lib/components/DrChip.svelte', 'utf8');
-		expect(chip).toContain('href="https://ahrefs.com/"');
-		expect(chip).toMatch(/by <a[^>]*>Ahrefs<\/a>/);
-		expect(chip).toContain('Domain Rating by Ahrefs');
-		expect(chip.slice(chip.indexOf('</script>'))).not.toMatch(/display:\s*none|sr-only|\bhidden\b|opacity-0/); // the markup, not the comment above it
-		// and it is used where a site is named: the dashboard card and the site header
-		expect(readFileSync('src/routes/+page.svelte', 'utf8')).toContain('<DrChip');
-		expect(readFileSync('src/routes/sites/[id]/+layout.svelte', 'utf8')).toContain('<DrChip');
+	it('shows only the circle on a card (no written credit there), but every circle links to Ahrefs and names it, and the credit is written out once per page', () => {
+		const badges = readFileSync('src/lib/components/AuthorityBadges.svelte', 'utf8');
+		const markup = badges.slice(badges.indexOf('</script>'));
+		expect(markup).toContain('{i.credit}'); // tooltip and aria-label: "Domain Rating by Ahrefs: 42 of 100"
+		expect(badges).toContain("credit: 'Domain Rating by Ahrefs'");
+		expect(badges).toContain("href: 'https://ahrefs.com/'");
+		expect(markup).not.toMatch(/by\s+Ahrefs|by\s+Moz/); // no written credit inside the circle
+		const credit = readFileSync('src/lib/components/AuthorityCredit.svelte', 'utf8');
+		expect(credit).toMatch(/Domain Rating by <a[^>]*href="https:\/\/ahrefs\.com\/"[^>]*>Ahrefs<\/a>/);
+		// and it is used where a site is named: the dashboard (circles and the credit line) and the site header (circles and the credit line)
+		for (const f of ['src/routes/+page.svelte', 'src/routes/sites/[id]/+layout.svelte']) {
+			const t = readFileSync(f, 'utf8');
+			expect(t, f).toContain('<AuthorityBadges');
+			expect(t, f).toContain('<AuthorityCredit');
+		}
 	});
 	it('the privacy policy says the domain names go to Ahrefs, and nothing else', () => {
 		const t = privacySections({ entity: 'X', contact: 'a@b.c', law: null, updated: '2026-11-14' }).map((s) => [...s.paras, ...(s.items ?? [])].join(' ')).join(' ');

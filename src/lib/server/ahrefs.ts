@@ -1,4 +1,5 @@
 import { audit, db } from './db';
+import { DAY, authDue, authFor, authRows, authSummary, authoritySiteIds, badgeOf, domainTarget, normaliseTarget, saveError, saveValue, type AuthBadge, type AuthRow } from './authority';
 import { integrationSecret, listIntegrations, removeIntegration, saveIntegration } from './links';
 import { getSite } from './clients';
 import { config, env } from './config';
@@ -16,8 +17,6 @@ const ENDPOINT = 'https://api.ahrefs.com/v3/public/domain-rating-free';
 const PROBE_TARGET = 'ahrefs.com';
 const MAX_TARGETS = 1000;
 export const DR_EVERY_DAYS = 7;
-const RETRY_AFTER_ERROR_MS = 24 * 3600_000;
-const DAY = 86_400_000;
 
 export class AhrefsError extends Error {
 	constructor(message: string, readonly status: number) {
@@ -25,26 +24,11 @@ export class AhrefsError extends Error {
 	}
 }
 
-export interface DrBadge { dr: number; date: string | null }
+export type DrBadge = AuthBadge;
+export { domainTarget, normaliseTarget };
 
 /** Ahrefs offers two versions of the score; the default (dr3) unless AHREFS_DR_VERSION=dr4. */
 export const drVersion = () => (env('AHREFS_DR_VERSION').trim().toLowerCase() === 'dr4' ? 'dr4' : 'dr3');
-
-/** The domain Ahrefs is asked about: a Domain property's domain, or a URL-prefix property's host without a leading www. */
-export function domainTarget(siteUrl: string): string | null {
-	try {
-		const host = siteUrl.startsWith('sc-domain:') ? siteUrl.slice('sc-domain:'.length) : new URL(siteUrl).hostname;
-		const t = host.trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
-		return /^[a-z0-9.-]+\.[a-z0-9-]{2,}$/.test(t) ? t : null;
-	} catch {
-		return null;
-	}
-}
-
-/** Targets are compared without scheme, case or trailing slash: Ahrefs answers "example.com" with "example.com/". */
-export const normaliseTarget = (t: string) => t.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
-
-const utcDay = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 /** The DR Ahrefs gave for each target it answered, keyed by normalised target. */
 export function parseDomainRatings(json: unknown): Map<string, number> {
@@ -108,27 +92,15 @@ export function disconnectAhrefs() {
 	audit('ahrefs.disconnected');
 }
 
-export interface DrRow { site_id: number; dr: number | null; fetched_on: string | null; error: string | null; error_at: number | null }
-export const drRows = () => db().prepare('SELECT * FROM site_dr').all() as DrRow[];
-export const drFor = (siteId: number) => db().prepare('SELECT * FROM site_dr WHERE site_id = ?').get(siteId) as DrRow | undefined;
-
-/** What the dashboard shows: the last good value (with its day), or null. Never an error. */
-export const drBadge = (row: DrRow | undefined): DrBadge | null => (row && row.dr != null ? { dr: Math.round(row.dr * 10) / 10, date: row.fetched_on } : null);
-
-/** Sites Domain Rating is looked up for: shown on the dashboard, readable, and with a domain Ahrefs can be asked about. */
-export function drSiteIds(): number[] {
-	const rows = db().prepare("SELECT id, site_url FROM sites WHERE hidden = 0 AND permission NOT IN ('siteUnverifiedUser','none')").all() as { id: number; site_url: string }[];
-	return rows.filter((r) => domainTarget(r.site_url)).map((r) => r.id);
-}
+export const drRows = () => authRows('dr');
+export const drFor = (siteId: number) => authFor(siteId, 'dr');
+export const drBadge = (row: AuthRow | undefined) => badgeOf(row);
+export const drSiteIds = authoritySiteIds;
 
 /** Due when connected and the last good value is older than DR_EVERY_DAYS, or the last attempt failed more than a day ago. */
 export function drDue(siteId: number, now = Date.now()): boolean {
 	if (!ahrefsIntegration() || !drSiteIds().includes(siteId)) return false;
-	const row = drFor(siteId);
-	if (!row) return true;
-	if (row.error_at && now - row.error_at < RETRY_AFTER_ERROR_MS) return false;
-	if (!row.fetched_on) return true;
-	return now - Date.parse(row.fetched_on + 'T00:00:00Z') >= DR_EVERY_DAYS * DAY;
+	return authDue(siteId, 'dr', DR_EVERY_DAYS, now);
 }
 
 /** Any site due: the scheduler then runs one batch for all of them. */
@@ -149,28 +121,26 @@ export async function syncDrAll(o: { fetchImpl?: typeof fetch; now?: number } = 
 	const key = integrationSecret<{ apiKey: string }>(integ).apiKey;
 	const fetchImpl = o.fetchImpl ?? (integ.is_demo ? demoAhrefsFetch() : fetch);
 	const d = db();
-	const fail = d.prepare('INSERT INTO site_dr (site_id, error, error_at) VALUES (?,?,?) ON CONFLICT(site_id) DO UPDATE SET error = excluded.error, error_at = excluded.error_at');
 	let answers: Map<string, number>;
 	try {
 		answers = await queryDomainRatings(key, [...new Set(bySite.values())], fetchImpl);
 	} catch (e) {
 		const err = e instanceof AhrefsError ? e : new AhrefsError(e instanceof Error ? e.message : String(e), 0);
-		d.transaction(() => { for (const id of bySite.keys()) fail.run(id, err.message, now); })();
+		d.transaction(() => { for (const id of bySite.keys()) saveError(id, 'dr', err.message, now); })();
 		// A rejected key will be rejected for every site: stop asking until someone replaces it.
 		if (err.status === 401 || err.status === 403) d.prepare("UPDATE integrations SET status = 'rejected' WHERE id = ?").run(integ.id);
 		throw err;
 	}
-	const ok = d.prepare('INSERT INTO site_dr (site_id, dr, fetched_on, error, error_at) VALUES (?,?,?,NULL,NULL) ON CONFLICT(site_id) DO UPDATE SET dr = excluded.dr, fetched_on = excluded.fetched_on, error = NULL, error_at = NULL');
 	let stored = 0, missing = 0;
 	d.transaction(() => {
 		for (const [id, target] of bySite) {
 			const dr = answers.get(normaliseTarget(target));
 			if (dr == null) {
 				missing++;
-				fail.run(id, `Ahrefs gave no Domain Rating for ${target}.`, now);
+				saveError(id, 'dr', `Ahrefs gave no Domain Rating for ${target}.`, now);
 			} else {
 				stored++;
-				ok.run(id, dr, utcDay(now));
+				saveValue(id, 'dr', dr, now);
 			}
 		}
 	})();
@@ -181,14 +151,6 @@ export async function syncDrAll(o: { fetchImpl?: typeof fetch; now?: number } = 
 export function ahrefsStatus() {
 	const row = ahrefsRow();
 	if (!row) return null;
-	const ids = drSiteIds();
-	const rows = new Map(drRows().map((r) => [r.site_id, r]));
-	const errors = ids.map((i) => rows.get(i)).filter((r) => r?.error && r.error_at).sort((a, b) => b!.error_at! - a!.error_at!);
-	return {
-		demo: !!row.is_demo,
-		rejected: row.status === 'rejected',
-		total: ids.length,
-		withDr: ids.filter((i) => rows.get(i)?.dr != null).length,
-		lastError: (errors[0]?.error as string | undefined) ?? null
-	};
+	const x = authSummary('dr');
+	return { demo: !!row.is_demo, rejected: row.status === 'rejected', total: x.total, withDr: x.withValue, lastError: x.lastError };
 }

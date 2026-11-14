@@ -26,6 +26,7 @@ import { auditDue, syncAudit } from './openseolink';
 import { linksFor as siteLinks } from './links';
 import { backupDue, runBackup } from './backup';
 import { ahrefsIntegration, drAnyDue, syncDrAll } from './ahrefs';
+import { daAnyDue, mozIntegration, syncDaAll } from './moz';
 
 type Job = { key: string; fn: () => Promise<unknown> };
 const waiting: Job[] = [];
@@ -130,6 +131,12 @@ export function enqueueDrAll(force = false): boolean {
 	return enqueue('ahrefs', () => syncDrAll());
 }
 
+/** Moz Domain Authority for the sites that are due, within the month's row budget; or, with force, for all of them (the Refresh button). */
+export function enqueueDaAll(force = false): boolean {
+	if (!mozIntegration() || !(force || daAnyDue())) return false;
+	return enqueue('moz', () => syncDaAll({ force }));
+}
+
 /** Indexing monitor for one site: inspects its top URLs and records changes. Opt-in per site, since it spends URL Inspection quota. */
 export function enqueueIndexMonitor(siteId: number): boolean {
 	return enqueue(`index:${siteId}`, () => monitorSite(siteId));
@@ -205,6 +212,7 @@ export function schedulerTick() {
 		for (const s of sites) if ((d.prepare('SELECT crux_pulled_on p FROM sites WHERE id = ?').get(s.id) as { p: string | null }).p !== today) enqueueCruxSync(s.id);
 	}
 	enqueueDrAll();
+	enqueueDaAll();
 	const today = pacificToday();
 	for (const s of sites) {
 		const sm = d.prepare('SELECT fetched_at f, error e FROM sitemap_sync WHERE site_id = ?').get(s.id) as { f: number; e: string | null } | undefined;
