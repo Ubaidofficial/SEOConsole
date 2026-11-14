@@ -97,6 +97,7 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 		const h = trackingHealth(site, days);
 		const how: Record<string, string> = {
 			'gtm-unpublished': 'Open the container in Tag Manager, review the workspace and publish a version. Until then none of its tags run.',
+			'gtm-tag-id-malformed': 'In Tag Manager open the Google tag, put only the measurement ID (G-…) in the Tag ID field, then Save, Submit and Publish. The Tag Manager tab shows which tag and what it holds now.',
 			'ga4-id-mismatch': 'Make the GA4 tag use the measurement ID of the property you report on, or link the right property on the Connect page.',
 			'ga4-no-organic': 'Check the GA4 tag fires on the site (Tag Assistant, GA4 Realtime), that the data stream URL is right and that consent settings are not blocking it.',
 			'ga4-gap': 'Check the GA4 tag fires on every template, and consent or ad-blocker losses; compare with Search Console over a longer window.',

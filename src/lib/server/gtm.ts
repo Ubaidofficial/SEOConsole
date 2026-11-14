@@ -33,6 +33,13 @@ export interface GtmTag {
 	/** G-XXXXXXX the tag sends to, when it is a Google tag / GA4 tag and the ID is a literal or a constant variable. */
 	measurementId: string | null;
 	eventName: string | null;
+	/**
+	 * A Google tag / GA4 tag whose ID field holds something that is not an ID and not a variable reference (for example a whole pasted gtag.js
+	 * snippet): the text, whitespace squashed and cut to 120 characters. Absent in older snapshots, filled on the next sync.
+	 */
+	badTagId?: string | null;
+	/** A measurement ID found inside that text, which is most likely the one meant. */
+	suggestedId?: string | null;
 	/** A Microsoft Clarity tag: Custom HTML carrying Clarity's snippet, or a template named after Clarity. Absent in older snapshots. */
 	clarity?: boolean;
 	/** The Clarity project ID the tag loads, when it can be read. */
@@ -100,6 +107,9 @@ export async function liveVersion(accountId: number, containerPath: string, http
 
 // ── summarising ──────────────────────────────────────────────────────────────
 const MEASUREMENT_ID = /^G-[A-Z0-9]{4,}$/;
+/** Every kind of ID a Google tag's ID field may legitimately hold (measurement, Google tag, Ads, Floodlight, old Analytics). */
+const ID_LIKE = /^(G|GT|AW|DC|UA)-[A-Z0-9-]{3,}$/i;
+const VARIABLE_REF = /^\{\{.+\}\}$/;
 export const GA4_TAG_TYPES = new Set(['googtag', 'gaawc', 'gaawe']);
 
 const param = (item: RawItem, ...keys: string[]) => {
@@ -130,6 +140,8 @@ export function summarizeVersion(v: RawVersion): GtmLive {
 		// Community templates are identified by name only: their parameter names are the template author's choice.
 		const clarity = html ? html.clarityLoader : type.startsWith('cvt_') && /clarity/i.test(t.name ?? '');
 		const templateId = clarity && !html ? (t.parameter ?? []).map((p) => p.value ?? '').find((v) => /^[a-z0-9]{8,12}$/.test(v)) ?? null : null;
+		const rawId = ga ? param(t, 'tagId', 'measurementId', 'measurementIdOverride') : null;
+		const bad = rawId && !VARIABLE_REF.test(rawId.trim()) && !ID_LIKE.test(rawId.trim()) ? rawId : null;
 		return {
 			id: t.tagId ?? '',
 			name: t.name ?? t.tagId ?? '(unnamed)',
@@ -138,7 +150,9 @@ export function summarizeVersion(v: RawVersion): GtmLive {
 			firing: (t.firingTriggerId ?? []).map((id) => triggerName.get(id) ?? `trigger ${id}`),
 			blocking: (t.blockingTriggerId ?? []).map((id) => triggerName.get(id) ?? `trigger ${id}`),
 			// googtag keeps its ID in `tagId`; GA4 configuration / event tags in `measurementId` / `measurementIdOverride`.
-			measurementId: ga ? resolve(param(t, 'tagId', 'measurementId', 'measurementIdOverride')) : null,
+			measurementId: ga ? resolve(rawId) : null,
+			badTagId: bad ? bad.replace(/\s+/g, ' ').trim().slice(0, 120) : null,
+			suggestedId: bad ? (/\bG-[A-Z0-9]{4,}\b/i.exec(bad)?.[0]?.toUpperCase() ?? null) : null,
 			eventName: type === 'gaawe' ? param(t, 'eventName') : null,
 			clarity,
 			clarityId: html?.clarityIds[0] ?? templateId

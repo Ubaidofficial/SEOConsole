@@ -19,6 +19,8 @@ export interface TrackingTag {
 	paused: boolean;
 	firing: string[];
 	measurementId: string | null;
+	badTagId?: string | null;
+	suggestedId?: string | null;
 }
 
 export interface TrackingInput {
@@ -58,6 +60,14 @@ export function auditTracking(input: TrackingInput): Finding[] {
 	if (gtm?.published) {
 		const gaTags = gtm.tags.filter((t) => GA4_TYPES.has(t.type));
 		const ids = [...new Set(gaTags.map((t) => t.measurementId).filter((m): m is string => !!m))];
+		const malformed = gaTags.filter((t) => t.badTagId);
+		for (const t of malformed) {
+			const fix = t.suggestedId ? `only ${t.suggestedId}` : 'only the measurement ID (G-…)';
+			out.push({
+				id: 'gtm-tag-id-malformed', severity: 'critical', title: 'A Google tag has something other than an ID in its Tag ID field',
+				detail: `The tag “${t.name}” has this where its Tag ID should be: “${t.badTagId}${(t.badTagId ?? '').length >= 120 ? '…' : ''}”. Tag Manager passes that text to Google as the ID, so the tag cannot send anything and GA4 records no visits from this container (a pasted gtag.js snippet is the usual cause). In Tag Manager open the tag, set the Tag ID to ${fix}, then Save, Submit and Publish.${t.suggestedId && ga4 && ga4.measurementIds.length && !ga4.measurementIds.includes(t.suggestedId) ? ` Note: ${t.suggestedId} is not the linked property's measurement ID (${list(ga4.measurementIds)}).` : ''}`
+			});
+		}
 		if (!gaTags.length) {
 			out.push({ id: 'gtm-no-ga4-tag', severity: 'warning', title: 'No Google tag or GA4 tag in the live container', detail: 'GA4 may be installed on the site some other way (a gtag.js snippet or a plugin). If it is meant to load through Tag Manager, nothing is sending data.' });
 		} else if (ga4 && ga4.measurementIds.length && ids.length) {
@@ -66,7 +76,7 @@ export function auditTracking(input: TrackingInput): Finding[] {
 			}
 		} else if (ga4 && ids.length && !ga4.measurementIds.length) {
 			out.push({ id: 'ga4-id-unknown', severity: 'info', title: 'Could not compare measurement IDs', detail: `The container sends to ${list(ids)}; Google did not return the linked property's measurement ID, so the match could not be checked.` });
-		} else if (ga4 && !ids.length) {
+		} else if (ga4 && !ids.length && !malformed.length) {
 			out.push({ id: 'ga4-id-hidden', severity: 'info', title: 'GA4 tag IDs could not be read', detail: 'The container has GA4 tags, but their measurement IDs are not literal values or constant variables, so the match could not be checked.' });
 		}
 
