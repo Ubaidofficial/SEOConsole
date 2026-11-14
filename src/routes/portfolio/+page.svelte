@@ -24,7 +24,7 @@
 
 <div class="mb-3 flex flex-wrap items-center gap-3">
 	<h1 class="text-lg font-semibold">Portfolio</h1>
-	<PeriodPicker days={data.days} />
+	<PeriodPicker days={data.days} latest={data.latest} />
 </div>
 <Explainer lead="One list of the same findings across all your sites.">
 	<p>{PORTFOLIO_INTRO}</p>

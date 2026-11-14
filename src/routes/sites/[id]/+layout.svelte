@@ -63,7 +63,7 @@
 		{#if data.site.authority.dr || data.site.authority.da}<div class="text-[11px] text-muted-foreground"><AuthorityCredit dr={!!data.site.authority.dr} da={!!data.site.authority.da} /></div>{/if}
 	</div>
 	<div class="ml-auto flex flex-wrap items-center gap-3">
-		<PeriodPicker days={data.days} />
+		<PeriodPicker days={data.days} latest={data.latest} />
 		{#if data.openseo?.url}<a class="btn" href={data.openseo.url} target="_blank" rel="noreferrer noopener" title={privacy.on ? undefined : `OpenSEO project: ${data.openseo.name}`}>OpenSEO ↗</a>{/if}
 		<a class="btn" href="/chat?draft={encodeURIComponent(`About ${data.site.name}: `)}" title="Open the chat with this site named in the question"><Sparkles class="size-3.5" />Ask about this site</a>
 		<form method="POST" action="{base}/sync" use:enhance><button class="btn" disabled={syncing}><RefreshCw class="size-3.5 {syncing ? 'animate-spin' : ''}" />{syncing ? 'Syncing…' : 'Sync'}</button></form>
