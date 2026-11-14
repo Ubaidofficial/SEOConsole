@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { daysParam, intParam } from '$lib/server/params';
-import { portfolioTotals, siteCards } from '$lib/server/queries';
+import { allSites, newestDataDay, portfolioTotals, siteCards } from '$lib/server/queries';
 import { enqueueSiteSync } from '$lib/server/jobs';
 import { db } from '$lib/server/db';
 import { listAccounts, syncAccountSites } from '$lib/server/accounts';
@@ -17,10 +17,12 @@ import { authorityMap } from '$lib/server/authority';
 import { hasRole } from '$lib/server/roles';
 
 export const load: PageServerLoad = ({ url, locals }) => {
-	const days = daysParam(url);
 	const showHidden = url.searchParams.get('hidden') === '1';
 	// A team member limited to some sites sees only those, and the totals cover only those.
 	const scope = locals?.user?.siteIds ?? null;
+	// "Since a date" runs to the newest data among the sites shown.
+	const latest = newestDataDay(allSites({ includeHidden: showHidden }).filter((s) => scope === null || scope.includes(s.id)));
+	const days = daysParam(url, latest);
 	const authBySite = authorityMap();
 	const cards = siteCards(days, { includeHidden: showHidden }).filter((c) => scope === null || scope.includes(c.site.id));
 	const totals = portfolioTotals(cards.filter((c) => !c.site.hidden && c.site.permission !== 'none'));
@@ -28,6 +30,7 @@ export const load: PageServerLoad = ({ url, locals }) => {
 	const has = (id: number, k: string) => links.some((l) => l.site_id === id && l.kind === k);
 	return {
 		days,
+		latest,
 		showHidden,
 		// The get-started guide is for whoever sets the installation up: the owner and admins.
 		onboarding: hasRole(locals?.user?.role, 'admin') ? onboardingFor() : null,

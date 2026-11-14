@@ -80,7 +80,7 @@
 		<span class="rounded-full bg-muted px-2.5 py-0.5 text-sm font-medium text-muted-foreground tnum">{data.totals.sites}</span>
 		{#if data.totals.duplicates}<span class="text-xs text-muted-foreground">{data.totals.duplicates} overlapping</span>{/if}
 	</div>
-	<PeriodPicker days={data.days} />
+	<PeriodPicker days={data.days} latest={data.latest} />
 	<div class="ml-auto flex flex-wrap items-center gap-2">
 		<div class="relative">
 			<Search class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -195,7 +195,11 @@
 						{:else}Waiting for first sync…{/if}
 					</div>
 				{:else}
-					<AreaSpark values={c.spark} trend={trendOf(c.clicksDelta, c.spark)} class="mt-5" />
+					{#if c.spark.length > 1}
+						<AreaSpark values={c.spark} trend={trendOf(c.clicksDelta, c.spark)} class="mt-5" />
+					{:else}
+						<p class="mt-5 text-xs text-muted-foreground">One day of data, so there is no trend line to draw.</p>
+					{/if}
 					<div class="tnum mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm whitespace-nowrap text-muted-foreground lg:flex-nowrap lg:justify-between 2xl:justify-start 2xl:gap-x-5">
 						<span class="inline-flex items-center gap-1.5">Impr. <b class="font-medium text-foreground">{fmtInt(c.impressions)}</b><Delta value={c.impressionsDelta} why={c.comparable ? 'Too little data in the previous period' : 'Previous period still loading'} /></span>
 						<span class="inline-flex items-center gap-1.5">CTR <b class="font-medium text-foreground">{fmtPct(c.ctr)}</b><Delta value={c.ctrDelta} why="Needs 100+ impressions in both periods" /></span>

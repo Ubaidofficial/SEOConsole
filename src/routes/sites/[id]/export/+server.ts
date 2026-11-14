@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getSite } from '$lib/server/clients';
 import { daysParam } from '$lib/server/params';
-import { periodFor, topPages, topQueries } from '$lib/server/queries';
+import { periodFor, siteEnd, topPages, topQueries } from '$lib/server/queries';
 import { ctrOf } from '$lib/analytics';
 
 /** Spreadsheet formula injection: a cell starting with = + - @ is executed by Excel/Sheets. */
@@ -15,7 +15,7 @@ const cell = (v: string | number) => {
 export const GET: RequestHandler = ({ params, url }) => {
 	const site = getSite(Number(params.id));
 	if (!site) error(404);
-	const days = daysParam(url);
+	const days = daysParam(url, siteEnd(site));
 	const p = periodFor(site, days);
 	const dim = url.searchParams.get('dim') === 'page' ? 'page' : 'query';
 	const rows = dim === 'page' ? topPages(site.id, p.start, p.end, {}, 100_000) : topQueries(site.id, p.start, p.end, {}, 100_000);

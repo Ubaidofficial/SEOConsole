@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { getSite, displayName } from '$lib/server/clients';
 import { daysParam } from '$lib/server/params';
-import { historyCoversPrevious, periodFor, summary } from '$lib/server/queries';
+import { historyCoversPrevious, periodFor, siteEnd, summary } from '$lib/server/queries';
 import { db } from '$lib/server/db';
 import { ctrOf, pctChangeMin, positionShift } from '$lib/analytics';
 import { config } from '$lib/server/config';
@@ -15,7 +15,8 @@ export const load: LayoutServerLoad = ({ params, url }) => {
 	const site = getSite(Number(params.id));
 	if (!site) error(404, 'Unknown site');
 	const acc = db().prepare('SELECT email, label, status FROM accounts WHERE id = ?').get(site.account_id) as { email: string; label: string | null; status: string };
-	const days = daysParam(url);
+	const latest = siteEnd(site);
+	const days = daysParam(url, latest);
 	const period = periodFor(site, days);
 	const now = summary(site.id, period.start, period.end);
 	const prev = summary(site.id, period.prevStart, period.prevEnd);
@@ -53,6 +54,7 @@ export const load: LayoutServerLoad = ({ params, url }) => {
 		},
 		account: acc,
 		days,
+		latest,
 		period,
 		readOnly: config.readOnly,
 		kpis: {

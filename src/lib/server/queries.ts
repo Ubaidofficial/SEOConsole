@@ -17,6 +17,11 @@ export function siteEnd(site: Pick<SiteRow, 'id' | 'synced_through'>): string {
 	return site.synced_through ?? addDays(pacificToday(), -2);
 }
 
+/** The newest day of data among the sites a page shows: what "since a date" runs to on the dashboard and the portfolio (each site's own window still ends at its own newest day). */
+export function newestDataDay(sites: Pick<SiteRow, 'id' | 'synced_through'>[] = allSites()): string {
+	return sites.reduce((m, s) => (siteEnd(s) > m ? siteEnd(s) : m), '') || addDays(pacificToday(), -2);
+}
+
 export function periodFor(site: Pick<SiteRow, 'id' | 'synced_through'>, days: number): Period {
 	return makePeriod(siteEnd(site), days);
 }
