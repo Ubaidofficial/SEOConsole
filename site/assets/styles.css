@@ -76,8 +76,8 @@ code, pre, .mono { font-family: var(--mono); }
 @keyframes rise { to { transform: none; opacity: 1; } }
 @keyframes draw { to { transform: scaleX(1); } }
 .cta { display: flex; flex-wrap: wrap; gap: 14px; }
-.proof { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 0; margin: 38px 0 0; color: var(--mut); font-size: 14px; }
-.proof li { display: inline-flex; align-items: center; gap: 8px; }
+.proof { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 34px 0 0; color: var(--mut); font-size: 13px; }
+.proof li { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--line2); border-radius: 999px; background: rgba(255, 255, 255, 0.72); }
 .proof li::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--acc-ink); flex: none; }
 .proof b { color: var(--fg); font-weight: 650; }
 
@@ -98,6 +98,11 @@ code, pre, .mono { font-family: var(--mono); }
 .flow { border-block: 1px solid var(--line); margin-top: clamp(40px, 6vw, 72px); background: var(--bg2); padding-block: clamp(36px, 5vw, 64px); }
 .flow .kicker { margin-bottom: 18px; }
 .flow .fine { margin-top: 18px; }
+.flow .h-lg { font-size: clamp(2rem, 4.4vw, 3.4rem); max-width: 24ch; margin-bottom: 14px; }
+.flow .sub { max-width: 70ch; margin-bottom: 36px; }
+.one-chips { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 0; margin: 30px 0 0; }
+.one-chips li { padding: 9px 16px; border-radius: 999px; background: #fff; border: 1px solid var(--line2); box-shadow: var(--soft); font-size: 14.5px; color: var(--mut); }
+.one-chips b { color: var(--fg); font-weight: 650; }
 .beam { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); height: 440px; }
 .beam-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .beam-svg path { fill: none; stroke: var(--line2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
