@@ -182,9 +182,9 @@ describe('site: the product visuals and their motion', () => {
 		expect(html).toMatch(/<figcaption id="hx-cap" class="sr">Example from the demo data/);
 		expect(html.match(/<div class="hx-float [^"]*" aria-hidden="true">/g)).toHaveLength(3); // the chart, the search result, and the agent's proposal waiting for a click
 		expect(html.match(/<li class="hx-row /g)).toHaveLength(5);
-		expect(html).toContain('<span class="w">Find the</span>');
-		expect(html).toContain('SEO <span class="hl">wins</span> hiding');
-		expect(html).toContain('<span class="w">in your data.</span>');
+		expect(html).toContain('<span class="w">One dashboard.</span>');
+		expect(html).toContain('Hidden SEO <span class="hl">wins</span>,');
+		expect(html).toContain('<span class="w">found for you.</span>');
 	});
 	it('no pixel art is left: no sprites, no art folder, no generator', () => {
 		for (const gone of ['class="spr', 'class="dig', 'dchip', 'landscape', 'art-card']) expect(html, gone).not.toContain(gone);

@@ -3,7 +3,8 @@
    2. node site/tools/capture-shots.cjs   (connects the demo sources, seeds an SEO test, two indexing checks and a digest, then captures)
    3. python3 site/tools/to-webp.py       (writes the large and 1080 px WebP files into site/assets/shots)
    Each capture hides the app's own header and tab bar and is clipped to whole rows and whole tables, so nothing on the page is cut off.
-   To re-capture only some (without seeding again): node site/tools/capture-shots.cjs hidden,tests */
+   To re-capture only some (without seeding again): node site/tools/capture-shots.cjs hidden,tests
+   To seed AND capture only some (a fresh database): SEED=1 node site/tools/capture-shots.cjs dashboard,portfolio */
 const { chromium } = require('playwright');
 const { mkdirSync } = require('node:fs');
 const B = process.env.APP_URL || 'http://localhost:5173';
@@ -54,6 +55,10 @@ async function seed(b) {
   await connect('form[action="?/ga4Auto"]');
   await connect('form[action="?/gtmAuto"]');
   await connect('form[action="?/crux"]', { apiKey: 'demo' });
+  // Ahrefs Domain Rating and Moz Domain Authority, so the cards show their circles (demo values, looked up in the background)
+  await connect('form[action="?/ahrefsKey"]', { apiKey: 'demo' });
+  await connect('form[action="?/mozKeys"]', { accessId: 'demo', secretKey: 'demo' });
+  await p.waitForTimeout(3000);
   for (let k = 0; k < 6; k++) if (!(await connect('form[action="?/clarity"]', { token: 'demo' }))) break;
   // a finished SEO test and two indexing checks on coffeelab (site 4), and one weekly digest
   await p.goto(B + '/sites/4/tests', { waitUntil: 'networkidle' });
@@ -71,13 +76,16 @@ async function seed(b) {
   await p.goto(B + '/digest', { waitUntil: 'networkidle' });
   await p.locator('form[action="?/generate"] button').click();
   await p.waitForTimeout(3000);
+  // the dashboard guide is for someone setting the app up; the marketing shot shows the sites
+  await p.goto(B + '/', { waitUntil: 'networkidle' });
+  if (await p.locator('form[action="?/hideOnboarding"] button').count()) { await p.locator('form[action="?/hideOnboarding"] button').click(); await p.waitForTimeout(1200); }
   await p.close();
 }
 (async () => {
   mkdirSync(OUT, { recursive: true });
   const b = await chromium.launch();
   const only = process.argv[2] ? process.argv[2].split(',') : null;
-  if (!only) await seed(b);
+  if (!only || process.env.SEED) await seed(b); // SEED=1 seeds even when only some shots are asked for
   const S = {
     dashboard: ['/', { w: 1440, keepChrome: true, fullX: false, end: 'main article:nth-of-type(4)', pad: 16, start: null }],
     privacy: ['/', { w: 1100, privacy: true, start: 'main .stagger', ratio: 1.6 }],
