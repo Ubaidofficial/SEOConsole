@@ -8,6 +8,7 @@
 	import AreaSpark from '$lib/components/AreaSpark.svelte';
 	import { trendOf } from '$lib/trend';
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
+	import DrChip from '$lib/components/DrChip.svelte';
 	import Delta from '$lib/components/Delta.svelte';
 	import GetStarted from '$lib/components/GetStarted.svelte';
 	import { privacy } from '$lib/privacy.svelte';
@@ -149,6 +150,7 @@
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
 							<a href="/sites/{c.id}?days={data.days}" class="pii truncate text-lg leading-tight font-semibold tracking-tight after:absolute after:inset-0 after:rounded-2xl">{title(c)}</a>
+							<DrChip dr={c.dr} class="relative z-10 shrink-0" />
 							{#if c.removed}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px]" title="Google no longer lists this property for the account">removed in Search Console</span>{/if}
 							{#if isPrefix(c)}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px]">URL prefix</span>{/if}
 							<a href={c.href} target="_blank" rel="noreferrer noopener" class="tap relative z-10 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 [@media(hover:none)]:opacity-100" aria-label="Open the site in a new tab" title="Open site"><ExternalLink class="size-3.5" /></a>

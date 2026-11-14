@@ -10,6 +10,7 @@
 	const tabOf = (t: string) => SITE_TABS.find(([p]) => p === t)!;
 	import Delta from '$lib/components/Delta.svelte';
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
+	import DrChip from '$lib/components/DrChip.svelte';
 	import { fmtInt, fmtPct, fmtPos, ago } from '$lib/format';
 
 	let { data, children } = $props();
@@ -52,7 +53,7 @@
 	<SiteAvatar name={data.site.label || data.site.name} siteId={data.site.id} class="pii mt-1 !size-9 !rounded-lg !text-sm" />
 	<div class="min-w-0">
 		<div class="text-xs text-muted-foreground"><a href="/" class="hover:underline">All sites</a> / <span class="pii">{data.account.label ?? data.account.email}</span></div>
-		<h1 class="pii truncate text-lg font-semibold">{data.site.label || data.site.name}</h1>
+		<div class="flex min-w-0 items-center gap-2"><h1 class="pii truncate text-lg font-semibold">{data.site.label || data.site.name}</h1><DrChip dr={data.site.dr} class="shrink-0" /></div>
 		<div class="text-xs text-muted-foreground">
 			<span class="pii">{data.site.url}</span> · {data.period.start} → {data.period.end}
 			· {#if data.site.syncStatus === 'running' || data.site.syncStatus === 'queued'}{data.site.syncStatus}…{:else if data.site.syncStatus === 'error'}<span class="text-bad">sync error: {data.site.syncMessage}</span>{:else}synced {ago(data.site.lastSync)}{/if}

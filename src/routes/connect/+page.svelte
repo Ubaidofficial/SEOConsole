@@ -28,7 +28,8 @@
 		gtm: full('gtm') && !msgFor('gtm'),
 		clarity: full('clarity') && !msgFor('clarity'),
 		openseo: !!data.openseo && !msgFor('openseo'),
-		crux: !!data.crux && !msgFor('crux')
+		crux: !!data.crux && !msgFor('crux'),
+		ahrefs: !!data.ahrefs && !data.ahrefs.rejected && !msgFor('ahrefs')
 	});
 	const statusOf = $derived({
 		google: data.accounts.length ? `✓ ${data.accounts.length} account(s) · ${data.total} site(s)` : 'Not connected',
@@ -37,7 +38,8 @@
 		gtm: `${done.gtm ? '✓ ' : ''}${done.gtm}/${data.total} sites`,
 		clarity: `${done.clarity ? '✓ ' : ''}${done.clarity}/${data.total} sites`,
 		openseo: data.openseo ? `✓ ${data.openseo.linked} site(s)` : 'Optional, not connected',
-		crux: data.crux ? '✓ connected' : 'Optional, not connected'
+		crux: data.crux ? '✓ connected' : 'Optional, not connected',
+		ahrefs: data.ahrefs ? (data.ahrefs.rejected ? 'Key rejected: replace it' : `✓ ${data.ahrefs.withDr}/${data.ahrefs.total} sites`) : 'Optional, not connected'
 	});
 </script>
 
@@ -257,5 +259,25 @@
 	</form>
 	{#if msgFor('crux')?.ok}<p class="mt-2 text-sm text-good">{msgFor('crux')?.ok}</p>{/if}
 	{#if msgFor('crux')?.error}<p class="mt-2 text-sm text-bad">{msgFor('crux')?.error}</p>{/if}
+</details>
+
+<!-- 8 Ahrefs Domain Rating -->
+<details class="card mt-4 p-4 [&[open]>summary]:mb-2" open={!complete.ahrefs}>
+	<summary class="flex cursor-pointer list-none flex-wrap items-center gap-2 select-none [&::-webkit-details-marker]:hidden"><h2 class="font-medium">8 · Ahrefs Domain Rating <span class="chip ml-1">optional</span></h2><span class="ml-auto text-xs {complete.ahrefs ? 'text-good' : data.ahrefs?.rejected ? 'text-bad' : 'text-muted-foreground'}">{statusOf.ahrefs}</span></summary>
+	<Explainer lead="Shows Ahrefs' Domain Rating (DR, 0 to 100) next to each site's name, free.">
+		<p>It uses Ahrefs' free Domain Rating endpoint, which costs no API units and needs no paid plan: create a key under Account settings, API keys, in a free Ahrefs account. One request a week carries every site's domain, and nothing else about your sites is sent. Ahrefs' <a class="underline" href="http://ahrefs.com/legal/domain-rating-license" target="_blank" rel="noopener">Domain Rating License</a> requires the credit "Domain Rating by Ahrefs" next to the number, which the app shows. The key is stored encrypted. Checked once against the live service; expect small fixes.</p>
+	</Explainer>
+	{#if data.ahrefs}
+		<div class="mb-2 flex flex-wrap items-center gap-2 text-sm"><span>{data.ahrefs.rejected ? 'Key rejected' : 'Connected'}</span><span class="text-xs text-muted-foreground">DR for {data.ahrefs.withDr} of {data.ahrefs.total} site(s)</span>
+			<form method="POST" action="?/ahrefsRefresh" use:enhance={submit('ahrefs-refresh')} class="ml-auto"><button class="btn" disabled={data.ahrefs.rejected || busy === 'ahrefs-refresh'} title="Looks every site up again now (free)">Refresh now</button></form>
+			<form method="POST" action="?/ahrefsRemove" use:enhance><button class="btn btn-danger">Disconnect</button></form></div>
+		{#if data.ahrefs.lastError}<p class="mb-2 text-xs text-bad">Last problem: {data.ahrefs.lastError}</p>{/if}
+	{/if}
+	<form method="POST" action="?/ahrefsKey" use:enhance={submit('ahrefs')} class="flex flex-wrap gap-2">
+		<input class="input min-w-0 flex-1" name="apiKey" type="password" autocomplete="off" aria-label="Ahrefs API key" placeholder="Ahrefs API v3 key" required />
+		<button class="btn btn-primary" disabled={busy === 'ahrefs'}>{busy === 'ahrefs' ? 'Checking…' : data.ahrefs ? 'Replace key' : 'Connect'}</button>
+	</form>
+	{#if msgFor('ahrefs')?.ok}<p class="mt-2 text-sm text-good">{msgFor('ahrefs')?.ok}</p>{/if}
+	{#if msgFor('ahrefs')?.error}<p class="mt-2 text-sm text-bad">{msgFor('ahrefs')?.error}</p>{/if}
 </details>
 

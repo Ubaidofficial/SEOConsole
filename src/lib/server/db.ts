@@ -162,6 +162,15 @@ CREATE TABLE IF NOT EXISTS crux_daily (
 	lcp_good REAL, inp_good REAL, cls_good REAL,         -- share of loads rated good
 	PRIMARY KEY (site_id, date, form_factor)
 ) WITHOUT ROWID;
+
+-- Ahrefs Domain Rating per site (one row, refreshed weekly while Ahrefs is connected). A failure keeps the last good value.
+CREATE TABLE IF NOT EXISTS site_dr (
+	site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
+	dr REAL,                            -- 0 to 100; NULL until the first success
+	fetched_on TEXT,                    -- UTC day of the last success
+	error TEXT,
+	error_at INTEGER
+);
 CREATE TABLE IF NOT EXISTS ga4_landing_prev (
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	days INTEGER NOT NULL,              -- the window length; this is the equally long window just BEFORE the one in ga4_landing

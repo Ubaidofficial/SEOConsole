@@ -8,13 +8,14 @@ import { listAccounts } from '$lib/server/accounts';
 import { allLinks, integrationMeta, linksFor, listIntegrations, removeIntegration, removeLink, setLink, type LinkKind } from '$lib/server/links';
 import { autoMatchGa4, autoMatchGtm, connectBingKey, connectClarity, connectCrux, connectOpenSeo, hasGa4Scope, hasGtmScope, linkGtmManually } from '$lib/server/connect';
 import { callsLeft } from '$lib/server/clarity';
-import { enqueueLinkSync } from '$lib/server/jobs';
+import { enqueueDrAll, enqueueLinkSync } from '$lib/server/jobs';
 import { gtmSnapshot } from '$lib/server/tracking';
 import { GA4_TAG_TYPES } from '$lib/server/gtm';
 import { checkClarityNow } from '$lib/server/clarityscan';
 import { gtmOnSite, planSetup, runSetup, startGa4Account, type SetupChoices } from '$lib/server/setup';
 import { intParam } from '$lib/server/params';
 import { env } from '$lib/server/config';
+import { AhrefsError, ahrefsIntegration, ahrefsStatus, connectAhrefs, disconnectAhrefs } from '$lib/server/ahrefs';
 import { SWITCHES, applyToAll, available, counts, getDefaults, isSwitchKey, setDefault } from '$lib/server/automation';
 
 const KINDS: LinkKind[] = ['bing', 'ga4', 'gtm', 'clarity', 'openseo'];
@@ -47,6 +48,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		choices,
 		setupOnSite: setupSite && setupContainer ? gtmOnSite(setupSite.id, setupContainer) : null,
 		readOnly: config.readOnly,
+		ahrefs: ahrefsStatus(),
 		automation: (() => {
 			const c = counts();
 			const defaults = getDefaults();
@@ -80,6 +82,25 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 export const actions: Actions = {
+	/** Ahrefs Domain Rating: check the key (free), keep it encrypted, and fetch every site's value. */
+	ahrefsKey: async ({ request }) => {
+		try {
+			await connectAhrefs(String((await request.formData()).get('apiKey') ?? ''));
+			enqueueDrAll(true);
+			return { ok: "Ahrefs connected. Domain Rating is being looked up for all your sites; it appears next to each site's name shortly.", section: 'ahrefs' };
+		} catch (e) {
+			return fail(e instanceof AhrefsError && e.status === 400 ? 400 : 502, { error: msg(e), section: 'ahrefs' });
+		}
+	},
+	ahrefsRemove: async () => {
+		disconnectAhrefs();
+		return { ok: 'Ahrefs disconnected. The Domain Ratings already stored stay on the dashboard.', section: 'ahrefs' };
+	},
+	ahrefsRefresh: async () => {
+		if (!ahrefsIntegration()) return fail(400, { error: 'The key is not active. Replace it below first.', section: 'ahrefs' });
+		enqueueDrAll(true);
+		return { ok: 'Looking up Domain Rating again for all your sites. It costs nothing.', section: 'ahrefs' };
+	},
 	/** What a site found later starts with (off until chosen). */
 	automationDefault: async ({ request }) => {
 		const f = await request.formData();
