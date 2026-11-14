@@ -257,6 +257,52 @@ export function demoOpenSeoApi(siteId: number) {
 				const summary = types.map((t) => ({ issueType: t.issueType, title: t.title, severity: t.severity, count: issues.filter((i) => i.issueType === t.issueType).length })).filter((s) => s.count);
 				return { summary, issues, total: issues.length, page: 1 };
 			}
+			if (name === 'get_serp_results') {
+				// Shaped like a live answer: SERP elements with a type, rank and organicRank. About one keyword in eleven fails, as providers do.
+				const titles = ['Best {k} - Top 10 Picks', '{k}: a complete guide', '{k} vs the alternatives', 'Top {k} ranked', '{k} calculator', 'What is {k}?', '{k} pricing and reviews', 'The ultimate {k} list', '{k} explained', 'Buy {k} online'];
+				return { results: (args.queries as { keyword: string }[]).map((q) => {
+					const h = hash(q.keyword);
+					if (h % 11 === 0) return { keyword: q.keyword, ok: false, error: 'Internal SE Server Error. The data provider is temporarily unavailable; this is not a problem with the request.' };
+					const items: Record<string, unknown>[] = [];
+					let rank = 1;
+					if (h % 3 === 0) items.push({ type: 'ai_overview', rank: rank++, organicRank: null, title: null, url: null, domain: null, description: null });
+					if (h % 5 === 0) items.push({ type: 'featured_snippet', rank: rank++, organicRank: 1, title: `Snippet for ${q.keyword}`, url: 'https://snippet.example/a', domain: 'snippet.example', description: null });
+					const listy = h % 2 === 0;
+					for (let i = 0; i < 10; i++) {
+						if (i === 2 && h % 4 === 0) items.push({ type: 'people_also_ask', rank: rank++, organicRank: null, title: null, url: null, domain: null, description: null });
+						const t = listy ? titles[[0, 3, 7, 0, 3, 1, 7, 0, 3, 4][i]] : titles[[1, 5, 8, 1, 2, 9, 1, 8, 5, 6][i]];
+						items.push({ type: 'organic', rank: rank++, organicRank: i + 1, title: t.replace('{k}', q.keyword), url: `https://result${i}.example/${i}`, domain: `result${i}.example`, description: null });
+					}
+					return { keyword: q.keyword, ok: true, items, locationCode: 2840, languageCode: 'en', device: 'desktop' };
+				}) };
+			}
+			if (name === 'find_serp_competitors') {
+				const kws = (args.keywords as string[]).slice(0, 100);
+				const mk = (domain: string, base: number, share: number) => {
+					const positions: Record<string, number[]> = {};
+					kws.forEach((k, i) => { if ((hash(domain + k) % 100) / 100 < share) positions[k] = [Math.max(1, Math.round(base + (hash(k + domain) % 8) - 3 + i % 4))]; });
+					const ranks = Object.values(positions).map((v) => v[0]);
+					const avg = ranks.length ? ranks.reduce((a, b) => a + b, 0) / ranks.length : 0;
+					return { se_type: 'google', domain, avg_position: Math.round(avg * 10) / 10, median_position: ranks.sort((a, b) => a - b)[Math.floor(ranks.length / 2)] ?? 0, rating: 100, etv: ranks.length * 40, keywords_count: ranks.length, visibility: Math.round(ranks.length * 0.9 * 100) / 100, relevant_serp_items: ranks.length, keywords_positions: positions };
+				};
+				return { competitors: [mk('en.wikipedia.org', 3, 0.5), mk('www.rival-one.example', 5, 0.45), mk('rival-two.example', 8, 0.35), mk('rival-three.example', 12, 0.25)].filter((c) => c.keywords_count > 0).slice(0, Number(args.limit ?? 50)) };
+			}
+			if (name === 'get_ranked_keywords') {
+				const target = String(args.target);
+				const words = ['guide', 'tips', 'checklist', 'for beginners', 'near me', 'cost', 'vs', 'examples', 'template', 'ideas', 'tools', 'reviews'];
+				const topic = target.replace(/^www\./, '').split('.')[0].replace(/-/g, ' ');
+				const rows = words.map((w, i) => {
+					const h = hash(target + w);
+					return { keyword_data: { keyword: `${topic} ${w}`, keyword_info: { search_volume: h % 9 === 0 ? null : [20, 40, 90, 170, 320, 590, 880, 1600, 2900][h % 9], cpc: 1.2 }, keyword_properties: { keyword_difficulty: h % 60 }, search_intent_info: { main_intent: ['informational', 'commercial', 'transactional'][h % 3] }, serp_info: { serp_item_types: h % 2 ? ['ai_overview', 'organic', 'people_also_ask'] : ['organic', 'related_searches'] } }, ranked_serp_element: { serp_item: { url: `https://${target}/${w.replace(/ /g, '-')}`, rank_group: 1 + (h % 18) + (i % 3), rank_absolute: 2 + (h % 20), etv: 5, type: 'organic', domain: target } } };
+				});
+				return { keywords: rows.slice(0, Number(args.limit ?? 50)), totalCount: rows.length, target, scope: 'subdomains' };
+			}
+			if (name === 'get_backlinks_profile') {
+				const host = String(args.target).replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+				const row = (from: string, to: string, anchor: string, dofollow: boolean, spam: number, o: { broken?: boolean; lost?: boolean } = {}) => ({ domainFrom: from, urlFrom: `https://${from}/post-${hash(from + to) % 900}`, urlTo: `https://${host}${to}`, anchor, itemType: 'anchor', isDofollow: dofollow, relAttributes: dofollow ? [] : ['nofollow'], rank: 20, domainFromRank: 10 + hash(from) % 60, pageFromRank: 5, spamScore: spam, firstSeen: '2026-03-02 10:00:00 +00:00', lastSeen: '2026-11-01 10:00:00 +00:00', isLost: !!o.lost, isBroken: !!o.broken, linksCount: 1 });
+				const rows = [row('industry-blog.example', '/', 'a good place to start', true, 4), row('newsletter.example', '/discontinued-page', 'their old guide', true, 6, { broken: true }), row('university.example', '/discontinued-page', 'reading list', true, 3, { broken: true }), row('directory.example', '/', host, false, 22), row('seolinkagency.example', '/', 'Premium Backlink Services', false, 71), row('old-site.example', '/', 'lost one', true, 5, { lost: true })];
+				return { target: host, scope: 'subdomains', backlinks: { rows, totalCount: rows.length, hasMore: false, page: 1, pageSize: 200, fetchedAt: new Date().toISOString() } };
+			}
 			throw new Error(`Demo OpenSEO has no ${name}`);
 		}
 	};

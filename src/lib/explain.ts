@@ -102,6 +102,9 @@ export const SITE_TABS = [
 	['/indexing', 'Indexing', 'Watch whether Google has indexed your pages, using a rotating sample of URL inspections.'],
 	['/indexnow', 'IndexNow', 'Tell Bing and other IndexNow search engines the moment a page changes.'],
 	['/onpage', 'On-page', 'Checks pages for common on-page problems, such as a missing title or description.'],
+	['/diagnose', 'Diagnose', 'Why clicks changed, checked in order before you touch a page: noise, impressions versus click rate, which searches lost most, an update still rolling out, last year.'],
+	['/health', 'Content health', 'Whether what you publish is being shown, which topics you actually win, and broken or detoured internal links.'],
+	['/research', 'Research', 'Results pages, competitors and backlinks from OpenSEO\'s paid data, run only after a preview of what will be asked.'],
 	['/links', 'Internal links', 'Which of your pages should link to pages close to ranking better, with the anchor text already on the page, and pages nothing links to.'],
 	['/sitemaps', 'Sitemaps', 'Your sitemaps as Google sees them, with a check that each can be fetched and read.'],
 	['/inspect', 'Inspect', 'Look up Google\'s index status for specific URLs (URL Inspection).'],
@@ -127,7 +130,7 @@ export const SITE_PRIMARY_TABS = ['', '/quickwins', '/actions', '/opportunities'
 
 export const SITE_TAB_GROUPS = [
 	['Traffic', ['', '/queries', '/pages', '/trends', '/groups', '/segments', '/types']],
-	['Findings', ['/quickwins', '/actions', '/opportunities', '/cannibalization', '/decay', '/onpage', '/links', '/vitals', '/tests']],
+	['Findings', ['/quickwins', '/actions', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests']],
 	['Indexing', ['/submit', '/request', '/indexing', '/indexnow', '/sitemaps', '/inspect']],
 	['Other sources', ['/bing', '/analytics', '/tags', '/clarity', '/ai']],
 	['Site', ['/settings']]
