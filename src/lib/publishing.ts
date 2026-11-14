@@ -36,6 +36,8 @@ export interface SectionRow {
 	noindex: number;
 	reasons: { reason: string; count: number }[];
 	verdict: SectionVerdict;
+	/** fewer than half of the section's pages have a trustworthy date, so "too new" could not be judged */
+	ageUnknown: boolean;
 	advice: string;
 }
 export interface CohortRow { bucket: string; urls: number; shown: number; shownShare: number; clicks: number }
@@ -103,8 +105,9 @@ export function publishingReport(urls: PubUrl[], today: string, days = 90, depth
 		const young = dated.length >= MIN_SECTION && dated.filter((a) => a <= YOUNG_DAYS).length / dated.length >= 0.6;
 		const share = list.length ? shown / list.length : 0;
 		const verdict: SectionVerdict = list.length < MIN_SECTION ? 'small' : share >= WORKING ? 'working' : young ? 'too_new' : share < STALLED ? 'stalled' : 'slow';
+		const ageUnknown = dated.length < list.length * 0.5;
 		const advice =
-			verdict === 'stalled' ? 'Google shows almost none of these pages. Publishing more of the same will not change that: make the best few clearly better than what already ranks (something only you have), link to them from your strongest pages, and fold or remove the rest.'
+			verdict === 'stalled' ? `Google shows almost none of these pages. Publishing more of the same will not change that: make the best few clearly better than what already ranks (something only you have), link to them from your strongest pages, and fold or remove the rest.${ageUnknown ? ' The age of these pages could not be judged (the sitemap dates are missing or a build stamp), so some of them may simply be new: check when they were published before removing anything.' : ''}`
 			: verdict === 'slow' ? 'Some of these are shown and many are not. Look at what the shown ones have that the rest lack before adding more.'
 			: verdict === 'too_new' ? 'Most of these pages are recent, so a low share is expected. Check again in a few weeks.'
 			: verdict === 'working' ? 'Most of these pages are being shown. This section is worth extending, carefully.'
@@ -114,7 +117,7 @@ export function publishingReport(urls: PubUrl[], today: string, days = 90, depth
 			inspected: inspected.length, indexed: inspected.filter((u) => u.index === 'indexed').length, notIndexed: inspected.filter((u) => u.index === 'not_indexed').length,
 			noindex: list.filter((u) => u.index === 'not_indexed' && /noindex/i.test(u.reason ?? '')).length,
 			reasons: [...reasons].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count).slice(0, 4),
-			verdict, advice
+			verdict, ageUnknown, advice
 		};
 	}).sort((a, b) => b.urls - a.urls);
 

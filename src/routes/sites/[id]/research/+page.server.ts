@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getSite } from '$lib/server/clients';
-import { backlinkPlan, gapPlan, researchFor, runBacklinks, runGap, runSerp, serpPlan, SERP_MAX } from '$lib/server/openseoresearch';
+import { backlinkPlan, gapPlan, researchFor, runBacklinks, runGap, runSerp, serpCandidates, serpPlan, serpPlanFrom, SERP_MAX } from '$lib/server/openseoresearch';
 import { openSeoFor } from '$lib/server/openseolink';
 import { SERP_VERDICT_LABEL, FORMAT_LABEL } from '$lib/serpformat';
 
@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ params }) => {
 	return {
 		linked: !!os,
 		project: os?.projectName ?? null,
-		serp: os ? serpPlan(site.id, 10) : null,
+		serp: os ? serpPlanFrom(serpCandidates(site, SERP_MAX), 10) : null,
 		gap: os ? gapPlan(site.id, 30) : null,
 		backlinks: os ? backlinkPlan(site.id) : null,
 		stored: {

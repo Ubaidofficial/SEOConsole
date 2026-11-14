@@ -307,13 +307,14 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 	// ── what was published: sections of the sitemap that Google shows almost none of ──
 	try {
 		const pub = publishingFor(site, 90);
-		for (const sec of pub.sections.filter((x) => x.verdict === 'stalled').slice(0, 2)) {
+		// While the history is still downloading, "not shown" only means "not downloaded yet".
+		for (const sec of pub.historyComplete ? pub.sections.filter((x) => x.verdict === 'stalled').slice(0, 2) : []) {
 			const idx = sec.inspected ? ` Of ${n0(sec.inspected)} checked with Google, ${n0(sec.indexed)} are indexed${sec.noindex ? ` and ${n0(sec.noindex)} are excluded by a noindex tag` : ''}.` : '';
 			add({
 				key: `publishing:${sec.folder}`, type: 'publishing',
 				title: `${n0(sec.shown)} of ${n0(sec.urls)} pages in ${sec.folder} have been shown in Search in 90 days`,
-				why: `${Math.round(sec.shownShare * 100)}% of this section's sitemap pages had at least one impression.${idx} Search Console's query data leaves out rare and anonymised searches, so treat this as a list to inspect, not proof of non-indexing.`,
-				how: sec.advice, impact: null, confidence: 'medium', effort: 'high', blocking: false, href: `${base}/health#publishing`,
+				why: `${Math.round(sec.shownShare * 100)}% of this section's sitemap pages had at least one impression.${idx} Search Console's query data leaves out rare and anonymised searches, so treat this as a list to inspect, not proof of non-indexing.${sec.ageUnknown ? ' Page age could not be judged, so some of these may simply be new.' : ''}`,
+				how: sec.advice, impact: null, confidence: sec.ageUnknown ? 'low' : 'medium', effort: 'high', blocking: false, href: `${base}/health#publishing`,
 				evidence: sec.reasons.slice(0, 3).map((r) => `${r.reason}: ${n0(r.count)} pages`)
 			});
 		}

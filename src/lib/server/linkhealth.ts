@@ -1,8 +1,7 @@
 import { db, audit } from './db';
-import { config } from './config';
 import { getSite, type SiteRow } from './clients';
 import { periodFor } from './queries';
-import { crawledPages } from './internallinks';
+import { crawledLinkPages, type CrawledLinkPage } from './internallinks';
 import { fetchPage, guardedFetch, hostAllowed } from './onpage';
 import { demoPageFetch } from './demo-channels';
 import { normalizeUrl } from '../analytics';
@@ -19,8 +18,7 @@ function storedChecks(siteId: number, now = Date.now()): Map<string, TargetCheck
 }
 
 /** Broken and redirected internal links from the stored crawl and the stored target checks. Fetches nothing. */
-export function linkHealthFor(site: SiteRow, days = 90): LinkHealth & { crawledAt: number | null } {
-	const pages = crawledPages(site.id);
+export function linkHealthFor(site: SiteRow, days = 90, pages: CrawledLinkPage[] = crawledLinkPages(site.id)): LinkHealth & { crawledAt: number | null } {
 	const p = periodFor(site, days);
 	const clicks = new Map<string, number>();
 	for (const r of db().prepare('SELECT page, SUM(clicks) c FROM sa_rows WHERE site_id = ? AND date BETWEEN ? AND ? GROUP BY page').all(site.id, p.start, p.end) as { page: string; c: number }[]) clicks.set(normalizeUrl(r.page), r.c);
@@ -35,11 +33,12 @@ export function linkHealthFor(site: SiteRow, days = 90): LinkHealth & { crawledA
 export async function verifyLinkTargets(siteId: number, o: { fetchImpl?: typeof fetch; max?: number } = {}): Promise<{ checked: number; broken: number; redirected: number; skipped: number }> {
 	const site = getSite(siteId);
 	if (!site) throw new Error('No such site.');
-	const before = linkHealthFor(site);
+	const pages = crawledLinkPages(siteId); // read once: the crawl does not change while targets are checked
+	const before = linkHealthFor(site, 90, pages);
 	const max = Math.min(VERIFY_MAX, Math.max(1, o.max ?? VERIFY_MAX));
 	// The original URLs, not the normalised ones: what the pages actually link to.
 	const urlOf = new Map<string, string>();
-	for (const pg of crawledPages(siteId)) for (const l of pg.links) { const k = normalizeUrl(l.url); if (!urlOf.has(k)) urlOf.set(k, l.url); }
+	for (const pg of pages) for (const l of pg.links) { const k = normalizeUrl(l.url); if (!urlOf.has(k)) urlOf.set(k, l.url); }
 	const todo = before.unchecked.map((k) => urlOf.get(k)).filter((u): u is string => !!u && hostAllowed(u, site.site_url));
 	const skipped = before.unchecked.length - todo.length;
 	const batch = todo.slice(0, max);
@@ -57,9 +56,8 @@ export async function verifyLinkTargets(siteId: number, o: { fetchImpl?: typeof 
 	const put = db().prepare('INSERT OR REPLACE INTO link_checks (site_id, norm, url, status, final_url, error, checked_at) VALUES (?,?,?,?,?,?,?)');
 	const now = Date.now();
 	db().transaction(() => { for (const r of results) put.run(siteId, normalizeUrl(r.url), r.url, r.status, r.finalUrl, r.error, now); })();
-	const after = linkHealthFor(site);
+	const after = linkHealthFor(site, 90, pages);
 	audit('links.verify', { siteId, detail: `${results.length} link targets checked, ${after.broken.length} broken in all` });
 	return { checked: results.length, broken: after.broken.length, redirected: after.redirected.length, skipped };
 }
 
-export const verifyAllowed = () => !config.readOnly;

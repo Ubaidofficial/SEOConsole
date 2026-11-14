@@ -10,6 +10,7 @@
  * ones worth studying. Search volume and rank come from a third-party panel, not from Google.
  */
 import { queryTokens } from './groups';
+import { normQuery as norm } from './hidden';
 
 export interface Competitor { domain: string; avgPosition: number; medianPosition: number; keywords: number; visibility: number; traffic: number; positions: Record<string, number>; platform: boolean }
 
@@ -65,7 +66,6 @@ export interface GapRow { keyword: string; competitor: string; competitorRank: n
 
 /** How much of a keyword's volume the rank collects: a rough shape, not a measured curve. */
 const rankWeight = (r: number) => (r <= 3 ? 1 : r <= 5 ? 0.6 : r <= 10 ? 0.3 : r <= 20 ? 0.08 : 0.01);
-export const norm = (q: string) => q.toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
  * From one competitor's ranked keywords: `missing` are keywords it ranks in the top 20 for that you do not appear for at all in your

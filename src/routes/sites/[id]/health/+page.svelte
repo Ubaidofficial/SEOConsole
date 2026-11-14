@@ -18,6 +18,7 @@
 
 <section class="card mb-4 p-4" id="publishing">
 	<h2 class="font-medium">Publishing: is it being shown?</h2>
+	{#if !pub.historyComplete}<p class="mt-1 text-sm text-warn">The last 90 days of Search Console history are still being downloaded, so "shown" counts below are too low and no verdict should be trusted yet.</p>{/if}
 	<p class="pii mt-1 text-sm">{pub.headline}</p>
 	{#if pub.buildStamp}<p class="mt-1 text-xs text-warn">{fmtPct(pub.buildStamp.share, 0)} of the dated sitemap URLs share the date {pub.buildStamp.date}: that is a build stamp, so page age below is unknown for them and "too new" is never granted to them.</p>{/if}
 	{#if pub.sections.length}

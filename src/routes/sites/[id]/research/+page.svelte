@@ -4,13 +4,15 @@
 	import { ago, fmtInt, fmtPct, shortUrl } from '$lib/format';
 	let { data, form } = $props();
 	let busy = $state('');
+	let n = $state(10);
+	const serpN = $derived(data.serp ? Math.max(1, Math.min(n || 1, data.serp.available, data.serpMax)) : 0);
 	const s = $derived(data.stored);
 	const vtone: Record<string, string> = { crowded: 'text-warn', mismatch: 'text-warn', both: 'text-bad', ok: 'text-good', unclear: 'text-muted-foreground' };
 	const run = (name: string) => () => { busy = name; return async ({ update }: { update: () => Promise<void> }) => { await update(); busy = ''; }; };
 </script>
 
 <Explainer lead="Three checks that use OpenSEO's paid data: the results pages you rank on, who beats you, and links to pages that no longer work.">
-	<p>Nothing here is sent to OpenSEO until you press a button, and each button says what it will ask. The prices are OpenSEO's own, read from its tool descriptions (about 5 credits for a results page at the usual depth, 2.5 at the depth used here; about 30 for a page of backlinks); for the competitor tools OpenSEO only says "charges credits", so no price is shown and you should check its balance after the first run. The numbers come from a third-party data provider, not from Google. Results are stored, so reading them again is free, and agents can read them over MCP (<code>get_research_findings</code>) without spending anything.</p>
+	<p>Nothing here is sent to OpenSEO until you press a button, and each button says what it will ask. The prices are OpenSEO's own, read from its tool descriptions: about 5 credits for a results page at its usual depth (the depth used here is not priced separately, so 5 is shown as an upper bound) and about 30 for a page of backlinks. For the competitor tools OpenSEO only says "charges credits", so no price is shown; check its balance after the first run. The numbers come from a third-party data provider, not from Google. Results are stored, so reading them again is free, and agents can read them over MCP (<code>get_research_findings</code>) without spending anything.</p>
 </Explainer>
 
 {#if !data.linked}
@@ -27,8 +29,8 @@
 		<p class="mt-1 text-sm text-muted-foreground">Looks up the results pages of searches you rank for but get few clicks on, and checks what sits above the first organic result and what kind of page most results are.</p>
 		{#if data.serp && data.serp.keywords.length}
 			<form method="POST" action="?/serp" use:enhance={run('serp')} class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-				<label class="flex items-center gap-1.5">Searches <input class="input w-20" type="number" name="n" min="1" max={data.serpMax} value={data.serp.keywords.length} /></label>
-				<button class="btn btn-primary !h-8 text-xs" disabled={busy === 'serp'}>{busy === 'serp' ? 'Looking up…' : `Look up ${data.serp.keywords.length} results pages, about ${data.serp.credits} credits`}</button>
+				<label class="flex items-center gap-1.5">Searches <input class="input w-20" type="number" name="n" min="1" max={Math.min(data.serpMax, data.serp.available)} bind:value={n} /></label>
+				<button class="btn btn-primary !h-8 text-xs" disabled={busy === 'serp'}>{busy === 'serp' ? 'Looking up…' : `Look up ${serpN} results pages, up to about ${serpN * data.serp.perKeyword} credits`}</button>
 			</form>
 			<details class="mt-1 text-xs text-muted-foreground"><summary class="cursor-pointer">Which searches</summary><p class="pii mt-1">{data.serp.keywords.map((k) => k.keyword).join(' · ')}</p></details>
 		{:else}<p class="mt-2 text-xs text-muted-foreground">No search qualifies yet (top 15 with at least 50 impressions).</p>{/if}

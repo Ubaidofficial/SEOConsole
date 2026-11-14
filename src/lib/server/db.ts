@@ -588,7 +588,7 @@ CREATE TABLE IF NOT EXISTS oseo_research (          -- results of the OpenSEO-ba
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	kind TEXT NOT NULL,                 -- serp | gap | backlinks
 	fetched_at INTEGER NOT NULL,
-	credits REAL,                       -- OpenSEO's own price estimate for what was asked, when it states one
+	credits REAL,                       -- an ESTIMATE from OpenSEO's stated prices for what was asked (not what was charged), when it states one
 	payload TEXT NOT NULL,              -- JSON; shape per kind in src/lib/server/openseoresearch.ts
 	PRIMARY KEY (site_id, kind)
 ) WITHOUT ROWID;

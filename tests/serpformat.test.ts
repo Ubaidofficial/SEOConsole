@@ -85,9 +85,9 @@ describe('checkSerp', () => {
 });
 
 describe('serpCredits', () => {
-	it('follows OpenSEO\'s stated price: about 5 a keyword at depth 20, 2.5 less at 10', () => {
-		expect(serpCredits(10, 20)).toBe(50);
-		expect(serpCredits(10, 10)).toBe(25);
-		expect(serpCredits(4, 30)).toBe(30);
+	it('uses the one price OpenSEO states (about 5 a keyword at depth 20) as an upper bound, and does not invent a depth-10 price', () => {
+		expect(serpCredits(10)).toBe(50);
+		expect(serpCredits(1)).toBe(5);
+		expect(serpCredits(0)).toBe(0);
 	});
 });

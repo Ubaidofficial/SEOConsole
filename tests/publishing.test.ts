@@ -50,6 +50,15 @@ describe('publishingReport', () => {
 		expect(r.cohorts.find((c) => c.bucket === 'age unknown')!.urls).toBe(30);
 		expect(r.sections[0].verdict).toBe('stalled'); // not excused as new
 		expect(r.velocity.known).toBe(0);
+		expect(r.sections[0].ageUnknown).toBe(true);
+		expect(r.sections[0].advice).toMatch(/age of these pages could not be judged/);
+	});
+	it('does not add the age caveat when the dates can be trusted', () => {
+		const urls = many(30, (i) => u(`/a/p${i}`, { lastmod: `2026-0${(i % 5) + 1}-1${i % 9}`, impressions: i < 3 ? 5 : 0 }));
+		const s = publishingReport(urls, TODAY).sections[0];
+		expect(s.verdict).toBe('stalled');
+		expect(s.ageUnknown).toBe(false);
+		expect(s.advice).not.toMatch(/could not be judged/);
 	});
 	it('buckets by age and reports the shown share of each', () => {
 		const urls = [u('/a/1', { lastmod: '2026-11-10', impressions: 1 }), u('/a/2', { lastmod: '2026-11-12' }), u('/a/3', { lastmod: '2026-08-01', impressions: 5, clicks: 1 }), u('/a/4', { lastmod: '2026-01-01' }), u('/a/5')];

@@ -16,7 +16,7 @@ import { getSite, type SiteRow } from './clients';
 import { hostKey } from './hosts';
 import { brandTerms, fittedCurve, periodFor, queryPageRows } from './queries';
 import { openSeoFor, type OseoApi } from './openseolink';
-import { crawledPages } from './internallinks';
+import { crawledLinkPages } from './internallinks';
 import { nicheFor } from './nichefit';
 import { ctrAtPosition, isBranded, normalizeUrl } from '../analytics';
 import { checkSerp, parseSerp, serpCredits, type SerpCheck } from '../serpformat';
@@ -50,9 +50,11 @@ function claim(siteId: number, kind: ResearchKind, o: { force?: boolean; now?: n
 	const key = `research-run:${kind}:${siteId}`;
 	const now = o.now ?? Date.now();
 	const last = Number((db().prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined)?.value ?? 0);
-	if (!o.force && now - last < RUN_COOLDOWN_MS) {
-		const mins = Math.max(1, Math.ceil((RUN_COOLDOWN_MS - (now - last)) / 60_000));
-		throw new Error(`This was run ${Math.floor((now - last) / 60_000)} minutes ago and every run spends OpenSEO credits. The stored result is below; try again in ${mins} minute${mins === 1 ? '' : 's'}.`);
+	const elapsed = now - last;
+	// A stamp from the future (the clock was stepped back) is not a reason to block for hours.
+	if (!o.force && elapsed >= 0 && elapsed < RUN_COOLDOWN_MS) {
+		const mins = Math.max(1, Math.ceil((RUN_COOLDOWN_MS - elapsed) / 60_000));
+		throw new Error(`This was run ${Math.floor(elapsed / 60_000)} minutes ago and every run spends OpenSEO credits. The stored result is below; try again in ${mins} minute${mins === 1 ? '' : 's'}.`);
 	}
 	db().prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(now));
 	return () => void db().prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(last));
@@ -93,12 +95,13 @@ export function serpCandidates(site: SiteRow, n = 10): SerpCandidate[] {
 	}).filter((c) => c.position <= 15 && c.impressions >= 50 && c.keyword.length <= 100).sort((a, b) => b.missing - a.missing || b.impressions - a.impressions).slice(0, Math.min(SERP_MAX, n));
 }
 
-export interface SerpPlan { keywords: SerpCandidate[]; calls: number; credits: number; depth: number }
-export function serpPlan(siteId: number, n = 10): SerpPlan {
-	const site = getSite(siteId)!;
-	const keywords = serpCandidates(site, n);
-	return { keywords, calls: Math.ceil(keywords.length / SERP_BATCH), credits: serpCredits(keywords.length, SERP_DEPTH), depth: SERP_DEPTH };
+/** `credits` is an upper bound: OpenSEO states about 5 a keyword at depth 20 and does not price the depth used here (see serpCredits). */
+export interface SerpPlan { keywords: SerpCandidate[]; calls: number; credits: number; depth: number; /** how many searches qualify in all (up to SERP_MAX) */ available: number; perKeyword: number }
+export function serpPlanFrom(all: SerpCandidate[], n: number): SerpPlan {
+	const keywords = all.slice(0, Math.min(SERP_MAX, Math.max(1, n)));
+	return { keywords, calls: Math.ceil(keywords.length / SERP_BATCH), credits: serpCredits(keywords.length), depth: SERP_DEPTH, available: all.length, perKeyword: serpCredits(1) };
 }
+export const serpPlan = (siteId: number, n = 10): SerpPlan => serpPlanFrom(serpCandidates(getSite(siteId)!, SERP_MAX), n);
 export interface SerpResult { checks: SerpCheck[]; asked: number; failed: number; depth: number; summary: { crowded: number; mismatch: number; both: number; ok: number; unclear: number } }
 
 export async function runSerp(siteId: number, keywords: SerpCandidate[], o: { api?: OseoApi; force?: boolean; now?: number } = {}): Promise<SerpResult> {
@@ -106,9 +109,9 @@ export async function runSerp(siteId: number, keywords: SerpCandidate[], o: { ap
 	const list = keywords.slice(0, SERP_MAX);
 	if (!list.length) throw new Error('No searches to look up.');
 	const release = claim(siteId, 'serp', o);
-	const api = await os.api();
 	const checks: SerpCheck[] = [];
 	try {
+		const api = await os.api();
 		for (let i = 0; i < list.length; i += SERP_BATCH) {
 			const batch = list.slice(i, i + SERP_BATCH);
 			const out = await api.callTool('get_serp_results', { projectId: os.projectId, queries: batch.map((k) => ({ keyword: k.keyword })), depth: SERP_DEPTH });
@@ -125,7 +128,7 @@ export async function runSerp(siteId: number, keywords: SerpCandidate[], o: { ap
 	const summary = { crowded: 0, mismatch: 0, both: 0, ok: 0, unclear: 0 };
 	for (const c of checks) summary[c.verdict]++;
 	const result: SerpResult = { checks, asked: list.length, failed: checks.filter((c) => c.verdict === 'unclear').length, depth: SERP_DEPTH, summary };
-	keep(siteId, 'serp', serpCredits(list.length, SERP_DEPTH), result);
+	keep(siteId, 'serp', serpCredits(list.length), result);
 	audit('openseo.serp', { siteId, detail: `${list.length} searches looked up, ${result.failed} failed` });
 	return result;
 }
@@ -158,11 +161,11 @@ export async function runGap(siteId: number, keywords: string[], o: { api?: Oseo
 	if (!kws.length) throw new Error('No searches to compare on.');
 	const release = claim(siteId, 'gap', o);
 	const own = hostKey(site.site_url);
-	const api = await os.api();
 	let competitors: Competitor[];
 	const rows: GapRow[] = [];
 	let studied: string[] = [];
 	try {
+		const api = await os.api();
 		competitors = parseCompetitors(await api.callTool('find_serp_competitors', { projectId: os.projectId, keywords: kws, excludeDomains: [own], limit: 20, sortBy: 'visibility' }));
 		const study = studyList(competitors, own, GAP_STUDY);
 		studied = study.map((c) => c.domain);
@@ -204,7 +207,7 @@ export interface BacklinkResult { target: string; profile: LinkProfile; reclaim:
 /** Pages known to be gone: the crawl's 4xx/5xx and the checked link targets that came back that way. Keyed by normalised URL. */
 function deadPages(siteId: number): Map<string, string> {
 	const dead = new Map<string, string>();
-	for (const p of crawledPages(siteId)) if (p.status >= 400) dead.set(normalizeUrl(p.url), `The page answered ${p.status}.`);
+	for (const p of crawledLinkPages(siteId)) if (p.status >= 400) dead.set(normalizeUrl(p.url), `The page answered ${p.status}.`);
 	for (const r of db().prepare('SELECT norm, status FROM link_checks WHERE site_id = ? AND status >= 400 AND status NOT IN (401,403,408,429)').all(siteId) as { norm: string; status: number }[]) if (!dead.has(r.norm)) dead.set(r.norm, `The page answered ${r.status}.`);
 	return dead;
 }

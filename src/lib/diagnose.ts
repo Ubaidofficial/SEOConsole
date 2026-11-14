@@ -16,7 +16,7 @@
  *   change in clicks = (change in impressions) x (earlier CTR)  +  (later impressions) x (change in CTR).
  * The per-row causes (demand / ranking / click rate / lost) are heuristics with the thresholds below; they say where to look, not why Google did it.
  */
-import type { Metrics } from './analytics';
+import { ctrOf, pctChange, type Metrics } from './analytics';
 
 export interface DiagRow { key: string; now: Metrics; prev: Metrics }
 export interface DiagUpdate { name: string; begin: string; end: string | null }
@@ -89,8 +89,6 @@ export interface Diagnosis {
 	steps: Step[];
 }
 
-const pct = (n: number, p: number): number | null => (p > 0 ? (n - p) / p : null);
-const ctr = (m: Metrics) => (m.impressions > 0 ? m.clicks / m.impressions : 0);
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const fmtAbs = (x: number | null) => (x == null ? 'n/a' : `${Math.round(Math.abs(x) * 100)}%`);
 const fmtPct = (x: number | null) => (x == null ? 'n/a' : `${x > 0 ? '+' : ''}${Math.round(x * 100)}%`);
@@ -103,9 +101,9 @@ export function classifyRow(now: Metrics, prev: Metrics): Cause {
 	if (now.clicks >= prev.clicks) return now.clicks > prev.clicks && prev.clicks < MIN_PREV_CLICKS ? 'new' : 'noise';
 	if (prev.clicks < MIN_PREV_CLICKS) return 'noise';
 	if (now.position - prev.position >= RANK_SHIFT) return 'ranking';
-	const impr = pct(now.impressions, prev.impressions) ?? 0;
+	const impr = pctChange(now.impressions, prev.impressions) ?? 0;
 	if (impr <= -DEMAND_DROP) return 'demand';
-	const c = pct(ctr(now), ctr(prev)) ?? 0;
+	const c = pctChange(ctrOf(now), ctrOf(prev)) ?? 0;
 	if (c <= -CTR_DROP) return 'clickrate';
 	return 'noise';
 }
@@ -118,10 +116,10 @@ export function diagnose(i: DiagnoseInput): Diagnosis {
 	const significant = Math.abs(z) >= 2 && Math.abs(change) >= 5 && Math.abs(change) >= MIN_CHANGE * prev.clicks;
 
 	const split = {
-		demand: (now.impressions - prev.impressions) * ctr(prev),
-		clickRate: now.impressions * (ctr(now) - ctr(prev)),
-		impressionsPct: pct(now.impressions, prev.impressions),
-		ctrPct: prev.impressions > 0 && ctr(prev) > 0 ? pct(ctr(now), ctr(prev)) : null,
+		demand: (now.impressions - prev.impressions) * ctrOf(prev),
+		clickRate: now.impressions * (ctrOf(now) - ctrOf(prev)),
+		impressionsPct: pctChange(now.impressions, prev.impressions),
+		ctrPct: prev.impressions > 0 && ctrOf(prev) > 0 ? pctChange(ctrOf(now), ctrOf(prev)) : null,
 		positionNow: now.position,
 		positionPrev: prev.position
 	};
@@ -155,7 +153,7 @@ export function diagnose(i: DiagnoseInput): Diagnosis {
 	// Season: what the same two windows did a year ago. If last year's impressions moved the same way, expect it again.
 	let seasonal: Diagnosis['seasonal'] = null;
 	if (i.yearAgo && i.yearAgo.prev.impressions >= 200 && i.yearAgo.now.impressions >= 0) {
-		const p = pct(i.yearAgo.now.impressions, i.yearAgo.prev.impressions)!;
+		const p = pctChange(i.yearAgo.now.impressions, i.yearAgo.prev.impressions)!;
 		seasonal = { impressionsPct: p, expectedClicks: Math.round(prev.clicks * p) };
 	}
 
@@ -172,7 +170,7 @@ export function diagnose(i: DiagnoseInput): Diagnosis {
 		!i.comparable
 			? { n: 2, question: 'Is the change bigger than noise?', status: 'info', detail: 'Cannot tell yet.' }
 			: significant
-				? { n: 2, question: 'Is the change bigger than noise?', status: change < 0 ? 'check' : 'ok', detail: `Yes: clicks went from ${prev.clicks} to ${now.clicks} (${fmtPct(pct(now.clicks, prev.clicks))}), about ${r1(Math.abs(z))} standard errors, so it is unlikely to be chance.` }
+				? { n: 2, question: 'Is the change bigger than noise?', status: change < 0 ? 'check' : 'ok', detail: `Yes: clicks went from ${prev.clicks} to ${now.clicks} (${fmtPct(pctChange(now.clicks, prev.clicks))}), about ${r1(Math.abs(z))} standard errors, so it is unlikely to be chance.` }
 				: { n: 2, question: 'Is the change bigger than noise?', status: 'ok', detail: `No: clicks went from ${prev.clicks} to ${now.clicks}, within the normal scatter for this amount of traffic (a change under 5%, or too small to be sure of, is never called real). Changing pages in response would be reacting to noise.` }
 	);
 	if (i.comparable && (significant || Math.abs(change) >= 5)) {
@@ -218,15 +216,15 @@ export function diagnose(i: DiagnoseInput): Diagnosis {
 	const hold = i.comparable && (rolling || (!significant && change < 0));
 	let headline: string;
 	if (!i.comparable) headline = 'Not enough history to compare yet.';
-	else if (!significant) headline = change < 0 ? `Clicks are ${fmtPct(pct(now.clicks, prev.clicks))}, but that is within noise: change nothing.` : 'No meaningful change in clicks.';
-	else if (change > 0) headline = `Clicks are up ${fmtAbs(pct(now.clicks, prev.clicks))}.`;
-	else if (rolling) headline = `Clicks are down ${fmtAbs(pct(now.clicks, prev.clicks))} while a Google update is still rolling out: wait, then diagnose.`;
-	else if (causes[0]) headline = `Clicks are down ${fmtAbs(pct(now.clicks, prev.clicks))}; the biggest cause is "${CAUSE_LABEL[causes[0].cause].toLowerCase()}".`;
-	else headline = `Clicks are down ${fmtAbs(pct(now.clicks, prev.clicks))}, spread thinly across many searches.`;
+	else if (!significant) headline = change < 0 ? `Clicks are ${fmtPct(pctChange(now.clicks, prev.clicks))}, but that is within noise: change nothing.` : 'No meaningful change in clicks.';
+	else if (change > 0) headline = `Clicks are up ${fmtAbs(pctChange(now.clicks, prev.clicks))}.`;
+	else if (rolling) headline = `Clicks are down ${fmtAbs(pctChange(now.clicks, prev.clicks))} while a Google update is still rolling out: wait, then diagnose.`;
+	else if (causes[0]) headline = `Clicks are down ${fmtAbs(pctChange(now.clicks, prev.clicks))}; the biggest cause is "${CAUSE_LABEL[causes[0].cause].toLowerCase()}".`;
+	else headline = `Clicks are down ${fmtAbs(pctChange(now.clicks, prev.clicks))}, spread thinly across many searches.`;
 
 	return {
 		comparable: i.comparable,
-		clicks: { now: now.clicks, prev: prev.clicks, change, pct: pct(now.clicks, prev.clicks), z: r1(z), significant },
+		clicks: { now: now.clicks, prev: prev.clicks, change, pct: pctChange(now.clicks, prev.clicks), z: r1(z), significant },
 		split, causes, concentration: { topShare, concentrated, pages: top }, brand, seasonal, updates, hold, headline, steps
 	};
 }

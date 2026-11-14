@@ -116,5 +116,9 @@ export function checkSerp(k: SerpKeyword, own: { page: string | null; position: 
 
 export const SERP_VERDICT_LABEL: Record<SerpVerdict, string> = { crowded: 'Pushed down by features', mismatch: 'Format mismatch', both: 'Features and format', ok: 'Looks fine', unclear: 'Could not tell' };
 
-/** OpenSEO's own price for a SERP lookup, from the tool description (read 2026-11-14): about 5 credits a keyword at depth 20, 2.5 more per extra 10 rows. Approximate. */
-export const serpCredits = (keywords: number, depth = 10) => Math.round(keywords * (5 + (depth - 20) / 10 * 2.5) * 10) / 10;
+/**
+ * OpenSEO's tool description states about 5 credits a keyword at its default depth of 20 (read 2026-11-14). It does not price depth 10, which
+ * is what this app asks for, so the stated 5 is used as an upper bound and shown as "up to", never as the price.
+ */
+export const SERP_CREDITS_PER_KEYWORD = 5;
+export const serpCredits = (keywords: number) => keywords * SERP_CREDITS_PER_KEYWORD;

@@ -91,6 +91,14 @@ export async function crawlLinks(siteId: number, o: { fetchImpl?: typeof fetch; 
 
 export interface CrawledPage { url: string; finalUrl: string; status: number; error: string | null; title: string | null; h1: string | null; text: string; links: PageLink[]; fetchedAt: number }
 
+/** The crawl without the page text (up to 60 KB a page): all that link health and the dead-page lookup need. */
+export type CrawledLinkPage = Pick<CrawledPage, 'url' | 'finalUrl' | 'status' | 'error' | 'links' | 'fetchedAt'>;
+export function crawledLinkPages(siteId: number): CrawledLinkPage[] {
+	return (db().prepare('SELECT url, final_url, status, error, links, fetched_at FROM link_pages WHERE site_id = ? ORDER BY url').all(siteId) as { url: string; final_url: string; status: number; error: string | null; links: string; fetched_at: number }[]).map((r) => ({
+		url: r.url, finalUrl: r.final_url, status: r.status, error: r.error, links: JSON.parse(r.links) as PageLink[], fetchedAt: r.fetched_at
+	}));
+}
+
 export function crawledPages(siteId: number): CrawledPage[] {
 	return (db().prepare('SELECT url, final_url, status, error, title, h1, body, links, fetched_at FROM link_pages WHERE site_id = ? ORDER BY url').all(siteId) as { url: string; final_url: string; status: number; error: string | null; title: string | null; h1: string | null; body: string; links: string; fetched_at: number }[]).map((r) => ({
 		url: r.url, finalUrl: r.final_url, status: r.status, error: r.error, title: r.title, h1: r.h1, text: r.body, links: JSON.parse(r.links) as PageLink[], fetchedAt: r.fetched_at

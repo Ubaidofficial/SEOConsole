@@ -11,7 +11,7 @@ import { diagnoseSite } from '../src/lib/server/diagnose';
 import { publishingFor } from '../src/lib/server/publishing';
 import { linkHealthFor, verifyLinkTargets } from '../src/lib/server/linkhealth';
 import { nicheFor } from '../src/lib/server/nichefit';
-import { backlinkPlan, gapPlan, researchFor, runBacklinks, runGap, runSerp, serpPlan } from '../src/lib/server/openseoresearch';
+import { backlinkPlan, gapPlan, researchFor, runBacklinks, runGap, runSerp, serpPlan, serpPlanFrom } from '../src/lib/server/openseoresearch';
 import type { OseoApi } from '../src/lib/server/openseolink';
 import { createApiKey } from '../src/lib/server/apikeys';
 import { handleMcp, resetRateLimits } from '../src/lib/server/mcp';
@@ -81,12 +81,13 @@ describe('OpenSEO research (demo OpenSEO)', () => {
 		const plan = serpPlan(1, 8);
 		expect(plan.keywords.length).toBeGreaterThan(0);
 		expect(plan.keywords.length).toBeLessThanOrEqual(8);
-		expect(plan.credits).toBeCloseTo(plan.keywords.length * 2.5, 5);
+		expect(plan.credits).toBe(plan.keywords.length * 5); // OpenSEO's stated price, as an upper bound
+		expect(plan.available).toBeGreaterThanOrEqual(plan.keywords.length);
 		const out = await runSerp(1, plan.keywords);
 		expect(out.checks).toHaveLength(plan.keywords.length);
 		expect(Object.values(out.summary).reduce((a, b) => a + b, 0)).toBe(out.checks.length);
 		expect(researchFor(1).serp?.data.asked).toBe(plan.keywords.length);
-		expect(researchFor(1).serp?.credits).toBeCloseTo(plan.credits, 5);
+		expect(researchFor(1).serp?.credits).toBe(plan.credits);
 	});
 	it('serp: a search that failed at the provider is kept as "could not tell", not dropped', async () => {
 		const api: OseoApi = { callTool: async () => ({ results: [{ keyword: 'x', ok: false, error: 'boom' }] }) };
@@ -181,12 +182,49 @@ describe('paid runs cannot be repeated by accident', () => {
 		const ok: OseoApi = { callTool: async () => ({ results: [] }) };
 		await expect(runSerp(1, kw, { api: ok, now: t0 + 60_000 })).resolves.toBeTruthy(); // immediately again: allowed
 	});
+	it('also hands the claim back when the connection itself fails (before any call), for results pages and competitors', async () => {
+		const t0 = 2_100_000_000_000;
+		const failing: OseoApi = { callTool: async () => { throw new Error('Could not reach OpenSEO'); } };
+		await expect(runSerp(1, kw, { api: failing, now: t0, force: true })).rejects.toThrow(/Could not reach OpenSEO/);
+		await expect(runGap(1, ['a b c'], { api: failing, now: t0, force: true })).rejects.toThrow(/Could not reach OpenSEO/);
+		const ok: OseoApi = { callTool: async (name) => (name === 'find_serp_competitors' ? { competitors: [] } : { results: [] }) };
+		await expect(runSerp(1, kw, { api: ok, now: t0 + 1000 })).resolves.toBeTruthy();
+		await expect(runGap(1, ['a b c'], { api: ok, now: t0 + 1000 })).resolves.toBeTruthy();
+	});
+	it('a stamp from the future does not block (the clock was stepped back)', async () => {
+		const api: OseoApi = { callTool: async () => ({ backlinks: { rows: [], totalCount: 0 } }) };
+		await runBacklinks(1, { api, now: 3_000_000_000_000, force: true });
+		await expect(runBacklinks(1, { api, now: 2_900_000_000_000 })).resolves.toBeTruthy();
+	});
 	it('each analysis has its own cooldown', async () => {
 		const api: OseoApi = { callTool: async (name) => (name === 'get_backlinks_profile' ? { backlinks: { rows: [], totalCount: 0 } } : { competitors: [] }) };
 		const t0 = 2_000_000_000_000;
 		await runBacklinks(1, { api, now: t0, force: true });
 		await expect(runBacklinks(1, { api, now: t0 + 1000 })).rejects.toThrow(/ago/);
 		await expect(runGap(1, ['a b c'], { api, now: t0 + 1000 })).resolves.toBeTruthy(); // gap is a different analysis
+	});
+});
+
+describe('publishing findings wait for the history', () => {
+	it('while the 90 days are still downloading nothing is called stalled, and the report says why', async () => {
+		const { db } = await import('../src/lib/server/db');
+		const { buildActions } = await import('../src/lib/server/actions');
+		const d = db();
+		const before = d.prepare('SELECT backfill_done, backfilled_to FROM sites WHERE id = 1').get() as { backfill_done: number; backfilled_to: string };
+		try {
+			d.prepare('UPDATE sites SET backfill_done = 0, backfilled_to = ? WHERE id = 1').run('2026-11-10'); // newer than the window's start
+			const r = publishingFor(site(), 90);
+			expect(r.historyComplete).toBe(false);
+			expect(buildActions(site(), 28).filter((i) => i.type === 'publishing')).toEqual([]);
+			const key = createApiKey('hist', null).key;
+			resetRateLimits();
+			const out = await handleMcp(new Request('http://x/api/mcp', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_publishing_health', arguments: { site: '1' } } }) })).then(async (x) => JSON.parse((await x.json()).result.content[0].text));
+			expect(out.historyComplete).toBe(false);
+			expect(out.warning).toMatch(/still downloading/);
+		} finally {
+			d.prepare('UPDATE sites SET backfill_done = ?, backfilled_to = ? WHERE id = 1').run(before.backfill_done, before.backfilled_to);
+		}
+		expect(publishingFor(site(), 90).historyComplete).toBe(true);
 	});
 });
 
@@ -225,3 +263,13 @@ describe('the new findings reach the action queue', () => {
 
 import { crawledPages } from '../src/lib/server/internallinks';
 const crawled = () => crawledPages(1);
+
+describe('the price follows the number asked for', () => {
+	it('prices any count the page offers at the stated upper bound, never above the number that qualifies', () => {
+		const all = Array.from({ length: 12 }, (_, i) => ({ keyword: `k${i}`, page: null, position: 5, impressions: 100, clicks: 0, missing: 1 }));
+		expect(serpPlanFrom(all, 10)).toMatchObject({ credits: 50, perKeyword: 5, available: 12 });
+		expect(serpPlanFrom(all, 30).keywords).toHaveLength(12);
+		expect(serpPlanFrom(all, 30).credits).toBe(60);
+		expect(serpPlanFrom(all, 0).keywords).toHaveLength(1);
+	});
+});
