@@ -66,8 +66,10 @@
 </section>
 
 {#if data.groups.length}
+	<ShowMore items={data.groups} limit={4} step={1} noun="pages to link to">
+	{#snippet children(groups)}
 	<div class="stagger space-y-4">
-		{#each data.groups as g (g.target)}
+		{#each groups as g (g.target)}
 			<section class="card p-4">
 				<div class="flex flex-wrap items-center gap-2">
 					<h3 class="pii min-w-0 truncate text-sm font-medium" title={g.target}>Link to <a class="hover:underline" href={g.target} target="_blank" rel="noreferrer noopener">{path(g.target)}</a></h3>
@@ -101,6 +103,8 @@
 			</section>
 		{/each}
 	</div>
+	{/snippet}
+	</ShowMore>
 {:else if data.summary.pagesCrawled}
 	<div class="card p-6 text-center text-sm text-muted-foreground">No suggestions: none of the crawled pages mentions the searches of pages at positions 4 to 20 without already linking to them.</div>
 {:else if !running}

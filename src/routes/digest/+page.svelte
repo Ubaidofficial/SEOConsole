@@ -50,7 +50,7 @@
 					{#if s.comparable}
 						<span class="tnum">{fmtInt(s.clicks.now)} clicks <span class="{s.clicks.change == null ? '' : s.clicks.significant ? (s.clicks.change > 0 ? 'text-good' : 'text-bad') : 'text-muted-foreground'}">{s.clicks.change == null ? '' : fmtSigned(s.clicks.change)}</span> <span class="text-xs text-muted-foreground">{s.clicks.significant ? 'a real change' : 'within normal wobble'}</span></span>
 					{:else}<span class="text-xs text-muted-foreground">not compared yet (previous week still downloading or empty)</span>{/if}
-					<span class="ml-auto text-xs text-muted-foreground">{s.openActions} open{#if s.blockingActions} · <b class="text-bad">{s.blockingActions} blocking</b>{/if}</span>
+					<span class="ml-auto text-xs text-muted-foreground">{s.openActions} open {#if s.blockingActions}· <b class="text-bad">{s.blockingActions} blocking</b>{/if}</span>
 				</div>
 				{#if s.queryWinners.length || s.queryLosers.length}
 					<div class="mt-2 grid gap-x-6 gap-y-1 text-xs md:grid-cols-2">

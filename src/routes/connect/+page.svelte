@@ -93,7 +93,7 @@
 	<div class="mb-2 flex items-center gap-2"><h2 class="font-medium">Connections by site</h2><button type="button" class="btn !h-7 ml-auto text-xs" onclick={() => (editing = !editing)}>{editing ? 'Done editing' : 'Edit links'}</button></div>
 	<div class="card overflow-x-auto">
 		<table class="w-full">
-			<thead><tr><th class="th">Site</th><th class="th">Google</th><th class="th">Bing</th><th class="th">GA4</th><th class="th">GTM</th><th class="th">Clarity</th><th class="th">OpenSEO</th></tr></thead>
+			<thead><tr><th class="th">Site</th><th class="th"><img src="/logos/search-console.svg" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />Google</th><th class="th"><img src="/logos/bing.svg" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />Bing</th><th class="th"><img src="/logos/ga4.svg" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />GA4</th><th class="th"><img src="/logos/tag-manager.svg" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />GTM</th><th class="th"><img src="/logos/clarity.png" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />Clarity</th><th class="th">OpenSEO</th></tr></thead>
 			<tbody>
 				{#each data.rows as r (r.id)}
 					<tr>
