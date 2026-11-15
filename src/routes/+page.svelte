@@ -208,12 +208,14 @@
 				{/if}
 
 				<div class="mt-4 flex items-center gap-1.5 border-t pt-3 text-xs text-muted-foreground">
-					{#each [['bing', 'Bing'], ['ga4', 'GA4'], ['gtm', 'GTM'], ['clarity', 'Clarity'], ['openseo', 'OpenSEO']] as [k, l]}
-						{#if c.connected[k as 'bing']}<span class="chip !py-0 text-[10px]" title="{l} connected">{l}</span>{/if}
+					<!-- Each connected source shows its own logo (the files in static/logos); OpenSEO has no logo file, so it stays a text chip. -->
+					{#each [['bing', 'Bing', 'bing.svg'], ['ga4', 'Google Analytics 4', 'ga4.svg'], ['gtm', 'Google Tag Manager', 'tag-manager.svg'], ['clarity', 'Microsoft Clarity', 'clarity.png']] as [k, l, file]}
+						{#if c.connected[k as 'bing']}<img src="/logos/{file}" alt="{l} connected" title="{l} connected" width="16" height="16" class="size-4 shrink-0 object-contain" />{/if}
 					{/each}
+					{#if c.connected.openseo}<span class="chip !py-0 text-[10px]" title="OpenSEO connected">OpenSEO</span>{/if}
 					{#each c.tags as t}<span class="chip !py-0 text-[10px]">{t}</span>{/each}
 					<span class="ml-auto truncate">
-						{#if c.removed}removed · no longer synced{:else if c.syncStatus === 'running' || c.syncStatus === 'queued'}<RefreshCw class="mr-1 inline size-3 animate-spin" />{c.syncStatus}{:else if c.syncStatus === 'error'}<span class="text-bad" title={privacy.on ? undefined : (c.syncMessage ?? 'Sync failed')}>⚠ sync error</span>{:else}synced {ago(c.lastSync)}{/if}{#if !c.backfillDone && c.hasData} · loading history{/if}
+						{#if c.removed}removed · no longer synced{:else if c.syncStatus === 'running' || c.syncStatus === 'queued'}<RefreshCw class="mr-1 inline size-3 animate-spin" />{c.syncStatus}{:else if c.syncStatus === 'error'}<span class="text-bad" title={privacy.on ? undefined : (c.syncMessage ?? 'Sync failed')}>⚠ sync error</span>{:else}synced {ago(c.lastSync)}{/if} {#if !c.backfillDone && c.hasData}· loading history{/if}
 					</span>
 				</div>
 			</article>

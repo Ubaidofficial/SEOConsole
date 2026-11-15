@@ -52,7 +52,7 @@
 
 <div class="mb-3 flex flex-wrap items-start gap-3">
 	<SiteAvatar name={data.site.label || data.site.name} siteId={data.site.id} class="pii mt-1 !size-9 !rounded-lg !text-sm" />
-	<div class="min-w-0">
+	<div class="min-w-0 flex-1 basis-72">
 		<div class="text-xs text-muted-foreground"><a href="/" class="hover:underline">All sites</a> / <span class="pii">{data.account.label ?? data.account.email}</span></div>
 		<div class="flex min-w-0 items-center gap-2"><h1 class="pii truncate text-lg font-semibold">{data.site.label || data.site.name}</h1><AuthorityBadges authority={data.site.authority} /></div>
 		<div class="text-xs text-muted-foreground">

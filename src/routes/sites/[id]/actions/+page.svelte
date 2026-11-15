@@ -31,7 +31,7 @@
 	<div class="card p-6 text-center text-sm"><p class="mb-1 font-medium text-good">Nothing to do right now.</p><p class="text-muted-foreground">Either the site is healthy, or there is not enough data yet. Connect GA4 and Tag Manager, read the sitemaps and run the on-page check to widen what is looked at.</p></div>
 {:else}
 	<div class="mb-3 flex flex-wrap items-center gap-1.5">
-		<span class="mr-1 text-sm"><b>{data.open.length}</b> open{#if blocking} · <b class="text-bad">{blocking} blocking</b>{/if}</span>
+		<span class="mr-1 text-sm"><b>{data.open.length}</b> open {#if blocking}· <b class="text-bad">{blocking} blocking</b>{/if}</span>
 		<button class="chip {only === 'blocking' ? 'chip-on' : ''}" onclick={() => (only = only === 'blocking' ? 'all' : 'blocking')} disabled={!blocking}>Blocking ({blocking})</button>
 		<button class="chip {only === 'quick' ? 'chip-on' : ''}" onclick={() => (only = only === 'quick' ? 'all' : 'quick')} disabled={!quick} title="Low-effort items that are not blocking">Quick wins ({quick})</button>
 		<span class="mx-1 text-muted-foreground">|</span>
