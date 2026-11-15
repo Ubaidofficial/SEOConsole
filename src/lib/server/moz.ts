@@ -7,7 +7,9 @@ import { authDue, authFor, authSummary, authoritySiteIds, domainTarget, normalis
 
 /**
  * Moz Domain Authority (DA) for each site, shown next to its name. It needs the operator's own Moz API credentials (Access ID and
- * Secret Key, from a free Moz API account). Moz limits the free plan by monthly "rows", so this is deliberately thrifty: each site
+ * Secret Key). Whether a new or free Moz account can still get them is NOT confirmed: Moz's current documentation (read 2026-11-15, via a
+ * mirror) describes a newer API with a single token (`x-moz-token`, api.moz.com/jsonrpc) and says Moz is moving between versions. Moz limits
+ * plans by monthly "rows", so this is deliberately thrifty: each site
  * is looked up every MOZ_DA_EVERY_DAYS (default 30, at least 7), at most MOZ_MONTHLY_ROWS rows a month (default 40) are spent, and
  * requests are spaced 10 seconds apart. Written from third-party descriptions of Moz's API v2 (POST /v2/url_metrics, HTTP Basic auth,
  * `domain_authority` in `results`): Moz's own documentation could not be read here, so this has been tested against a fake only.
@@ -64,7 +66,7 @@ async function queryBatch(accessId: string, secretKey: string, targets: string[]
 		throw new MozError(e instanceof Error && e.name === 'TimeoutError' ? 'Moz did not answer within 30 seconds.' : 'Could not reach Moz.', 0);
 	}
 	const body = (await res.json().catch(() => null)) as { message?: unknown; error?: unknown } | null;
-	if (res.status === 401 || res.status === 403) throw new MozError('Moz rejected the Access ID or Secret Key. Copy both again from your Moz API account.', res.status);
+	if (res.status === 401 || res.status === 403) throw new MozError('Moz rejected the Access ID or Secret Key. Copy both again from your Moz API account. This older Moz API cannot use a single API token from Moz\'s newer API; if that is all you have, skip this step.', res.status);
 	if (res.status === 429) throw new MozError('Moz says the rate limit or your monthly rows are used up. It will be tried again tomorrow.', 429);
 	const detail = typeof body?.message === 'string' ? body.message : typeof body?.error === 'string' ? body.error : '';
 	if (!res.ok) throw new MozError(detail ? `Moz: ${detail.slice(0, 200)}` : `Moz answered HTTP ${res.status}.`, res.status);
