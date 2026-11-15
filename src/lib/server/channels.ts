@@ -1,6 +1,7 @@
 import { db } from './db';
 import { config } from './config';
-import { RealBingClient, type BingClient } from './bing';
+import { RealBingClient, type BingClient, type BingLinksClient } from './bing';
+import { bingLinksDue, syncBingLinks } from './binglinks';
 import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGtmContainers, demoGtmLive } from './demo-channels';
 import { callsLeft, CLARITY_FRESH_MS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
 import * as ga4 from './ga4';
@@ -90,6 +91,8 @@ export async function syncBing(siteId: number, client?: BingClient) {
 			for (const [kind, rows] of [['query', queries], ['page', pages]] as const) for (const r of rows) insTerm.run(siteId, kind, r.date, r.term, r.clicks, r.impressions, r.clickPos, r.imprPos);
 		})();
 		markLink(siteId, 'bing', 'idle', null, true);
+		// Inbound links and crawl issues: weekly, extra data, so a failure is recorded inside syncBingLinks and never fails this sync.
+		if (bingLinksDue(siteId)) await syncBingLinks(siteId, c as Partial<BingLinksClient>);
 		return { days: daily.length, queries: queries.length, pages: pages.length };
 	} catch (e) {
 		markLink(siteId, 'bing', 'error', e instanceof Error ? e.message : String(e));

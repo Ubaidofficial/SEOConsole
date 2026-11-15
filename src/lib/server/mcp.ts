@@ -11,6 +11,7 @@ import { joinWindows, resolveWindows, sortRows, type Joined, type SortBy } from 
 import { addDays } from './dates';
 import { computeCannibalization, computeCtrGaps, computeDecay, computeStriking, ctrOf, detectAnomalies, isBranded, pctChange } from '../analytics';
 import { linksFor } from './links';
+import { bingLinksFor } from './binglinks';
 import { openSeoProjectUrl } from './connect';
 import { authenticate, permits, presentedKey, type Permission } from './apikeys';
 import { consumeConfirmation, issueConfirmation, CONFIRM_TTL_MS } from './confirm';
@@ -336,11 +337,15 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_bing_performance',
-		description: 'Bing Webmaster data for a site: daily clicks/impressions plus top queries and pages. Note Bing updates query/page stats weekly, so rows are weekly buckets.',
-		schema: { ...siteArg, ...daysArg, limit: { type: 'integer' } },
+		description: 'Bing Webmaster data for a site: daily clicks/impressions plus top queries and pages (weekly buckets); view=links gives inbound links and failing pages that still have links.',
+		schema: { ...siteArg, ...daysArg, limit: { type: 'integer' }, view: { type: 'string', enum: ['performance', 'links'] } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			if (!linksFor(site.id).bing) return { connected: false, hint: 'Connect Bing Webmaster for this site on the Connect page.' };
+			if (a.view === 'links') {
+				const b = bingLinksFor(site);
+				return b?.report ? { fetchedAt: new Date(b.fetchedAt!).toISOString(), note: 'Bing\'s view only: small sites often have few links in it.', ...b.report } : { fetched: false, error: b?.error ?? null, hint: 'Read weekly after the Bing sync; open the Bing tab and press Refresh now.' };
+			}
 			const p = periodFor(site, days(a));
 			const d = db();
 			const top = (kind: string) => d.prepare('SELECT term, SUM(clicks) clicks, SUM(impressions) impressions, AVG(click_pos) avgClickPosition FROM bing_terms WHERE site_id = ? AND kind = ? AND date BETWEEN ? AND ? GROUP BY term ORDER BY clicks DESC, impressions DESC LIMIT ?').all(site.id, kind, p.start, p.end, limit(a, 15));

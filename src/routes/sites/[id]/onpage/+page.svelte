@@ -44,6 +44,9 @@
 					<dt class="text-muted-foreground">Title</dt><dd class="pii">{r.parsed.title ?? '—'} <span class="text-muted-foreground">({r.parsed.title?.length ?? 0})</span></dd>
 					<dt class="text-muted-foreground">Description</dt><dd class="pii">{r.parsed.description ?? '—'} <span class="text-muted-foreground">({r.parsed.description?.length ?? 0})</span></dd>
 					<dt class="text-muted-foreground">H1</dt><dd class="pii">{r.parsed.h1.length ? r.parsed.h1.join(' | ') : '—'}</dd>
+					{#if r.parsed.structured}<dt class="text-muted-foreground">Structured data</dt><dd>{r.parsed.structured.types.length ? r.parsed.structured.types.join(', ') : r.parsed.structured.blocks ? `${r.parsed.structured.blocks} block(s), no type read` : 'none found'}{r.parsed.structured.invalid ? ` · ${r.parsed.structured.invalid} not valid JSON` : ''}</dd>{/if}
+					{#if r.parsed.images}<dt class="text-muted-foreground">Images</dt><dd>{r.parsed.images.total}{r.parsed.images.missingAlt ? ` · ${r.parsed.images.missingAlt} without alt` : ''}</dd>{/if}
+					{#if r.parsed.viewport !== undefined}<dt class="text-muted-foreground">Social tags</dt><dd>{[r.parsed.ogTitle && 'og:title', r.parsed.ogDescription && 'og:description', r.parsed.ogImage && 'og:image'].filter(Boolean).join(', ') || 'none'}</dd>{/if}
 					{#if r.finalUrl !== r.url}<dt class="text-muted-foreground">Redirected to</dt><dd class="pii">{r.finalUrl}</dd>{/if}
 				</dl>
 				{#if (r.issues ?? []).length}<ul class="mb-3 space-y-1 text-xs">{#each r.issues ?? [] as i}<li class={sevTone[i.severity]}>{i.severity === 'bad' ? '✕' : i.severity === 'warn' ? '⚠' : 'ℹ'} {i.message}</li>{/each}</ul>{/if}

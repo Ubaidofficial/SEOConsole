@@ -2,6 +2,7 @@ import { db } from './db';
 import { decrypt, encrypt } from './crypto';
 import { env } from './config';
 import { sleep } from './google';
+import { parseCrawlIssues, parseLinkCounts, parseUrlLinks, type BingCrawlIssue, type BingLinkCount, type BingLinkSource } from '../binglinks';
 
 /** Verified against Microsoft Learn (Bing Webmaster API docs). */
 const KEY_BASE = 'https://ssl.bing.com/webmaster/api.svc/json';
@@ -18,6 +19,16 @@ export class BingApiError extends Error {
 export interface BingSite { url: string; isVerified: boolean }
 export interface BingDay { date: string; clicks: number; impressions: number }
 export interface BingTermRow { date: string; term: string; clicks: number; impressions: number; clickPos: number | null; imprPos: number | null }
+
+/** The link and crawl methods, apart from BingClient so the clients and fakes written before them stay valid. Free: same API key, no credits. */
+export interface BingLinksClient {
+	/** Pages of the site with inbound links and how many, all result pages up to `maxPages` (Bing says how many there are). */
+	linkCounts(siteUrl: string, maxPages?: number): Promise<{ links: BingLinkCount[]; totalPages: number; truncated: boolean }>;
+	/** The pages that link to one of yours, with anchor text. */
+	urlLinks(siteUrl: string, link: string, maxPages?: number): Promise<BingLinkSource[]>;
+	/** URLs Bing's crawler had trouble with: HTTP code, issue flags, and how many links point at each. */
+	crawlIssues(siteUrl: string): Promise<BingCrawlIssue[]>;
+}
 
 export interface BingClient {
 	listSites(): Promise<BingSite[]>;
@@ -83,7 +94,7 @@ export function friendlyBingError(message: string | undefined, code: number | un
 	return m || `Bing API ${status}`;
 }
 
-export class RealBingClient implements BingClient {
+export class RealBingClient implements BingClient, BingLinksClient {
 	constructor(
 		private integrationId: number,
 		private http: HttpOpts = {}
@@ -142,5 +153,34 @@ export class RealBingClient implements BingClient {
 	async pageStats(siteUrl: string) {
 		// Per Microsoft's docs GetPageStats reuses the QueryStats shape, with the page URL in `Query`.
 		return this.terms(await this.call('GetPageStats', { siteUrl }));
+	}
+	// The three link methods follow Microsoft's reference (Microsoft Learn, read 2026-11-15) and have not been run against a live Bing account here.
+	async linkCounts(siteUrl: string, maxPages = 20) {
+		const links: BingLinkCount[] = [];
+		let total = 1;
+		for (let page = 0; page < total && page < maxPages; page++) {
+			const r = parseLinkCounts(await this.call('GetLinkCounts', { siteUrl, page: String(page) }));
+			total = r.totalPages;
+			links.push(...r.links);
+		}
+		return { links, totalPages: total, truncated: total > maxPages };
+	}
+	async urlLinks(siteUrl: string, link: string, maxPages = 3) {
+		const out: BingLinkSource[] = [];
+		// Microsoft's JSON sample passes `link` as a JSON string literal (in quotes); if that finds nothing, the plain address is tried once.
+		for (const arg of [JSON.stringify(link), link]) {
+			out.length = 0;
+			let total = 1;
+			for (let page = 0; page < total && page < maxPages; page++) {
+				const r = parseUrlLinks(await this.call('GetUrlLinks', { siteUrl, link: arg, page: String(page) }));
+				total = Math.max(r.totalPages, 1);
+				out.push(...r.sources);
+			}
+			if (out.length) break;
+		}
+		return out;
+	}
+	async crawlIssues(siteUrl: string) {
+		return parseCrawlIssues(await this.call('GetCrawlIssues', { siteUrl }));
 	}
 }

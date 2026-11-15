@@ -1,4 +1,4 @@
-import type { BingClient, BingDay, BingSite, BingTermRow } from './bing';
+import type { BingClient, BingDay, BingLinksClient, BingSite, BingTermRow } from './bing';
 import type { Ga4Day, Ga4Property } from './ga4';
 import type { ClarityMetric } from './clarity';
 import type { GtmContainer, GtmLive } from './gtm';
@@ -28,11 +28,34 @@ const dayFactor = (date: string, end: string, seed: string) => {
 	return (dow === 0 || dow === 6 ? 0.72 : 1.05) * (0.85 + h01(seed, date) * 0.3) * (age === 17 ? 0.5 : 1);
 };
 
-export class DemoBing implements BingClient {
+export class DemoBing implements BingClient, BingLinksClient {
 	/** Demo: Bing "accepts" every submission and keeps a small daily allowance so the quota message can be seen. */
 	async submitUrlBatch(): Promise<void> {}
 	async urlSubmissionQuota(): Promise<{ daily: number | null; monthly: number | null }> {
 		return { daily: 10_000, monthly: 300_000 };
+	}
+	/** Demo: links to a handful of the site's own pages, in Bing's shape. */
+	async linkCounts(siteUrl: string) {
+		const s = siteOf(siteUrl);
+		const origin = siteUrl.replace(/\/$/, '');
+		const paths = ['/', `/products/${s.topic.replace(/\s+/g, '-')}-6`, `/blog/${s.topic.replace(/\s+/g, '-')}-10`, `/guides/${s.topic.replace(/\s+/g, '-')}-3`, `/products/${s.topic.replace(/\s+/g, '-')}-7`, '/discontinued-guide', '/old-products/legacy-kit'];
+		const links = paths.map((p, i) => ({ url: origin + p, count: Math.max(1, Math.round(60 * s.scale * (0.9 ** i) * (0.7 + h01(s.brand, p) * 0.6))) }));
+		return { links, totalPages: 1, truncated: false };
+	}
+	async urlLinks(siteUrl: string, link: string) {
+		return [{ url: 'https://industry-blog.example/best-tools', anchor: link.split('/').filter(Boolean).pop() ?? 'link' }, { url: 'https://university.example/reading', anchor: 'our guide' }];
+	}
+	/** Demo: two pages that no longer exist but still have links, one server error, one blocked page, and one healthy page with an unrelated flag. */
+	async crawlIssues(siteUrl: string) {
+		const s = siteOf(siteUrl);
+		const origin = siteUrl.replace(/\/$/, '');
+		return [
+			{ url: `${origin}/discontinued-guide`, httpCode: 404, issues: 1, inLinks: Math.max(2, Math.round(9 * s.scale)) },
+			{ url: `${origin}/old-products/legacy-kit`, httpCode: 410, issues: 1, inLinks: Math.max(1, Math.round(4 * s.scale)) },
+			{ url: `${origin}/checkout`, httpCode: 503, issues: 2, inLinks: 1 },
+			{ url: `${origin}/members`, httpCode: 403, issues: 4, inLinks: 2 },
+			{ url: `${origin}/forgotten-page`, httpCode: 404, issues: 1, inLinks: 0 }
+		];
 	}
 	async listSites(): Promise<BingSite[]> {
 		// Five of six demo sites exist in Bing; one does not, so the "unmatched" path is visible in the UI.
