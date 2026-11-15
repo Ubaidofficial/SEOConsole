@@ -10,6 +10,7 @@
  * two competitor tools it states only "charges credits", so the preview says the price is not stated instead of inventing one. Results are
  * stored (newest per kind), so reading them again is free; they are read-only through MCP (`get_research_findings`), which never spends credits.
  */
+import { bingDeadPages } from './binglinks';
 import { db, audit } from './db';
 import { config } from './config';
 import { getSite, type SiteRow } from './clients';
@@ -204,11 +205,12 @@ export interface BacklinkPlan { target: string; pages: number; credits: number }
 export const backlinkPlan = (siteId: number): BacklinkPlan => ({ target: hostKey(getSite(siteId)!.site_url), pages: 1, credits: 30 });
 export interface BacklinkResult { target: string; profile: LinkProfile; reclaim: ReclaimRow[]; spamSample: Backlink[]; sample: Backlink[]; partial: boolean; deadKnown: number }
 
-/** Pages known to be gone: the crawl's 4xx/5xx and the checked link targets that came back that way. Keyed by normalised URL. */
+/** Pages known to be gone: the crawl's 4xx/5xx, the checked link targets that came back that way, and the pages Bing's crawler found missing. Keyed by normalised URL. */
 function deadPages(siteId: number): Map<string, string> {
 	const dead = new Map<string, string>();
 	for (const p of crawledLinkPages(siteId)) if (p.status >= 400) dead.set(normalizeUrl(p.url), `The page answered ${p.status}.`);
 	for (const r of db().prepare('SELECT norm, status FROM link_checks WHERE site_id = ? AND status >= 400 AND status NOT IN (401,403,408,429)').all(siteId) as { norm: string; status: number }[]) if (!dead.has(r.norm)) dead.set(r.norm, `The page answered ${r.status}.`);
+	for (const [norm, b] of bingDeadPages(siteId)) if (!dead.has(norm)) dead.set(norm, `Bing's crawler got ${b.httpCode} for this page.`);
 	return dead;
 }
 

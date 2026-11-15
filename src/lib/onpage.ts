@@ -13,6 +13,55 @@ export interface Parsed {
 	robots: string | null;
 	lang: string | null;
 	ogTitle: string | null;
+	// Added later, so absent in checks stored by an older version (a check that has no value for them is simply not judged on them).
+	/** the viewport meta tag's content */
+	viewport?: string | null;
+	ogDescription?: string | null;
+	ogImage?: string | null;
+	/** JSON-LD blocks: how many, the schema.org types they declare, and how many are not valid JSON */
+	structured?: { blocks: number; types: string[]; invalid: number };
+	/** <img> tags in the page, and how many have no alt attribute at all (alt="" is a valid way to mark decoration) */
+	images?: { total: number; missingAlt: number };
+}
+
+/** schema.org types declared in a parsed JSON-LD value: "@type" as a string or list, also inside "@graph" and nested lists. */
+function collectTypes(node: unknown, into: Set<string>, depth = 0): void {
+	if (depth > 4 || node === null || typeof node !== 'object') return;
+	if (Array.isArray(node)) {
+		for (const n of node.slice(0, 50)) collectTypes(n, into, depth + 1);
+		return;
+	}
+	const o = node as Record<string, unknown>;
+	const t = o['@type'];
+	for (const x of Array.isArray(t) ? t : [t]) if (typeof x === 'string' && x.length <= 60) into.add(x);
+	if (o['@graph']) collectTypes(o['@graph'], into, depth + 1);
+}
+
+/**
+ * JSON-LD structured data. It lives in <script> tags, which stripInert removes, so this reads the raw HTML. Scans with indexOf like the rest of
+ * this file; at most 20 blocks of at most 200 KB are read, and an unterminated script ends the scan.
+ */
+export function parseStructuredData(rawHtml: string): { blocks: number; types: string[]; invalid: number } {
+	const html = rawHtml.slice(0, 1_500_000);
+	const lower = asciiLower(html);
+	const types = new Set<string>();
+	let blocks = 0;
+	let invalid = 0;
+	for (const t of openTags(html, lower, 'script')) {
+		if (!/ld\+json/i.test(attr(t.tag, 'type') ?? '')) continue;
+		const close = lower.indexOf('</script', t.end + 1);
+		if (close < 0) break;
+		if (++blocks > 20) {
+			blocks = 20;
+			break;
+		}
+		try {
+			collectTypes(JSON.parse(html.slice(t.end + 1, Math.min(close, t.end + 1 + 200_000)).trim()), types);
+		} catch {
+			invalid++;
+		}
+	}
+	return { blocks, types: [...types].slice(0, 12), invalid };
 }
 
 const codePoint = (n: number) => (n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : '�');
@@ -155,7 +204,20 @@ export function parseOnPage(rawHtml: string): Parsed {
 		canonical,
 		robots: metaContent(head, headLower, 'name', 'robots'),
 		lang: htmlTag ? attr(htmlTag.tag, 'lang') : null,
-		ogTitle: metaContent(head, headLower, 'property', 'og:title')
+		ogTitle: metaContent(head, headLower, 'property', 'og:title'),
+		viewport: metaContent(head, headLower, 'name', 'viewport'),
+		ogDescription: metaContent(head, headLower, 'property', 'og:description'),
+		ogImage: metaContent(head, headLower, 'property', 'og:image'),
+		structured: parseStructuredData(rawHtml),
+		images: (() => {
+			let total = 0;
+			let missingAlt = 0;
+			for (const t of openTags(html, lower, 'img')) {
+				if (++total > 5000) break;
+				if (attr(t.tag, 'alt') === null) missingAlt++;
+			}
+			return { total: Math.min(total, 5000), missingAlt };
+		})()
 	};
 }
 
@@ -222,6 +284,14 @@ export function checkPage(parsed: Parsed, queries: { query: string; clicks: numb
 		}
 	}
 	if (!parsed.lang) add('no-lang', 'info', 'The <html> tag has no lang attribute.');
+	// Only judged when the parser filled the field in: a check stored by an older version has no value to judge.
+	if (parsed.viewport === null) add('no-viewport', 'warn', 'No viewport meta tag. On phones the page may be shown zoomed out, and most searches happen on phones. Add <meta name="viewport" content="width=device-width, initial-scale=1">.');
+	if (parsed.ogImage !== undefined && (!parsed.ogTitle || !parsed.ogImage)) {
+		const missing = [!parsed.ogTitle && 'og:title', !parsed.ogImage && 'og:image'].filter(Boolean).join(' and ');
+		add('no-og', 'info', `No ${missing} tag. A link to this page shared in a chat or on a social network shows a plain preview. This does not affect Google rankings.`);
+	}
+	if (parsed.structured && parsed.structured.invalid > 0) add('bad-jsonld', 'warn', `${parsed.structured.invalid} of ${parsed.structured.blocks} structured-data (JSON-LD) block${parsed.structured.blocks === 1 ? ' is' : 's are'} not valid JSON, so search engines cannot read ${parsed.structured.invalid === 1 ? 'it' : 'them'}.`);
+	if (parsed.images && parsed.images.missingAlt > 0) add('img-alt', 'info', `${parsed.images.missingAlt} of ${parsed.images.total} images have no alt attribute (an empty alt="" is fine for decoration).`);
 	const cov: QueryCoverage[] = queries.map((q) => ({ query: q.query, clicks: q.clicks, title: matchQuery(title, q.query), description: matchQuery(description, q.query), h1: matchQuery(h1.join(' '), q.query) }));
 	// Only a query that earns clicks says what people want from the page. A page whose "top" query has 0 clicks (an off-topic or one-off
 	// search, say "nat eliason net worth" on a book page) is not told to rewrite its title around it.

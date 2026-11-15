@@ -1,8 +1,13 @@
-import type { PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { getSite } from '$lib/server/clients';
 import { brandTerms, periodFor, summary } from '$lib/server/queries';
 import { linksFor } from '$lib/server/links';
+import { config } from '$lib/server/config';
+import { bingClientFor } from '$lib/server/channels';
+import { bingLinksFor, logBingLinks, syncBingLinks } from '$lib/server/binglinks';
+import type { BingLinksClient } from '$lib/server/bing';
 import { isBranded, pctChange } from '$lib/analytics';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
@@ -28,6 +33,25 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		series: (d.prepare('SELECT date, clicks, impressions FROM bing_daily WHERE site_id = ? AND date BETWEEN ? AND ? ORDER BY date').all(site.id, p.start, p.end) as { date: string; clicks: number; impressions: number }[]).map((r) => ({ ...r, position: 0 })),
 		kpi: { clicks: now.clicks, impressions: now.impressions, clicksDelta: pctChange(now.clicks, prev.clicks), impressionsDelta: pctChange(now.impressions, prev.impressions), googleClicks: g.clicks, shareOfGoogle: g.clicks ? now.clicks / g.clicks : null },
 		queries: terms('query'),
-		pages: terms('page')
+		pages: terms('page'),
+		linksData: bingLinksFor(site),
+		readOnly: config.readOnly
 	};
+};
+
+/** Asking again within this time is refused: Bing's link data only changes slowly and its calls are rate-limited. */
+const REFRESH_COOLDOWN_MS = 10 * 60_000;
+
+export const actions: Actions = {
+	refreshLinks: async ({ params }) => {
+		if (config.readOnly) return fail(403, { error: 'Read-only mode: nothing was fetched.' });
+		const site = getSite(Number(params.id))!;
+		const link = linksFor(site.id).bing;
+		if (!link?.integration_id) return fail(400, { error: 'Bing is not linked to this site.' });
+		const row = db().prepare('SELECT fetched_at, error_at FROM bing_links WHERE site_id = ?').get(site.id) as { fetched_at: number; error_at: number | null } | undefined;
+		if (row && Date.now() - Math.max(row.fetched_at, row.error_at ?? 0) < REFRESH_COOLDOWN_MS) return fail(429, { error: 'Fetched a moment ago. Try again in a few minutes.' });
+		const r = await syncBingLinks(site.id, bingClientFor(link.integration_id) as Partial<BingLinksClient>);
+		logBingLinks(site.id, r.ok ? `refreshed: ${r.pages} pages with links, ${r.issues} crawl issues` : `refresh failed: ${r.error}`);
+		return r.ok ? { ok: true as const } : fail(502, { error: r.error ?? 'Bing did not answer.' });
+	}
 };

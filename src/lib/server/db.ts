@@ -557,6 +557,13 @@ CREATE TABLE IF NOT EXISTS link_checks (            -- link targets that were no
 	checked_at INTEGER NOT NULL,
 	PRIMARY KEY (site_id, norm)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS bing_links (             -- Bing's inbound-link counts and crawl issues for a site, read weekly (newest only)
+	site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
+	fetched_at INTEGER NOT NULL,        -- 0 = never read successfully
+	payload TEXT NOT NULL,              -- JSON { counts, issues, pagesWithLinks, links, truncated } (src/lib/server/binglinks.ts)
+	error TEXT,                         -- why the last read failed; the previous payload is kept
+	error_at INTEGER
+);
 CREATE TABLE IF NOT EXISTS clarity_scans (          -- is Clarity's script on the site's pages? (newest check only)
 	site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
 	checked_at INTEGER NOT NULL,

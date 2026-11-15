@@ -47,6 +47,25 @@ export interface ReclaimRow { target: string; why: string; links: ReclaimLink[];
 const slug = (u: string) => { try { return new URL(u).pathname.replace(/[-_/]+/g, ' '); } catch { return u; } };
 
 /**
+ * The live page whose address shares the most words with a dead one (a guess to check by eye): Jaccard overlap of the words in the two
+ * paths, at least a third, nudged towards pages that get impressions. `score` is that weighted overlap; null when nothing is close.
+ */
+export function closestLive(target: string, live: { url: string; clicks: number; impressions: number }[]): { url: string; score: number } | null {
+	const words = (u: string) => new Set(queryTokens(slug(u)));
+	const a = words(target);
+	let best: { url: string; score: number } | null = null;
+	for (const l of live) {
+		if (normalizeUrl(l.url) === normalizeUrl(target)) continue;
+		const b = words(l.url);
+		const inter = [...a].filter((t) => b.has(t)).length;
+		const score = a.size + b.size - inter > 0 ? inter / (a.size + b.size - inter) : 0;
+		const weighted = score * (1 + Math.log10(1 + l.impressions) / 10);
+		if (score >= 0.34 && (!best || weighted > best.score)) best = { url: l.url, score: weighted };
+	}
+	return best;
+}
+
+/**
  * `dead` maps the normalised URL of every page known to be gone (crawl 404, checked 404...) to the reason; a link the provider itself flags as
  * broken counts too. `live` are the working pages worth sending the links to, with what they earn. Redirect suggestions are by shared words in the
  * address, a guess to check by eye.
@@ -63,18 +82,8 @@ export function reclaimPlan(rows: Backlink[], dead: Map<string, string>, live: {
 		if (r.dofollow) g.dofollow++;
 		groups.set(key, g);
 	}
-	const words = (u: string) => new Set(queryTokens(slug(u)));
 	for (const g of groups.values()) {
-		const a = words(g.target);
-		let best: { url: string; score: number } | null = null;
-		for (const l of live) {
-			if (normalizeUrl(l.url) === normalizeUrl(g.target)) continue;
-			const b = words(l.url);
-			const inter = [...a].filter((t) => b.has(t)).length;
-			const score = a.size + b.size - inter > 0 ? inter / (a.size + b.size - inter) : 0;
-			const weighted = score * (1 + Math.log10(1 + l.impressions) / 10);
-			if (score >= 0.34 && (!best || weighted > best.score)) best = { url: l.url, score: weighted };
-		}
+		const best = closestLive(g.target, live);
 		g.redirectTo = best?.url ?? null;
 		g.match = best ? Math.round(Math.min(1, best.score) * 100) / 100 : 0;
 	}

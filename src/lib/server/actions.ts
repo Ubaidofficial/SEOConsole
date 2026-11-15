@@ -25,6 +25,7 @@ import { groupByTarget, linkReport } from './internallinks';
 import { CHANGE_REVIEW_DAYS, ERROR_STREAK, robotsBlockedPages, robotsChanges, robotsHosts } from './robotswatch';
 import { auditFindings, storedAudit } from './openseolink';
 import { linkHealthFor } from './linkhealth';
+import { bingLinksFor } from './binglinks';
 import { publishingFor } from './publishing';
 
 type Site = SiteRow;
@@ -40,7 +41,7 @@ const pathOf = (u: string) => {
 	}
 };
 const pct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(0)}%`;
-const VERSION = 'b0';
+const VERSION = 'b1';
 
 /** No successful Search Console download for this long means something is failing: the app tries every 6 hours. */
 export const STALE_AFTER_MS = 48 * 3600_000;
@@ -323,6 +324,25 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 		/* no sitemap read yet */
 	}
 
+	// ── pages other sites link to that no longer work, from Bing's link data ──
+	try {
+		const bl = bingLinksFor(site)?.report;
+		const dead = bl?.dead ?? [];
+		if (dead.length) {
+			const links = dead.reduce((a, d) => a + d.inLinks, 0);
+			add({
+				key: `reclaim:${keyHash(dead.map((d) => d.url))}`, type: 'reclaim',
+				title: `${n0(dead.length)} page${dead.length === 1 ? '' : 's'} with ${n0(links)} inbound link${links === 1 ? '' : 's'} no longer work${dead.length === 1 ? 's' : ''}`,
+				why: 'Bing found these addresses failing while links from other pages still point at them, so those links pass nothing to your site.',
+				how: 'Redirect each missing page to its closest live page (a permanent 301) and fix any server error. The Bing tab lists them with a suggested target.',
+				impact: null, confidence: 'medium', effort: 'low', blocking: false, href: `${base}/bing#links`,
+				evidence: dead.slice(0, 5).map((d) => `${pathOf(d.url)} (${d.httpCode}), ${n0(d.inLinks)} link${d.inLinks === 1 ? '' : 's'}${d.redirectTo ? ` → ${pathOf(d.redirectTo)}` : ''}`)
+			});
+		}
+	} catch {
+		/* no Bing link data yet */
+	}
+
 	// ── broken internal links, from the crawl and the checked link targets ──
 	try {
 		const lh = linkHealthFor(site);
@@ -346,7 +366,9 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 		'no-description': ['have no meta description', 'Write a description that sells the click; Google will write its own otherwise.', 'low'],
 		'no-h1': ['have no <h1>', 'Add one H1 stating the page topic in the words searchers use.', 'low'],
 		'top-query-missing': ['do not mention their top query in the title or H1', 'Work the query people already find the page with into the title and H1 naturally.', 'medium'],
-		'canonical-elsewhere': ['declare a different page as canonical', 'Check that is intended; if not, point the canonical at the page itself.', 'medium']
+		'canonical-elsewhere': ['declare a different page as canonical', 'Check that is intended; if not, point the canonical at the page itself.', 'medium'],
+		'no-viewport': ['have no viewport meta tag', 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> to the <head> of the template.', 'low'],
+		'bad-jsonld': ['have structured data that is not valid JSON', 'Fix the JSON syntax (a trailing comma or an unescaped quote is the usual cause) and check it with Google\'s Rich Results Test.', 'medium']
 	};
 	for (const [issue, [phrase, how, conf]] of Object.entries(issueHow)) {
 		const pages = [...checks.values()].filter((c) => (c.issues ?? []).some((i) => i.id === issue)).sort((a, b) => clicksOf(b.url) - clicksOf(a.url));
@@ -456,6 +478,7 @@ function cacheKey(site: Site, days: number): string {
 		one('SELECT MAX(fetched_at) m, COUNT(*) n FROM link_pages WHERE site_id = ?', site.id),
 		one('SELECT MAX(at) m, COUNT(*) n FROM link_done WHERE site_id = ?', site.id),
 		one('SELECT fetched_at f FROM sitemap_sync WHERE site_id = ?', site.id),
+		one('SELECT fetched_at f, error_at e FROM bing_links WHERE site_id = ?', site.id),
 		one("SELECT GROUP_CONCAT(origin || ' ' || fingerprint || ' ' || state || ' ' || fail_streak, '|') f FROM robots_checks WHERE site_id = ?", site.id),
 		one('SELECT MAX(id) m FROM robots_changes WHERE site_id = ?', site.id),
 		one('SELECT fetched_at f FROM oseo_audits WHERE site_id = ?', site.id),
