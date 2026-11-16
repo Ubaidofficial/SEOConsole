@@ -4,6 +4,7 @@
  * - Claude, through the official Anthropic SDK: a streamed Messages request in a loop. When the model asks for tools they run here,
  *   through callTool (the one path MCP and the REST API take), and the results go back until it answers. ANTHROPIC_API_KEY is the key
  *   AI answers already uses; CHAT_MODEL (default claude-opus-5-5) and CHAT_EFFORT (default medium) tune it.
+ *   Or any OpenAI-compatible server (CHAT_PROVIDER=openai, chatopenai.ts): same loop, same stored conversation, translated at the edge.
  * - It acts as the person who is signed in: their role sets what it may do (viewer: read only; editor and above: changes, minus the few
  *   the app keeps for admins), and a person limited to some sites only ever reaches those sites.
  * - Nothing changes without a click. When the model wants to change something (submit URLs, mark a to-do done...), the turn stops and
@@ -25,6 +26,7 @@ import { hostKey } from './hosts';
 import { permits, type Permission } from './apikeys';
 import type { CurrentUser } from './roles';
 import { toolLabel, validateChart, type ApprovalItem, type ChatEvent, type ChatItem, type ToolActivity } from '../chat';
+import { createOpenAiCall, ProviderError } from './chatopenai';
 
 type Msg = Anthropic.Beta.BetaMessageParam;
 type Block = Anthropic.Beta.BetaContentBlock;
@@ -36,8 +38,35 @@ export const MAX_RESULT_CHARS = 40_000;
 export const MAX_MESSAGE_CHARS = 8_000;
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
+/**
+ * Which model answers: `anthropic` (the default: Claude, with ANTHROPIC_API_KEY) or `openai` (any server that speaks the OpenAI chat
+ * completions protocol: CHAT_BASE_URL, CHAT_MODEL and, for hosted providers, CHAT_API_KEY). An unknown value is not guessed at: chat stays
+ * off and says so.
+ */
+export type ChatProvider = 'anthropic' | 'openai';
+export const chatProvider = (): ChatProvider | null => {
+	const p = env('CHAT_PROVIDER').trim().toLowerCase();
+	if (p === '' || p === 'anthropic') return 'anthropic';
+	return p === 'openai' || p === 'openai-compatible' ? 'openai' : null;
+};
 export const chatKey = () => env('ANTHROPIC_API_KEY').trim();
-export const chatModel = () => env('CHAT_MODEL').trim() || 'claude-opus-5-5';
+export const chatApiKey = () => env('CHAT_API_KEY').trim();
+export const chatBaseUrl = () => env('CHAT_BASE_URL').trim() || 'https://api.openai.com/v1';
+const validBaseUrl = (u: string) => {
+	try {
+		const p = new URL(u).protocol;
+		return p === 'https:' || p === 'http:';
+	} catch {
+		return false;
+	}
+};
+/** Some providers cap one answer well below Claude's limit (8,192 tokens is common), and refuse a request that asks for more. */
+export const chatMaxTokens = () => {
+	const n = Number(env('CHAT_MAX_TOKENS', '8192'));
+	return Number.isFinite(n) && n >= 256 ? Math.floor(n) : 8192;
+};
+/** The Claude model has a default; an OpenAI-compatible one must be named, because no model name is right for every provider. */
+export const chatModel = () => env('CHAT_MODEL').trim() || (chatProvider() === 'anthropic' ? 'claude-opus-5-5' : '');
 export const chatEffort = () => {
 	const e = env('CHAT_EFFORT').trim().toLowerCase();
 	return (EFFORTS as readonly string[]).includes(e) ? (e as (typeof EFFORTS)[number]) : 'medium';
@@ -46,7 +75,16 @@ export const chatDailyLimit = () => {
 	const n = Number(env('CHAT_MESSAGES_PER_DAY', '50'));
 	return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 50;
 };
-export const chatReady = () => chatKey() !== '';
+/** Why chat is off, in words for the person who runs the server; null when it is ready. */
+export function chatSetupProblem(): string | null {
+	const p = chatProvider();
+	if (p === null) return `CHAT_PROVIDER is "${env('CHAT_PROVIDER').trim().slice(0, 40)}": use anthropic (the default) or openai, then restart.`;
+	if (p === 'anthropic') return chatKey() === '' ? 'Chat needs an Anthropic API key: add ANTHROPIC_API_KEY to .env and restart. Or set CHAT_PROVIDER=openai to use an OpenAI-compatible provider.' : null;
+	if (chatModel() === '') return 'Chat with CHAT_PROVIDER=openai needs CHAT_MODEL (the provider\'s model name from its documentation). Add it and restart.';
+	if (!validBaseUrl(chatBaseUrl())) return 'CHAT_BASE_URL is not a valid http(s) address. Use the provider\'s base address, for example https://api.deepseek.com, then restart.';
+	return null;
+}
+export const chatReady = () => chatSetupProblem() === null;
 
 // ── who is asking ────────────────────────────────────────────────────────────
 /** Tools the app keeps for admins (in the app, these need the admin role), so an editor's chat cannot do them either. */
@@ -144,7 +182,12 @@ export const claudeCall: ModelCall = async (params, o) => {
 	return await stream.finalMessage();
 };
 
+/** The same loop, answered by an OpenAI-compatible server (CHAT_PROVIDER=openai). */
+export const openAiCall: ModelCall = createOpenAiCall(() => ({ baseUrl: chatBaseUrl(), apiKey: chatApiKey(), maxTokens: chatMaxTokens() }));
+const providerCall = (): ModelCall => (chatProvider() === 'openai' ? openAiCall : claudeCall);
+
 function apiErrorText(e: unknown): string {
+	if (e instanceof ProviderError) return e.message;
 	if (e instanceof Anthropic.AuthenticationError) return 'Anthropic rejected the API key (ANTHROPIC_API_KEY). Check it in .env.';
 	if (e instanceof Anthropic.PermissionDeniedError) return `This API key may not use ${chatModel()}. Set CHAT_MODEL to a model it can use.`;
 	if (e instanceof Anthropic.NotFoundError) return `The model ${chatModel()} was not found. Check CHAT_MODEL.`;
@@ -329,7 +372,8 @@ export async function runTurn(u: CurrentUser, input: TurnInput, emit: Emit, o: {
 	};
 	const busyText = 'This conversation is still finishing its last answer. Wait a moment, then send again.';
 	try {
-		if (!chatReady()) return emit({ type: 'error', message: 'Chat needs an Anthropic API key: add ANTHROPIC_API_KEY to .env and restart.' });
+		const setup = chatSetupProblem();
+		if (setup) return emit({ type: 'error', message: setup });
 		let thread: ThreadRow | null = input.threadId == null ? null : getThread(u, input.threadId);
 		if (input.threadId != null && !thread) return emit({ type: 'error', message: 'That conversation was not found.' });
 		const limit = chatDailyLimit();
@@ -358,7 +402,7 @@ export async function runTurn(u: CurrentUser, input: TurnInput, emit: Emit, o: {
 			const next: Msg = { role: 'user', content: order(results, uses as { id: string }[]) };
 			messages.push(next);
 			append(thread.id, next);
-			return await loop(u, thread, messages, emit, signal, o.call ?? claudeCall);
+			return await loop(u, thread, messages, emit, signal, o.call ?? providerCall());
 		}
 		const text = input.text.trim();
 		if (!text) return emit({ type: 'error', message: 'Type a question first.' });
@@ -389,7 +433,7 @@ export async function runTurn(u: CurrentUser, input: TurnInput, emit: Emit, o: {
 		const user: Msg = { role: 'user', content };
 		messages = [...messages, user];
 		append(thread.id, user);
-		await loop(u, thread, messages, emit, signal, o.call ?? claudeCall);
+		await loop(u, thread, messages, emit, signal, o.call ?? providerCall());
 	} catch (e) {
 		emit({ type: 'error', message: e instanceof Error ? e.message : 'Something went wrong.' });
 	} finally {

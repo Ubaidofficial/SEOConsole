@@ -3,7 +3,8 @@
  * who they are with LEGAL_ENTITY, LEGAL_CONTACT_EMAIL and LEGAL_GOVERNING_LAW. They are a starting point, not legal advice: the operator should
  * have them reviewed before relying on them, above all for Google's OAuth verification and for any customers they serve.
  */
-export interface LegalContext { entity: string; contact: string | null; law: string | null; updated: string }
+/** `chatHost` is set only when the Ask chat is pointed at an OpenAI-compatible provider instead of Anthropic: the address it talks to. */
+export interface LegalContext { entity: string; contact: string | null; law: string | null; updated: string; chatHost?: string | null }
 export interface LegalSection { title: string; paras: string[]; items?: string[] }
 
 const who = (c: LegalContext) => c.entity;
@@ -58,7 +59,7 @@ export function privacySections(c: LegalContext): LegalSection[] {
 				'Search engines that take part in IndexNow, and Bing’s URL submission, when you ask us to submit URLs: they receive those public URLs.',
 				'A chat or webhook address (such as Slack or Discord) if the operator sets one for the weekly digest.',
 				'An AI assistant you connect through the MCP server: it receives whatever its tools return, under that assistant’s own terms. Connect only assistants you trust, and prefer a key limited to the sites it needs.',
-				'An AI model provider, only if the operator has switched on the Ask chat: when you ask a question there, your question and the data the service looks up to answer it (for example queries, pages, clicks, positions and the to-do list for the sites you choose) are sent to Anthropic, the company behind Claude, using the operator’s own API key, to write the answer. Nothing is sent unless someone uses Ask. Anthropic handles it under its own terms and privacy policy.',
+				`An AI model provider, only if the operator has switched on the Ask chat: when you ask a question there, your question and the data the service looks up to answer it (for example queries, pages, clicks, positions and the to-do list for the sites you choose) are sent to ${c.chatHost ? `the model provider the operator has chosen (${c.chatHost}), using the operator’s own API key,` : 'Anthropic, the company behind Claude, using the operator’s own API key,'} to write the answer. Nothing is sent unless someone uses Ask. ${c.chatHost ? 'That provider' : 'Anthropic'} handles it under its own terms and privacy policy.`,
 				'AI answer providers, only if the operator has switched on AI answer tracking: the questions you write to track are sent to the AI services that answer them (OpenAI, Anthropic and Perplexity, or DataForSEO, which runs some of them for the service) to see whether your brand or site is mentioned. This is not data from Google.',
 				'Ahrefs, only if the operator has connected it: the domain names of the sites you manage are sent to Ahrefs, once a week, to look up their Domain Rating. Nothing else about your sites, and none of your Google data, is sent.',
 				'Moz, only if the operator has connected it: the domain names of the sites you manage are sent to Moz, about once a month, to look up their Domain Authority. Nothing else about your sites, and none of your Google data, is sent.',

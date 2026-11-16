@@ -26,6 +26,13 @@ describe('privacy policy', () => {
 		expect(priv).toMatch(/not use it to train AI models/);
 		expect(priv).toMatch(/AI answer tracking[^.]*OpenAI[^.]*Perplexity[^.]*DataForSEO/);
 	});
+	it('names the configured provider, not Anthropic, when the Ask chat is pointed at another one', () => {
+		const other = text(privacySections({ ...named, chatHost: 'api.deepseek.com' }));
+		expect(other).toContain('are sent to the model provider the operator has chosen (api.deepseek.com), using the operator’s own API key');
+		expect(other).toContain('That provider handles it under its own terms and privacy policy');
+		expect(other).not.toMatch(/sent to Anthropic/);
+		expect(other).toMatch(/not use it to train AI models/);
+	});
 	it('says nothing is sold', () => {
 		expect(priv).toMatch(/do not sell your data/);
 	});

@@ -232,10 +232,21 @@
 			{#if !data.ready}
 				<div class="mx-auto mb-6 w-full max-w-xl rounded-xl border border-dashed bg-card p-5 text-sm">
 					<p class="flex items-center gap-2 font-medium"><KeyRound class="size-4" />One step to switch it on</p>
-					<p class="mt-1.5 text-muted-foreground">Chat runs on Claude with your own Anthropic API key. Add it to <code>.env</code> and restart:</p>
-					<!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrollable block must be reachable by keyboard to scroll it) -->
-					<pre tabindex="0" class="mt-3 overflow-x-auto rounded-lg bg-muted px-3 py-2 text-xs">ANTHROPIC_API_KEY=sk-ant-…</pre>
-					<p class="mt-2 text-xs text-muted-foreground">The same key also powers AI answers. Usage is billed to your Anthropic account; each person can send {data.usage.limit} messages a day (CHAT_MESSAGES_PER_DAY).</p>
+					{#if data.provider === 'anthropic'}
+						<p class="mt-1.5 text-muted-foreground">Chat runs on Claude with your own Anthropic API key. Add it to <code>.env</code> and restart:</p>
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrollable block must be reachable by keyboard to scroll it) -->
+						<pre tabindex="0" class="mt-3 overflow-x-auto rounded-lg bg-muted px-3 py-2 text-xs">ANTHROPIC_API_KEY=sk-ant-…</pre>
+						<p class="mt-2 text-xs text-muted-foreground">The same key also powers AI answers. Usage is billed to your Anthropic account; each person can send {data.usage.limit} messages a day (CHAT_MESSAGES_PER_DAY).</p>
+						<p class="mt-2 text-xs text-muted-foreground">To use another provider (DeepSeek, OpenAI, OpenRouter, a local model) set <code>CHAT_PROVIDER=openai</code> with <code>CHAT_BASE_URL</code>, <code>CHAT_MODEL</code> and <code>CHAT_API_KEY</code>.</p>
+					{:else}
+						<p class="mt-1.5 text-muted-foreground">{data.setupProblem}</p>
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrollable block must be reachable by keyboard to scroll it) -->
+						<pre tabindex="0" class="mt-3 overflow-x-auto rounded-lg bg-muted px-3 py-2 text-xs">CHAT_PROVIDER=openai
+CHAT_BASE_URL=https://api.deepseek.com
+CHAT_MODEL=your-model-name
+CHAT_API_KEY=…</pre>
+						<p class="mt-2 text-xs text-muted-foreground">Questions and the data they need are sent to that provider. Usage is billed by it; each person can send {data.usage.limit} messages a day (CHAT_MESSAGES_PER_DAY).</p>
+					{/if}
 				</div>
 			{/if}
 		{:else}
