@@ -33,6 +33,58 @@
 		sent = d.usage.sent;
 	});
 
+	// Which provider and model answer: the person's pick from the menus, remembered in this browser (a convenience, never needed).
+	let providerId = $state('');
+	let modelId = $state('');
+	let models = $state<string[]>([]);
+	const current = $derived(data.providers.find((p) => p.id === providerId) ?? data.providers[0]);
+	const modelOptions = $derived(modelId && !models.includes(modelId) ? [modelId, ...models] : models);
+	const remember = (k: string, v: string) => {
+		try {
+			localStorage.setItem(k, v);
+		} catch {
+			/* private window or blocked storage: the pick just is not remembered */
+		}
+	};
+	const recall = (k: string) => {
+		try {
+			return localStorage.getItem(k) ?? '';
+		} catch {
+			return '';
+		}
+	};
+	async function loadModels(id: string) {
+		models = [];
+		const p = data.providers.find((x) => x.id === id);
+		if (!p || data.locked) return;
+		modelId = recall(`osc.chat.model.${id}`) || p.model;
+		try {
+			const res = await fetch(`/chat/models?provider=${encodeURIComponent(id)}`);
+			if (!res.ok || providerId !== id) return;
+			const d = (await res.json()) as { models: string[]; default: string };
+			models = d.models;
+			// A remembered model the provider no longer lists is dropped for its default (or the first it lists).
+			if (d.models.length && modelId && !d.models.includes(modelId) && modelId !== d.default) modelId = d.default || d.models[0];
+			else if (!modelId) modelId = d.default || d.models[0] || '';
+		} catch {
+			/* no list: the model set on the server still works */
+		}
+	}
+	function pickProvider(id: string) {
+		providerId = id;
+		remember('osc.chat.provider', id);
+		loadModels(id);
+	}
+	function pickModel(m: string) {
+		modelId = m;
+		remember(`osc.chat.model.${providerId}`, m);
+	}
+	const pick = () => (data.locked || !current ? {} : { provider: current.id, ...(modelId ? { model: modelId } : {}) });
+	onMount(() => {
+		const saved = recall('osc.chat.provider');
+		pickProvider(data.providers.some((p) => p.id === saved) ? saved : (data.providers[0]?.id ?? ''));
+	});
+
 	const empty = $derived(items.length === 0 && !busy);
 	const left = $derived(Math.max(0, data.usage.limit - sent));
 
@@ -139,7 +191,7 @@
 		draft = '';
 		resize();
 		await follow(true);
-		await stream({ threadId, text: t });
+		await stream({ threadId, text: t, ...pick() });
 	}
 
 	async function decide(approve: boolean | 'each', each: Record<string, boolean> = {}) {
@@ -147,7 +199,7 @@
 		const decisions = Object.fromEntries(approvals.map((a) => [a.id, approve === 'each' ? !!each[a.id] : approve]));
 		approvals = [];
 		sent++; // an answer to an approval counts as a turn, like a message
-		await stream({ threadId, decisions });
+		await stream({ threadId, decisions, ...pick() });
 	}
 	let picks = $state<Record<string, boolean>>({});
 
@@ -232,10 +284,11 @@
 			{#if !data.ready}
 				<div class="mx-auto mb-6 w-full max-w-xl rounded-xl border border-dashed bg-card p-5 text-sm">
 					<p class="flex items-center gap-2 font-medium"><KeyRound class="size-4" />One step to switch it on</p>
-					<p class="mt-1.5 text-muted-foreground">Chat runs on Claude with your own Anthropic API key. Add it to <code>.env</code> and restart:</p>
+					<p class="mt-1.5 text-muted-foreground">{data.setupProblem}</p>
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrollable block must be reachable by keyboard to scroll it) -->
 					<pre tabindex="0" class="mt-3 overflow-x-auto rounded-lg bg-muted px-3 py-2 text-xs">ANTHROPIC_API_KEY=sk-ant-…</pre>
-					<p class="mt-2 text-xs text-muted-foreground">The same key also powers AI answers. Usage is billed to your Anthropic account; each person can send {data.usage.limit} messages a day (CHAT_MESSAGES_PER_DAY).</p>
+					<p class="mt-2 text-xs text-muted-foreground">Or another provider: <code>CHAT_PROVIDER=deepseek</code> with <code>DEEPSEEK_API_KEY</code> (also openai, gemini, kimi, openrouter, groq, mistral, xai, or custom with <code>CHAT_BASE_URL</code>). List more in <code>CHAT_PROVIDERS</code> to let people choose between them in the chat.</p>
+					<p class="mt-2 text-xs text-muted-foreground">Questions and the data they need are sent to the provider you pick, and usage is billed by it; each person can send {data.usage.limit} messages a day (CHAT_MESSAGES_PER_DAY).</p>
 				</div>
 			{/if}
 		{:else}
@@ -299,7 +352,19 @@
 			<form class="rounded-2xl border bg-card shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-2 focus-within:ring-ring/30" onsubmit={(e) => { e.preventDefault(); ask(draft); }}>
 				<label for="chat-input" class="sr-only">Ask about your sites</label>
 				<textarea id="chat-input" bind:this={input} bind:value={draft} oninput={resize} onkeydown={keydown} rows="1" maxlength="8000" disabled={!data.ready} placeholder={data.ready ? (approvals.length ? 'Or write to decline and ask something else…' : 'Ask about clicks, pages, queries, indexing, AI answers…') : 'Add ANTHROPIC_API_KEY to switch chat on'} class="block max-h-56 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[14px] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"></textarea>
-				<div class="flex items-center gap-2 px-3 pb-2.5">
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 pb-2.5">
+					{#if data.ready && !data.locked && (data.providers.length > 1 || modelOptions.length > 1)}
+						{#if data.providers.length > 1}
+							<select id="chat-provider" aria-label="Model provider" value={current?.id} onchange={(e) => pickProvider(e.currentTarget.value)} disabled={busy} class="max-w-[9.5rem] truncate rounded-md border bg-background px-1.5 py-1 text-[11px]">
+								{#each data.providers as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+							</select>
+						{/if}
+						{#if modelOptions.length > 1}
+							<select id="chat-model" aria-label="Model" value={modelId} onchange={(e) => pickModel(e.currentTarget.value)} disabled={busy} class="max-w-[11rem] truncate rounded-md border bg-background px-1.5 py-1 text-[11px]">
+								{#each modelOptions as m (m)}<option value={m}>{m}</option>{/each}
+							</select>
+						{/if}
+					{/if}
 					<span class="text-[11px] text-muted-foreground">{#if data.role === 'viewer'}Read-only (viewer role) · {/if}{left} of {data.usage.limit} messages left today</span>
 					{#if busy}
 						<button type="button" onclick={stop} class="ml-auto grid size-8 place-items-center rounded-full bg-primary text-primary-foreground hover:opacity-90" aria-label="Stop"><Square class="size-3 fill-current" /></button>
@@ -318,7 +383,7 @@
 					{/each}
 				</div>
 			{/if}
-			<p class="mt-2 text-center text-[11px] text-muted-foreground">Answers are written by {data.model} from your own data and can be wrong: check the numbers that matter. Changes always ask first.</p>
+			<p class="mt-2 text-center text-[11px] text-muted-foreground">Answers are written by {modelId || data.model || 'the selected model'}{current && data.providers.length > 1 ? ` (${current.label})` : ''} from your own data and can be wrong: check the numbers that matter. Changes always ask first.</p>
 		</div>
 	</section>
 </div>

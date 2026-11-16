@@ -17,7 +17,7 @@ A self-hosted dashboard for **all your Google Search Console properties across m
 - **SEO and LLM tests**: before/after, split and redirect tests with a control group and a significance figure.
 - **Indexing without the busywork**: sitemap coverage and `lastmod` checks, IndexNow and Bing submission, an indexing monitor, and a daily Request Indexing list. Google has no API for that button, so you still press it yourself, one page at a time.
 - **Digest and alerts**: a weekly digest, urgent alerts and a monthly report, by webhook if you set one.
-- **Ask your data**: a chat over your own data, using your own Anthropic API key.
+- **Ask your data**: a chat over your own data, using your own key for Claude, OpenAI, Gemini, DeepSeek, Kimi, OpenRouter and more (or any OpenAI-compatible server); people can pick the provider and model in the chat.
 - **MCP server and REST API**: the same tools for agents and scripts, with keys that read only unless you allow more.
 - **Team**: unlimited users with roles.
 

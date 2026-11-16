@@ -26,6 +26,22 @@ describe('privacy policy', () => {
 		expect(priv).toMatch(/not use it to train AI models/);
 		expect(priv).toMatch(/AI answer tracking[^.]*OpenAI[^.]*Perplexity[^.]*DataForSEO/);
 	});
+	it('names the configured provider, not Anthropic, when the Ask chat is pointed at another one', () => {
+		const other = text(privacySections({ ...named, chatProviders: ['api.deepseek.com'] }));
+		expect(other).toContain('are sent to the model provider the operator has switched on (api.deepseek.com), using the operator’s own API key,');
+		expect(other).toContain('That provider handles it under its own terms and privacy policy');
+		expect(other).not.toMatch(/sent to Anthropic/);
+		expect(other).toMatch(/not use it to train AI models/);
+	});
+	it('names every provider when several are switched on, and keeps the plain wording for Claude alone', () => {
+		const many = text(privacySections({ ...named, chatProviders: ['Anthropic', 'api.deepseek.com', 'generativelanguage.googleapis.com'] }));
+		expect(many).toContain('the model providers the operator has switched on (Anthropic, api.deepseek.com, generativelanguage.googleapis.com)');
+		expect(many).toContain('by whichever of them is picked in the chat');
+		expect(many).toContain('Each provider handles it');
+		const claude = text(privacySections({ ...named, chatProviders: ['Anthropic'] }));
+		expect(claude).toMatch(/Ask chat[^.]*Anthropic/);
+		expect(claude).not.toContain('switched on (');
+	});
 	it('says nothing is sold', () => {
 		expect(priv).toMatch(/do not sell your data/);
 	});
