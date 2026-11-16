@@ -3,7 +3,7 @@ import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/m
 import { db, openDb } from '../src/lib/server/db';
 import { ensureDemoAccounts } from '../src/lib/server/accounts';
 import { resetRateLimits, resetWriteLimits } from '../src/lib/server/mcp';
-import { chatBaseUrl, chatMaxTokens, chatModel, chatProvider, chatReady, chatSetupProblem, runTurn, threadMessages, type ModelCall } from '../src/lib/server/chat';
+import { runTurn, threadMessages, type ModelCall } from '../src/lib/server/chat';
 import { createOpenAiCall, ProviderError, toOpenAiMessages, toOpenAiTools } from '../src/lib/server/chatopenai';
 import { OWNER } from '../src/lib/server/roles';
 import type { ChatEvent } from '../src/lib/chat';
@@ -165,7 +165,7 @@ describe('one streamed call to an OpenAI-compatible provider', () => {
 
 	it.each([
 		[401, /rejected the API key \(CHAT_API_KEY\)/],
-		[404, /Check CHAT_MODEL and CHAT_BASE_URL/],
+		[404, /did not find some-model or the endpoint/],
 		[429, /rate limiting/],
 		[503, /server error \(503\)/],
 		[400, /refused the request \(400\)\. It said: context too long/]
@@ -183,7 +183,7 @@ describe('one streamed call to an OpenAI-compatible provider', () => {
 			throw new TypeError('fetch failed');
 		}) as unknown as typeof fetch;
 		const e1 = await createOpenAiCall(CFG, down)(params(), sink().o).catch((e) => e);
-		expect(e1.message).toBe('Could not reach the model provider at api.example.test. Check CHAT_BASE_URL.');
+		expect(e1.message).toBe('Could not reach the model provider at api.example.test.');
 		const e2 = await createOpenAiCall(CFG, fakeProvider(sse([{ error: { message: 'overloaded' } }])).fetchImpl)(params(), sink().o).catch((e) => e);
 		expect(e2.message).toBe('The model provider reported an error: overloaded');
 	});
@@ -201,57 +201,6 @@ describe('one streamed call to an OpenAI-compatible provider', () => {
 	});
 });
 
-describe('choosing the provider', () => {
-	beforeEach(() => {
-		for (const k of ['CHAT_PROVIDER', 'CHAT_MODEL', 'CHAT_BASE_URL', 'CHAT_API_KEY', 'CHAT_MAX_TOKENS', 'ANTHROPIC_API_KEY']) delete process.env[k];
-	});
-
-	it('is Claude by default, and needs the Anthropic key', () => {
-		expect(chatProvider()).toBe('anthropic');
-		expect(chatModel()).toBe('claude-opus-5-5');
-		expect(chatReady()).toBe(false);
-		expect(chatSetupProblem()).toMatch(/ANTHROPIC_API_KEY/);
-		process.env.ANTHROPIC_API_KEY = 'sk-ant-x';
-		expect(chatReady()).toBe(true);
-	});
-
-	it('needs a model name for an OpenAI-compatible provider, but not a key, and defaults the address to OpenAI', () => {
-		process.env.CHAT_PROVIDER = 'OpenAI';
-		expect(chatProvider()).toBe('openai');
-		expect(chatModel()).toBe('');
-		expect(chatReady()).toBe(false);
-		expect(chatSetupProblem()).toMatch(/CHAT_MODEL/);
-		process.env.CHAT_MODEL = 'a-model';
-		expect(chatReady()).toBe(true);
-		expect(chatBaseUrl()).toBe('https://api.openai.com/v1');
-		process.env.CHAT_BASE_URL = 'http://localhost:11434/v1';
-		expect(chatBaseUrl()).toBe('http://localhost:11434/v1');
-		expect(chatReady()).toBe(true);
-	});
-
-	it('refuses a base address that is not http(s), and a provider name it does not know', () => {
-		process.env.CHAT_PROVIDER = 'openai';
-		process.env.CHAT_MODEL = 'a-model';
-		process.env.CHAT_BASE_URL = 'ftp://x.example';
-		expect(chatSetupProblem()).toMatch(/CHAT_BASE_URL/);
-		process.env.CHAT_BASE_URL = 'not a url';
-		expect(chatReady()).toBe(false);
-		process.env.CHAT_PROVIDER = 'deepseek';
-		process.env.ANTHROPIC_API_KEY = 'sk-ant-x';
-		expect(chatProvider()).toBeNull();
-		expect(chatReady()).toBe(false);
-		expect(chatSetupProblem()).toMatch(/CHAT_PROVIDER is "deepseek"/);
-	});
-
-	it('caps one answer at 8,192 tokens unless told otherwise', () => {
-		expect(chatMaxTokens()).toBe(8192);
-		process.env.CHAT_MAX_TOKENS = '16000';
-		expect(chatMaxTokens()).toBe(16000);
-		process.env.CHAT_MAX_TOKENS = 'lots';
-		expect(chatMaxTokens()).toBe(8192);
-	});
-});
-
 describe('a whole chat turn answered by an OpenAI-compatible provider', () => {
 	beforeEach(async () => {
 		globalThis.__openSiteConsoleDb = openDb(':memory:');
@@ -259,10 +208,11 @@ describe('a whole chat turn answered by an OpenAI-compatible provider', () => {
 		process.env.SCHEDULER = '0';
 		delete process.env.CHAT_MESSAGES_PER_DAY;
 		delete process.env.READ_ONLY;
-		process.env.CHAT_PROVIDER = 'openai';
+		process.env.CHAT_PROVIDER = 'custom';
+		process.env.CHAT_BASE_URL = 'https://api.example.test/v1';
 		process.env.CHAT_MODEL = 'some-model';
 		process.env.CHAT_API_KEY = 'sk-fake';
-		delete process.env.ANTHROPIC_API_KEY;
+		for (const k of ['ANTHROPIC_API_KEY', 'CHAT_PROVIDERS', 'CHAT_LOCK_MODEL']) delete process.env[k];
 		await ensureDemoAccounts();
 		resetRateLimits();
 		resetWriteLimits();
@@ -279,7 +229,7 @@ describe('a whole chat turn answered by an OpenAI-compatible provider', () => {
 			sse([delta({ tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'list_sites', arguments: '{}' } }] }, 'tool_calls')]),
 			sse([delta({ content: 'You have ' }), delta({ content: 'some sites.' }, 'stop')])
 		);
-		const events = await turn({ threadId: null, text: 'which sites do I have?' }, createOpenAiCall(() => ({ baseUrl: chatBaseUrl(), apiKey: 'sk-fake', maxTokens: chatMaxTokens() }), p.fetchImpl));
+		const events = await turn({ threadId: null, text: 'which sites do I have?' }, createOpenAiCall(CFG, p.fetchImpl));
 		expect(events.find((e) => e.type === 'error')).toBeUndefined();
 		expect(events.filter((e) => e.type === 'text').map((e) => (e as { text: string }).text).join('')).toBe('You have some sites.');
 		expect(events.some((e) => e.type === 'tool' && e.tool.name === 'list_sites' && e.tool.status === 'done')).toBe(true);
@@ -314,7 +264,27 @@ describe('a whole chat turn answered by an OpenAI-compatible provider', () => {
 		expect(events[events.length - 1].type).toBe('done');
 	});
 
-	it('uses the OpenAI-compatible path by default when CHAT_PROVIDER=openai, and says what is missing when it is not set up', async () => {
+	it('uses the provider and model the person picked, and refuses one that is not switched on, before storing anything', async () => {
+		process.env.CHAT_PROVIDERS = 'anthropic';
+		process.env.ANTHROPIC_API_KEY = 'sk-ant-x';
+		const asked: string[] = [];
+		const call: ModelCall = async (params) => {
+			asked.push(params.model);
+			return { id: 'm', type: 'message', role: 'assistant', model: params.model, content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', stop_sequence: null, usage: {} } as never;
+		};
+		await turn({ threadId: null, text: 'a' }, call);
+		await turn({ threadId: null, text: 'b', model: 'picked-model' }, call);
+		await turn({ threadId: null, text: 'c', provider: 'anthropic', model: 'claude-sonnet-5-5' }, call);
+		expect(asked).toEqual(['some-model', 'picked-model', 'claude-sonnet-5-5']);
+		const before = (db().prepare('SELECT COUNT(*) AS n FROM chat_threads').get() as { n: number }).n;
+		const events = await turn({ threadId: null, text: 'd', provider: 'mistral' }, call);
+		expect((events.find((e) => e.type === 'error') as { message: string }).message).toMatch(/mistral is not switched on/);
+		expect(events[events.length - 1].type).toBe('done');
+		expect((db().prepare('SELECT COUNT(*) AS n FROM chat_threads').get() as { n: number }).n).toBe(before);
+		expect(asked.length).toBe(3);
+	});
+
+	it('says what is missing when the provider has no model set and none was picked', async () => {
 		delete process.env.CHAT_MODEL;
 		const events = await turn({ threadId: null, text: 'hi' });
 		const err = events.find((e) => e.type === 'error') as { message: string };

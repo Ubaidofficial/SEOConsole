@@ -26,6 +26,9 @@ export interface OpenAiConfig {
 	baseUrl: string;
 	apiKey: string;
 	maxTokens: number;
+	/** The variable holding the key, and the provider's name, for messages (defaults: CHAT_API_KEY, "The model provider"). */
+	keyName?: string;
+	label?: string;
 }
 
 export type OaToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } };
@@ -99,7 +102,7 @@ const parseArgs = (raw: string): Record<string, unknown> => {
 
 const snippet = (s: string) => (s.length > ERROR_SNIPPET ? `${s.slice(0, ERROR_SNIPPET)}…` : s);
 
-async function failure(r: Response, model: string): Promise<ProviderError> {
+async function failure(r: Response, model: string, who: string, keyName: string): Promise<ProviderError> {
 	let detail = '';
 	try {
 		const body = await r.text();
@@ -114,11 +117,11 @@ async function failure(r: Response, model: string): Promise<ProviderError> {
 		/* no body */
 	}
 	detail = snippet(detail.replace(/\s+/g, ' ').trim());
-	if (r.status === 401 || r.status === 403) return new ProviderError(`The model provider rejected the API key (CHAT_API_KEY) or does not allow it to use ${model}.${detail ? ` It said: ${detail}` : ''}`);
-	if (r.status === 404) return new ProviderError(`The model provider did not find ${model} or the endpoint. Check CHAT_MODEL and CHAT_BASE_URL.${detail ? ` It said: ${detail}` : ''}`);
-	if (r.status === 429) return new ProviderError('The model provider is rate limiting this key. Wait a minute and ask again.');
-	if (r.status >= 500) return new ProviderError(`The model provider had a server error (${r.status}). Ask again in a moment.`);
-	return new ProviderError(`The model provider refused the request (${r.status}).${detail ? ` It said: ${detail}` : ''}`);
+	if (r.status === 401 || r.status === 403) return new ProviderError(`${who} rejected the API key (${keyName}) or does not allow it to use ${model}.${detail ? ` It said: ${detail}` : ''}`);
+	if (r.status === 404) return new ProviderError(`${who} did not find ${model} or the endpoint. Pick another model, or check CHAT_BASE_URL for a custom address.${detail ? ` It said: ${detail}` : ''}`);
+	if (r.status === 429) return new ProviderError(`${who} is rate limiting this key. Wait a minute and ask again.`);
+	if (r.status >= 500) return new ProviderError(`${who} had a server error (${r.status}). Ask again in a moment.`);
+	return new ProviderError(`${who} refused the request (${r.status}).${detail ? ` It said: ${detail}` : ''}`);
 }
 
 type Delta = { content?: unknown; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] };
@@ -174,6 +177,7 @@ async function* events(body: ReadableStream<Uint8Array>): AsyncGenerator<Chunk> 
 export function createOpenAiCall(config: () => OpenAiConfig, fetchImpl: typeof fetch = fetch) {
 	return async (params: Params, o: { signal: AbortSignal; onText: (t: string) => void; onBlock: () => void }): Promise<Reply> => {
 		const cfg = config();
+		const who = cfg.label ?? 'The model provider';
 		const url = `${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 		const tools = toOpenAiTools(params.tools);
 		const body = {
@@ -194,17 +198,17 @@ export function createOpenAiCall(config: () => OpenAiConfig, fetchImpl: typeof f
 			});
 		} catch (e) {
 			if (o.signal.aborted) throw e;
-			if (timeout.aborted) throw new ProviderError('The model provider did not answer in time. Ask again.');
+			if (timeout.aborted) throw new ProviderError(`${who} did not answer in time. Ask again.`);
 			let host = url;
 			try {
 				host = new URL(url).host;
 			} catch {
 				/* keep the whole text */
 			}
-			throw new ProviderError(`Could not reach the model provider at ${host}. Check CHAT_BASE_URL.`);
+			throw new ProviderError(`Could not reach ${who.replace(/^The model provider$/, 'the model provider')} at ${host}.`);
 		}
-		if (!res.ok) throw await failure(res, params.model);
-		if (!res.body) throw new ProviderError('The model provider sent no answer.');
+		if (!res.ok) throw await failure(res, params.model, who, cfg.keyName ?? 'CHAT_API_KEY');
+		if (!res.body) throw new ProviderError(`${who} sent no answer.`);
 
 		let text = '';
 		let finish: string | null = null;
@@ -213,7 +217,7 @@ export function createOpenAiCall(config: () => OpenAiConfig, fetchImpl: typeof f
 			for await (const chunk of events(res.body)) {
 				if (chunk.error) {
 					const m = typeof chunk.error === 'string' ? chunk.error : chunk.error.message;
-					throw new ProviderError(`The model provider reported an error: ${snippet(String(m ?? 'unknown'))}`);
+					throw new ProviderError(`${who} reported an error: ${snippet(String(m ?? 'unknown'))}`);
 				}
 				const choice = chunk.choices?.[0];
 				if (!choice) continue;
@@ -235,8 +239,8 @@ export function createOpenAiCall(config: () => OpenAiConfig, fetchImpl: typeof f
 			}
 		} catch (e) {
 			if (o.signal.aborted || e instanceof ProviderError) throw e;
-			if (timeout.aborted) throw new ProviderError('The model provider did not answer in time. Ask again.');
-			throw new ProviderError('The connection to the model provider broke while it was answering. Ask again.');
+			if (timeout.aborted) throw new ProviderError(`${who} did not answer in time. Ask again.`);
+			throw new ProviderError(`The connection to ${who.replace(/^The model provider$/, 'the model provider')} broke while it was answering. Ask again.`);
 		}
 
 		const content: unknown[] = [];

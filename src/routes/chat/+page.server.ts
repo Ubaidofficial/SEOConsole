@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { chatDailyLimit, chatModel, chatProvider, chatReady, chatSetupProblem, deleteThread, displayItems, getThread, listThreads, pendingOf, sentToday, threadMessages } from '$lib/server/chat';
+import { chatDailyLimit, chatModel, chatReady, chatSetupProblem, deleteThread, displayItems, getThread, listThreads, pendingOf, sentToday, threadMessages } from '$lib/server/chat';
+import { chatLocked, providerChoices } from '$lib/server/chatconfig';
 import { STARTERS } from '$lib/chat';
 
 export const load: PageServerLoad = ({ locals, url }) => {
@@ -11,7 +12,8 @@ export const load: PageServerLoad = ({ locals, url }) => {
 	const waiting = new Set(pending?.awaiting.map((a) => a.id) ?? []);
 	return {
 		ready: chatReady(),
-		provider: chatProvider(),
+		providers: providerChoices(),
+		locked: chatLocked(),
 		setupProblem: chatSetupProblem(),
 		model: chatModel(),
 		role: user.role,

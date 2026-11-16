@@ -133,7 +133,7 @@ export function requiredRole(method: string, url: URL): Role {
 /** Pages a person limited to some sites may still open: they show nothing from other sites. Everything else covers every site. */
 const SCOPED_READABLE = new Set(['/', '/team', '/updates']);
 /** Routes a person limited to some sites may also post to: the chat, whose tools only ever see that person's sites, and their own account page. */
-const SCOPED_USABLE = new Set(['/chat', '/chat/stream', '/profile']);
+const SCOPED_USABLE = new Set(['/chat', '/chat/stream', '/chat/models', '/profile']);
 
 /**
  * Why a request is refused, or null. `not-found` for a site outside the person's scope (it is not even confirmed to exist),

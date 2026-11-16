@@ -1,28 +1,36 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { legalContext } from '../src/lib/server/legal';
 
-const keys = ['CHAT_PROVIDER', 'CHAT_BASE_URL'];
+const keys = ['CHAT_PROVIDER', 'CHAT_PROVIDERS', 'CHAT_BASE_URL', 'ANTHROPIC_API_KEY', 'DEEPSEEK_API_KEY', 'GEMINI_API_KEY', 'OPENAI_API_KEY'];
 afterEach(() => {
 	for (const k of keys) delete process.env[k];
 });
 
-describe('the host the privacy page names for the Ask chat', () => {
-	it('is none for Claude, which the page already names', () => {
-		expect(legalContext().context.chatHost).toBeNull();
-		process.env.CHAT_PROVIDER = 'anthropic';
-		expect(legalContext().context.chatHost).toBeNull();
+describe('the providers the privacy page names for the Ask chat', () => {
+	it('is empty while chat is off, and Anthropic alone for the default', () => {
+		expect(legalContext().context.chatProviders).toEqual([]);
+		process.env.ANTHROPIC_API_KEY = 'sk-ant-x';
+		expect(legalContext().context.chatProviders).toEqual(['Anthropic']);
 	});
-	it('is the address of the OpenAI-compatible provider, never the path or a key', () => {
+	it('lists the address of each provider switched on, never a path or a key', () => {
+		process.env.CHAT_PROVIDER = 'deepseek';
+		process.env.DEEPSEEK_API_KEY = 'sk-x';
+		expect(legalContext().context.chatProviders).toEqual(['api.deepseek.com']);
+		process.env.CHAT_PROVIDERS = 'anthropic,gemini';
+		process.env.ANTHROPIC_API_KEY = 'sk-ant-x';
+		process.env.GEMINI_API_KEY = 'g-x';
+		expect(legalContext().context.chatProviders).toEqual(['api.deepseek.com', 'Anthropic', 'generativelanguage.googleapis.com']);
+	});
+	it('does not name a provider that is merely listed without a key, or one whose key exists only for AI answers', () => {
+		process.env.CHAT_PROVIDER = 'deepseek';
+		process.env.DEEPSEEK_API_KEY = 'sk-x';
+		process.env.CHAT_PROVIDERS = 'gemini';
+		process.env.OPENAI_API_KEY = 'sk-openai-for-ai-answers';
+		expect(legalContext().context.chatProviders).toEqual(['api.deepseek.com']);
+	});
+	it('names a custom address by its host', () => {
 		process.env.CHAT_PROVIDER = 'openai';
-		process.env.CHAT_BASE_URL = 'https://api.deepseek.com/v1';
-		expect(legalContext().context.chatHost).toBe('api.deepseek.com');
 		process.env.CHAT_BASE_URL = 'http://localhost:11434/v1';
-		expect(legalContext().context.chatHost).toBe('localhost:11434');
-	});
-	it('falls back to OpenAI when no address is set, and does not break on a bad one', () => {
-		process.env.CHAT_PROVIDER = 'openai';
-		expect(legalContext().context.chatHost).toBe('api.openai.com');
-		process.env.CHAT_BASE_URL = 'not a url';
-		expect(legalContext().context.chatHost).toBe('the address set in CHAT_BASE_URL');
+		expect(legalContext().context.chatProviders).toEqual(['localhost:11434']);
 	});
 });

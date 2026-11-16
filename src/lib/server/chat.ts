@@ -4,7 +4,8 @@
  * - Claude, through the official Anthropic SDK: a streamed Messages request in a loop. When the model asks for tools they run here,
  *   through callTool (the one path MCP and the REST API take), and the results go back until it answers. ANTHROPIC_API_KEY is the key
  *   AI answers already uses; CHAT_MODEL (default claude-opus-5-5) and CHAT_EFFORT (default medium) tune it.
- *   Or any OpenAI-compatible server (CHAT_PROVIDER=openai, chatopenai.ts): same loop, same stored conversation, translated at the edge.
+ *   Or another provider (OpenAI, Gemini, DeepSeek, Kimi...; which are offered is chatconfig.ts, the translation is chatopenai.ts): same loop,
+ *   same stored conversation, translated at the edge. Each person may pick the provider and model per turn; the server checks the pick.
  * - It acts as the person who is signed in: their role sets what it may do (viewer: read only; editor and above: changes, minus the few
  *   the app keeps for admins), and a person limited to some sites only ever reaches those sites.
  * - Nothing changes without a click. When the model wants to change something (submit URLs, mark a to-do done...), the turn stops and
@@ -27,6 +28,7 @@ import { permits, type Permission } from './apikeys';
 import type { CurrentUser } from './roles';
 import { toolLabel, validateChart, type ApprovalItem, type ChatEvent, type ChatItem, type ToolActivity } from '../chat';
 import { createOpenAiCall, ProviderError } from './chatopenai';
+import { chatMaxTokens, chatModel, chatSetupProblem, chooseProvider, type ResolvedProvider } from './chatconfig';
 
 type Msg = Anthropic.Beta.BetaMessageParam;
 type Block = Anthropic.Beta.BetaContentBlock;
@@ -38,35 +40,9 @@ export const MAX_RESULT_CHARS = 40_000;
 export const MAX_MESSAGE_CHARS = 8_000;
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
-/**
- * Which model answers: `anthropic` (the default: Claude, with ANTHROPIC_API_KEY) or `openai` (any server that speaks the OpenAI chat
- * completions protocol: CHAT_BASE_URL, CHAT_MODEL and, for hosted providers, CHAT_API_KEY). An unknown value is not guessed at: chat stays
- * off and says so.
- */
-export type ChatProvider = 'anthropic' | 'openai';
-export const chatProvider = (): ChatProvider | null => {
-	const p = env('CHAT_PROVIDER').trim().toLowerCase();
-	if (p === '' || p === 'anthropic') return 'anthropic';
-	return p === 'openai' || p === 'openai-compatible' ? 'openai' : null;
-};
+// Which providers and models are offered lives in chatconfig.ts; re-exported here for the page and the tests.
+export { chatMaxTokens, chatModel, chatReady, chatSetupProblem } from './chatconfig';
 export const chatKey = () => env('ANTHROPIC_API_KEY').trim();
-export const chatApiKey = () => env('CHAT_API_KEY').trim();
-export const chatBaseUrl = () => env('CHAT_BASE_URL').trim() || 'https://api.openai.com/v1';
-const validBaseUrl = (u: string) => {
-	try {
-		const p = new URL(u).protocol;
-		return p === 'https:' || p === 'http:';
-	} catch {
-		return false;
-	}
-};
-/** Some providers cap one answer well below Claude's limit (8,192 tokens is common), and refuse a request that asks for more. */
-export const chatMaxTokens = () => {
-	const n = Number(env('CHAT_MAX_TOKENS', '8192'));
-	return Number.isFinite(n) && n >= 256 ? Math.floor(n) : 8192;
-};
-/** The Claude model has a default; an OpenAI-compatible one must be named, because no model name is right for every provider. */
-export const chatModel = () => env('CHAT_MODEL').trim() || (chatProvider() === 'anthropic' ? 'claude-opus-5-5' : '');
 export const chatEffort = () => {
 	const e = env('CHAT_EFFORT').trim().toLowerCase();
 	return (EFFORTS as readonly string[]).includes(e) ? (e as (typeof EFFORTS)[number]) : 'medium';
@@ -75,16 +51,6 @@ export const chatDailyLimit = () => {
 	const n = Number(env('CHAT_MESSAGES_PER_DAY', '50'));
 	return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 50;
 };
-/** Why chat is off, in words for the person who runs the server; null when it is ready. */
-export function chatSetupProblem(): string | null {
-	const p = chatProvider();
-	if (p === null) return `CHAT_PROVIDER is "${env('CHAT_PROVIDER').trim().slice(0, 40)}": use anthropic (the default) or openai, then restart.`;
-	if (p === 'anthropic') return chatKey() === '' ? 'Chat needs an Anthropic API key: add ANTHROPIC_API_KEY to .env and restart. Or set CHAT_PROVIDER=openai to use an OpenAI-compatible provider.' : null;
-	if (chatModel() === '') return 'Chat with CHAT_PROVIDER=openai needs CHAT_MODEL (the provider\'s model name from its documentation). Add it and restart.';
-	if (!validBaseUrl(chatBaseUrl())) return 'CHAT_BASE_URL is not a valid http(s) address. Use the provider\'s base address, for example https://api.deepseek.com, then restart.';
-	return null;
-}
-export const chatReady = () => chatSetupProblem() === null;
 
 // ── who is asking ────────────────────────────────────────────────────────────
 /** Tools the app keeps for admins (in the app, these need the admin role), so an editor's chat cannot do them either. */
@@ -152,9 +118,9 @@ export function chatTools(u: CurrentUser): Anthropic.Beta.BetaTool[] {
 	return tools;
 }
 
-export function buildParams(u: CurrentUser, messages: Msg[]): Params {
+export function buildParams(u: CurrentUser, messages: Msg[], model: string = chatModel()): Params {
 	return {
-		model: chatModel(),
+		model,
 		max_tokens: 32_000,
 		system: SYSTEM,
 		tools: chatTools(u),
@@ -182,9 +148,9 @@ export const claudeCall: ModelCall = async (params, o) => {
 	return await stream.finalMessage();
 };
 
-/** The same loop, answered by an OpenAI-compatible server (CHAT_PROVIDER=openai). */
-export const openAiCall: ModelCall = createOpenAiCall(() => ({ baseUrl: chatBaseUrl(), apiKey: chatApiKey(), maxTokens: chatMaxTokens() }));
-const providerCall = (): ModelCall => (chatProvider() === 'openai' ? openAiCall : claudeCall);
+/** The call for the provider a turn uses: Claude through its SDK, anything else through the OpenAI chat-completions protocol. */
+export const callFor = (p: ResolvedProvider): ModelCall =>
+	p.protocol === 'anthropic' ? claudeCall : createOpenAiCall(() => ({ baseUrl: p.baseUrl, apiKey: p.apiKey, maxTokens: chatMaxTokens(), keyName: p.keyName, label: p.label }));
 
 function apiErrorText(e: unknown): string {
 	if (e instanceof ProviderError) return e.message;
@@ -301,13 +267,13 @@ function repairDangling(threadId: number, messages: Msg[]): Msg[] {
 	return [...messages, fix];
 }
 
-async function loop(u: CurrentUser, thread: ThreadRow, messages: Msg[], emit: Emit, signal: AbortSignal, call: ModelCall) {
+async function loop(u: CurrentUser, thread: ThreadRow, messages: Msg[], emit: Emit, signal: AbortSignal, call: ModelCall, model: string) {
 	const name = siteNamer(u);
 	for (let round = 0; round < MAX_ROUNDS; round++) {
 		let res: Anthropic.Beta.BetaMessage;
 		let partial = '';
 		try {
-			res = await call(buildParams(u, messages), { signal, onText: (text) => ((partial += text), emit({ type: 'text', text })), onBlock: () => ((partial += '\n\n'), emit({ type: 'break' })) });
+			res = await call(buildParams(u, messages, model), { signal, onText: (text) => ((partial += text), emit({ type: 'text', text })), onBlock: () => ((partial += '\n\n'), emit({ type: 'break' })) });
 		} catch (e) {
 			if (signal.aborted) {
 				// Stopped (or the page was closed) mid-answer: keep what was already shown, so the conversation reads as it did.
@@ -355,7 +321,8 @@ async function loop(u: CurrentUser, thread: ThreadRow, messages: Msg[], emit: Em
 /** Tool results in the order the calls were made (they finish in any order). */
 const order = (results: ToolResult[], uses: { id: string }[]) => uses.map((u) => results.find((r) => r.tool_use_id === u.id)).filter((r): r is ToolResult => !!r);
 
-export type TurnInput = { threadId: number | null; text: string } | { threadId: number; decisions: Record<string, boolean> };
+/** `provider` and `model` are what the person picked in the chat; both are optional and checked against what the server has switched on. */
+export type TurnInput = ({ threadId: number | null; text: string } | { threadId: number; decisions: Record<string, boolean> }) & { provider?: string; model?: string };
 
 /**
  * Run one turn and report it through `emit`: a new message from the person, or their answer to the changes waiting for approval.
@@ -374,6 +341,8 @@ export async function runTurn(u: CurrentUser, input: TurnInput, emit: Emit, o: {
 	try {
 		const setup = chatSetupProblem();
 		if (setup) return emit({ type: 'error', message: setup });
+		const choice = chooseProvider(input.provider, input.model);
+		if ('error' in choice) return emit({ type: 'error', message: choice.error });
 		let thread: ThreadRow | null = input.threadId == null ? null : getThread(u, input.threadId);
 		if (input.threadId != null && !thread) return emit({ type: 'error', message: 'That conversation was not found.' });
 		const limit = chatDailyLimit();
@@ -402,7 +371,7 @@ export async function runTurn(u: CurrentUser, input: TurnInput, emit: Emit, o: {
 			const next: Msg = { role: 'user', content: order(results, uses as { id: string }[]) };
 			messages.push(next);
 			append(thread.id, next);
-			return await loop(u, thread, messages, emit, signal, o.call ?? providerCall());
+			return await loop(u, thread, messages, emit, signal, o.call ?? callFor(choice.provider), choice.model);
 		}
 		const text = input.text.trim();
 		if (!text) return emit({ type: 'error', message: 'Type a question first.' });
@@ -433,7 +402,7 @@ export async function runTurn(u: CurrentUser, input: TurnInput, emit: Emit, o: {
 		const user: Msg = { role: 'user', content };
 		messages = [...messages, user];
 		append(thread.id, user);
-		await loop(u, thread, messages, emit, signal, o.call ?? providerCall());
+		await loop(u, thread, messages, emit, signal, o.call ?? callFor(choice.provider), choice.model);
 	} catch (e) {
 		emit({ type: 'error', message: e instanceof Error ? e.message : 'Something went wrong.' });
 	} finally {

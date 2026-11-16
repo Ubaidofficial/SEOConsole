@@ -5,7 +5,8 @@ import type { ChatEvent } from '$lib/chat';
 
 /**
  * One chat turn, streamed as newline-delimited JSON events (see ChatEvent). Body: {threadId?, text} for a new message, or
- * {threadId, decisions: {toolUseId: true|false}} to answer the changes waiting for approval. Any signed-in person may chat; what
+ * {threadId, decisions: {toolUseId: true|false}} to answer the changes waiting for approval. Either may carry `provider` and `model`, the
+ * person's pick from the chat's menus. Any signed-in person may chat; what
  * the chat may do follows their role and site scope (src/lib/server/chat.ts).
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -25,6 +26,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (threadId === null) error(400, 'Approvals need the `threadId`.');
 		input = { threadId, decisions: Object.fromEntries(Object.entries(body.decisions as Record<string, unknown>).map(([k, v]) => [k, v === true])) };
 	} else input = { threadId, text: String(body.text ?? '') };
+	// The provider and model the person picked; the server checks both and falls back to its default.
+	if (typeof body.provider === 'string') input.provider = body.provider.slice(0, 40);
+	if (typeof body.model === 'string') input.model = body.model.slice(0, 120);
 
 	const abort = new AbortController();
 	request.signal.addEventListener('abort', () => abort.abort());
