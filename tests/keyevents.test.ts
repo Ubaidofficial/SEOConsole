@@ -33,6 +33,8 @@ describe('what is sent to Tag Manager', () => {
 			{ parameter: 'alert_remote', parameterValue: '{{DLV - alert_remote}}' }
 		]);
 		expect(tagBody('x', 'G-ABCD1234', [], '1').parameter.some((p) => p.key === 'eventSettingsTable')).toBe(false);
+		// the flags every current GA4 Event tag carries; without migratedToV2 Tag Manager reported a "Conflicting Google tag" on a real container
+		for (const [key, value] of [['sendEcommerceData', 'false'], ['enableUserProperties', 'true'], ['enableEuid', 'true'], ['migratedToV2', 'true'], ['demoV2', 'false']]) expect(t.parameter, key).toContainEqual({ type: 'boolean', key, value });
 	});
 	it('names are checked the way GA4 accepts them', () => {
 		expect(checkInput({ event: 'job_alert_signup', params: ['alert_form', 'alert_form', ' '] })).toEqual({ event: 'job_alert_signup', params: ['alert_form'], measurementId: null });
