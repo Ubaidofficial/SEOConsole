@@ -236,6 +236,8 @@ export interface WorkspaceInstall {
 	publicId: string;
 	/** The tag to add. Not used when `apply` is given. */
 	tag?: object;
+	/** Work in this existing workspace instead of creating one (a workspace SEOConsole made earlier for the same change that never became a version). */
+	existing?: { path: string; workspaceId: string };
 	/** Instead of adding a tag: change what is in the new workspace (the Tag ID repair edits an existing tag here). */
 	apply?: (ws: { path: string; workspaceId: string }) => Promise<void>;
 	/** Names the audit entries: `${audit}_prepared`, `${audit}_published`, `${audit}_failed`. */
@@ -255,7 +257,7 @@ export async function installTagViaWorkspace(writer: GtmWriter, w: WorkspaceInst
 	const [, accountNum, , containerNum] = w.container.split('/');
 	const ui = (ws: string) => `https://tagmanager.google.com/#/container/accounts/${accountNum}/containers/${containerNum}/workspaces/${ws}`;
 	try {
-		const ws = await writer.createWorkspace(w.container, w.workspaceName, w.workspaceDescription);
+		const ws = w.existing ?? (await writer.createWorkspace(w.container, w.workspaceName, w.workspaceDescription));
 		if (w.apply) await w.apply(ws);
 		else await writer.createTag(ws.path, w.tag!);
 		w.onTag?.();

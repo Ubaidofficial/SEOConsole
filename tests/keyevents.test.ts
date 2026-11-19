@@ -6,7 +6,8 @@ import { queueDepth } from '../src/lib/server/jobs';
 import { linksFor } from '../src/lib/server/links';
 import { createApiKey } from '../src/lib/server/apikeys';
 import { handleMcp } from '../src/lib/server/mcp';
-import { applyKeyEvent, checkInput, demoKeyEvents, planKeyEvent, realEventWriter, realKeyEventAdmin, tagBody, triggerBody, variableBody } from '../src/lib/server/keyevents';
+import { applyKeyEvent, checkInput, demoKeyEvents, planKeyEvent, realEventWriter, realKeyEventAdmin, tagBody, triggerBody, variableBody, type GtmEventWriter } from '../src/lib/server/keyevents';
+import type { RawTag } from '../src/lib/server/gtmwrite';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const drain = async () => {
@@ -63,8 +64,8 @@ describe('the real clients', () => {
 			return json({});
 		});
 		const w = realEventWriter(id, { fetchImpl: f as never });
-		await w.deleteWorkspace('accounts/1/containers/2/workspaces/4');
-		expect(calls.at(-1)).toMatchObject({ method: 'DELETE', url: 'https://tagmanager.googleapis.com/tagmanager/v2/accounts/1/containers/2/workspaces/4' });
+		expect(await w.listWorkspaces('accounts/1/containers/2')).toEqual([]);
+		expect(calls.at(-1)).toMatchObject({ method: 'GET', url: 'https://tagmanager.googleapis.com/tagmanager/v2/accounts/1/containers/2/workspaces' });
 		const ws = 'accounts/1/containers/2/workspaces/3';
 		expect(await w.list(ws)).toEqual({ variables: [{ id: '7', name: 'DLV - alert_form' }], triggers: [], tags: [{ id: '3', name: 'x', type: 'gaawe', eventName: 'other' }] });
 		expect(await w.createTrigger(ws, triggerBody('job_alert_signup'))).toEqual({ triggerId: '9' });
@@ -119,21 +120,38 @@ describe('plan and apply on demo data', () => {
 		expect(audit).toEqual(['gtm.key_event_published', 'ga4.key_event_created', 'gtm.key_event_prepared']);
 	});
 
-	it('deletes only its own unpublished workspace for the same event before trying again, and says so in the preview', async () => {
+	it('reuses its own unpublished workspace for the same event (no new one, no delete) and rewrites the tag an earlier run wrote', async () => {
 		const container = linksFor(siteId).gtm!.external_id;
-		demoKeyEvents.workspaces.set(container, [
-			{ path: `${container}/workspaces/4`, name: 'SEOConsole key event lead_form 2026-11-19' },
-			{ path: `${container}/workspaces/5`, name: 'SEOConsole key event lead_form_v2 2026-11-19' },
-			{ path: `${container}/workspaces/6`, name: 'Marketing changes' }
-		]);
-		const p = await planKeyEvent(siteId, { event: 'lead_form' });
-		expect(p.staleWorkspaces?.map((w) => w.name)).toEqual(['SEOConsole key event lead_form 2026-11-19']);
-		expect(p.changes![0]).toMatch(/^Delete the workspace "SEOConsole key event lead_form 2026-11-19"/);
-		expect(demoKeyEvents.workspaces.get(container)).toHaveLength(3); // the preview deleted nothing
-		const r = await applyKeyEvent(siteId, { event: 'lead_form' }, 'publish');
+		const ws = `${container}/workspaces/4`;
+		const updated: { tagId: string; tag: RawTag }[] = [];
+		let created = 0;
+		// what the first run on 6figjobs left: the variables, the trigger and a tag without the current flags
+		const writer: GtmEventWriter = {
+			latestVersionId: async () => '12',
+			createWorkspace: async () => (created++, { path: `${container}/workspaces/9`, workspaceId: '9' }),
+			createTag: async () => { throw new Error('must not create a second tag'); },
+			createVersion: async () => ({ path: `${container}/versions/13`, versionId: '13', compilerError: false }),
+			publish: async () => ({ versionId: '13', compilerError: false }),
+			getTag: async (_w, tagId) => ({ tagId, name: 'GA4 event - lead_form (added by SEOConsole)', type: 'gaawe', fingerprint: 'fp1', parameter: [{ type: 'template', key: 'eventName', value: 'lead_form' }] }),
+			updateTag: async (_w, tagId, tag) => void updated.push({ tagId, tag }),
+			list: async () => ({ variables: [{ id: '5', name: 'DLV - plan' }], triggers: [{ id: '6', name: 'Event - lead_form' }], tags: [{ id: '7', name: 'GA4 event - lead_form (added by SEOConsole)', type: 'gaawe', eventName: 'lead_form' }] }),
+			createVariable: async () => { throw new Error('must not create an existing variable'); },
+			createTrigger: async () => { throw new Error('must not create an existing trigger'); },
+			listWorkspaces: async () => [
+				{ path: ws, name: 'SEOConsole key event lead_form 2026-11-19' },
+				{ path: `${container}/workspaces/5`, name: 'SEOConsole key event lead_form_v2 2026-11-19' },
+				{ path: `${container}/workspaces/6`, name: 'Marketing changes' }
+			]
+		};
+		const p = await planKeyEvent(siteId, { event: 'lead_form', params: ['plan'] }, { writer });
+		expect(p.reuseWorkspace).toEqual({ path: ws, name: 'SEOConsole key event lead_form 2026-11-19' });
+		expect(p.changes![0]).toMatch(/^Work in the workspace "SEOConsole key event lead_form 2026-11-19"/);
+		const r = await applyKeyEvent(siteId, { event: 'lead_form', params: ['plan'] }, 'publish', { writer });
 		expect(r).toMatchObject({ ok: true, published: true });
-		expect(demoKeyEvents.workspaces.get(container)!.map((w) => w.name)).toEqual(['SEOConsole key event lead_form_v2 2026-11-19', 'Marketing changes']);
-		expect(db().prepare("SELECT COUNT(*) n FROM audit_log WHERE action = 'gtm.key_event_workspace_deleted'").get()).toEqual({ n: 1 });
+		expect(created).toBe(0);
+		expect(updated).toHaveLength(1);
+		expect(updated[0]).toMatchObject({ tagId: '7', tag: { tagId: '7', fingerprint: 'fp1', type: 'gaawe', firingTriggerId: ['6'] } });
+		expect(updated[0].tag.parameter).toContainEqual({ type: 'boolean', key: 'migratedToV2', value: 'true' });
 	});
 
 	it('refuses without permission, on a read-only server, and for bad input; MCP preview changes nothing', async () => {
