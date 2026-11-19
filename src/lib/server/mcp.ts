@@ -21,7 +21,7 @@ import { coverageMap } from '../property';
 import { gtmSnapshot, trackingHealth } from './tracking';
 import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
-import { aiTrafficReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
+import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
 import { evaluateTestCached, listTests } from './seotests';
 import { indexHistory, indexSummary, recentEvents, watchList } from './indexmon';
 import { storedChecks } from './onpage';
@@ -122,6 +122,30 @@ const reportJson = (rep: Awaited<ReturnType<typeof submitForIndexing>>) => ({
 	note: rep.note
 });
 const isoOrNull = (t: number | null | undefined) => (t ? new Date(t).toISOString() : null);
+
+/** get_ga4_summary view=pages (landing pages, every channel) or view=events (key events by name). */
+function ga4PagesOrEvents(site: Site, n: number, a: Record<string, unknown>) {
+	if (a.view === 'events') {
+		const k = keyEventsReport(site, n);
+		if (!k.linked) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
+		if (k.status === 'pending') return { connected: true, note: 'Key events appear after the next GA4 sync.' };
+		if (k.status === 'failed') return { connected: true, error: `GA4 could not return key events on the last sync; it will be retried. ${k.error}` };
+		if (k.status === 'none') return { connected: true, note: 'GA4 has recorded no key events for this site: none are marked as key events in GA4 (Admin → Events).' };
+		return { window: k.window, ...(k.staleError ? { warning: `The last refresh failed, so recent days may be missing: ${k.staleError}` } : {}), total: k.total, events: k.events.map((e) => ({ event: e.event, keyEvents: e.keyEvents, previous: e.prevKeyEvents, change: e.keyEventsDelta == null ? null : r2(e.keyEventsDelta * 100) + '%' })) };
+	}
+	const l = landingPagesReport(site, n, { search: typeof a.search === 'string' ? a.search : undefined });
+	if (!l.linked) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
+	if (l.status === 'pending') return { connected: true, note: 'Landing pages appear after the next GA4 sync.' };
+	if (l.status === 'failed') return { connected: true, error: `GA4 could not return landing pages on the last sync; it will be retried. ${l.error}` };
+	if (l.status === 'no-window') return { connected: true, error: `Landing pages are stored for windows of ${l.periods.join(', ')} days; pass one of those as days.` };
+	return {
+		window: l.window,
+		previousWindow: l.previousWindow,
+		...(l.staleError ? { warning: `The last refresh failed, so this is from ${l.window.end}: ${l.staleError}` } : {}),
+		...(l.truncated ? { note: 'GA4 returned its row limit; very small pages may be missing.' } : {}),
+		pages: l.rows.slice(0, 50).map((r) => ({ page: r.page, sessions: r.sessions, previousSessions: r.prevSessions, change: r.sessionsDelta == null ? null : r2(r.sessionsDelta * 100) + '%', mainChannel: r.topChannel, fromOrganic: r2(r.organicShare * 100) + '%', engagementRate: r2(r.engagementRate * 100) + '%', keyEvents: r.keyEvents, channels: r.channels.slice(0, 4) }))
+	};
+}
 
 /** get_ga4_summary view=sources: sessions by GA4 source / medium, optionally only those matching `search`. */
 function ga4Sources(site: Site, n: number, a: Record<string, unknown>) {
@@ -372,12 +396,13 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_ga4_summary',
-		description: 'GA4 sessions, engaged sessions, unique users and key events by channel group (compare Organic Search with Google clicks), plus the top Google-organic landing pages. view=sources: by source/medium, `search` filters.',
-		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources'] }, search: { type: 'string' } },
+		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events); `search` filters.',
+		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources', 'pages', 'events'] }, search: { type: 'string' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			if (!linksFor(site.id).ga4) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
 			if (a.view === 'sources') return ga4Sources(site, days(a), a);
+			if (a.view === 'pages' || a.view === 'events') return ga4PagesOrEvents(site, days(a), a);
 			const p = periodFor(site, days(a));
 			const d = db();
 			const n = days(a);

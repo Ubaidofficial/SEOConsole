@@ -55,6 +55,53 @@
 			{/if}
 		</section>
 	{/if}
+	{#if data.keyEvents.linked}
+		<section class="mt-6">
+			<h2 class="mb-1 font-medium">Key events by name</h2>
+			{#if data.keyEvents.status === 'pending'}
+				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
+			{:else if data.keyEvents.status === 'failed'}
+				<p class="text-xs text-warn">GA4 could not return key events on the last sync; it will be retried. {data.keyEvents.error}</p>
+			{:else if data.keyEvents.status === 'none'}
+				<p class="text-xs text-muted-foreground">GA4 has recorded no key events for this site. Mark the events that matter (a sign-up, an application, a purchase) as key events in GA4 (Admin → Events) and they appear here.</p>
+			{:else}
+				<p class="mb-2 text-xs text-muted-foreground">{data.keyEvents.window.start} to {data.keyEvents.window.end}, GA4's newest days. Only events marked as key events in GA4 are counted.</p>
+				{#if data.keyEvents.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so recent days may be missing: {data.keyEvents.staleError}</p>{/if}
+				<DataTable rows={data.keyEvents.events} cols={[{ key: 'event', label: 'Event', type: 'text' }, { key: 'keyEvents', label: 'Key events', type: 'int', bar: true }, { key: 'keyEventsDelta', label: 'Δ', title: 'Change against the same number of days just before.', type: 'delta' }, { key: 'prevKeyEvents', label: 'Before', type: 'int' }]} sortKey="keyEvents" filterable={false} pageSize={15} />
+			{/if}
+		</section>
+	{/if}
+	{#if data.landing.linked}
+		<section class="mt-6">
+			<h2 class="mb-1 font-medium">Landing pages, every channel</h2>
+			{#if data.landing.status === 'pending'}
+				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
+			{:else if data.landing.status === 'failed'}
+				<p class="text-xs text-warn">GA4 could not return landing pages on the last sync; it will be retried. {data.landing.error}</p>
+			{:else if data.landing.status === 'no-window'}
+				<p class="text-xs text-muted-foreground">Landing pages are kept for the 7d, 28d, 3m, 6m and 16m periods. Pick one of those to see them.</p>
+			{:else}
+				<Explainer lead="Where sessions start, from every channel, {data.landing.window.start} to {data.landing.window.end}.">
+					<p>Sessions that began on each page, whatever brought them: search, direct, referral, social, email. "Main channel" is the channel that brought the most of them, and "From organic" the share from Organic Search, so a page that lives on referral or social traffic stands out. Query strings are dropped, so /page?ref=x counts as /page.{#if data.landing.truncated} Very small pages past GA4's row limit are not shown.{/if}</p>
+				</Explainer>
+				{#if data.landing.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so this is from {data.landing.window.end}: {data.landing.staleError}</p>{/if}
+				<DataTable
+					rows={data.landing.rows}
+					cols={[
+						{ key: 'page', label: 'Landing page', type: 'text', pii: true },
+						{ key: 'sessions', label: 'Sessions', type: 'int', bar: true },
+						{ key: 'sessionsDelta', label: 'Δ sessions', title: data.landing.previousWindow ? `Against ${data.landing.previousWindow.start} to ${data.landing.previousWindow.end}. Empty for a page with no sessions then.` : 'GA4 no longer keeps the whole previous period.', type: 'delta' },
+						{ key: 'topChannel', label: 'Main channel', type: 'text' },
+						{ key: 'organicShare', label: 'From organic', type: 'pct' },
+						{ key: 'engagementRate', label: 'Engaged', type: 'pct' },
+						{ key: 'keyEvents', label: 'Key events', type: 'int' }
+					]}
+					sortKey="sessions"
+					pageSize={15}
+				/>
+			{/if}
+		</section>
+	{/if}
 	{#if data.ai.linked}
 		<section class="mt-6">
 			<h2 class="mb-1 font-medium">AI assistants</h2>

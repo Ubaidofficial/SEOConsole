@@ -5,7 +5,7 @@ import { breakdown, periodFor, summary, topPages, topQueries } from './queries';
 import { linksFor } from './links';
 import { ctrOf, pctChange } from '../analytics';
 import { PERIODS } from '../periods';
-import { trafficSourcesReport } from './insights';
+import { keyEventsReport, landingPagesReport, trafficSourcesReport } from './insights';
 import type { ClarityMetric } from './clarity';
 import type { Ga4Dim } from './ga4';
 
@@ -95,9 +95,16 @@ function ga4(site: Site, days: number) {
 		breakdownsError: dimsError,
 		// Sources are stored for whole windows of the PERIODS lengths only, ending on their own pull date.
 		sources: src && src.linked && src.status === 'ok' ? { window: src.window, rows: src.rows.slice(0, 10) } : null,
-		landing: (PERIODS as readonly number[]).includes(days)
-			? (d.prepare('SELECT page, sessions, key_events keyEvents FROM ga4_landing WHERE site_id = ? AND days = ? ORDER BY sessions DESC LIMIT 10').all(site.id, days) as { page: string; sessions: number; keyEvents: number }[])
-			: null
+		// Landing pages from every channel, pulled with the sources (same stored windows).
+		landing: (() => {
+			if (!(PERIODS as readonly number[]).includes(days)) return null;
+			const l = landingPagesReport(site, days);
+			return l.linked && l.status === 'ok' ? { window: l.window, rows: l.rows.slice(0, 10) } : null;
+		})(),
+		keyEventsByName: (() => {
+			const k = keyEventsReport(site, days);
+			return k.linked ? k : null;
+		})()
 	};
 }
 

@@ -128,3 +128,75 @@ describe('all-sources dashboard', () => {
 		expect(d.clarity).toBeNull(); // not linked
 	}, 30_000);
 });
+
+describe('GA4 key events by name and landing pages from every channel', () => {
+	it('asks GA4 only for events marked as key events, and merges landing pages that differ by query string', async () => {
+		const { keyEventsDaily, landingAllChannels, LANDING_ROW_LIMIT } = await import('../src/lib/server/ga4');
+		const id = upsertGoogleAccount({ sub: 's', email: 'a@b.c', accessToken: 'AT', refreshToken: 'RT', expiresIn: 3600, scope: 'analytics.readonly' });
+		const bodies: Record<string, any>[] = [];
+		const r = (v: string[], m: number[]) => ({ dimensionValues: v.map((value) => ({ value })), metricValues: m.map((x) => ({ value: String(x) })) });
+		const f = vi.fn(async (_u: string, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body));
+			bodies.push(body);
+			return body.dimensions[1].name === 'eventName'
+				? json({ rows: [r(['20261118', 'sign_up'], [4, 4])] })
+				: json({ rows: [r(['/jobs?ref=x', 'Referral'], [10, 6, 1]), r(['/jobs/', 'Referral'], [5, 3, 0]), r(['/jobs', 'Organic Search'], [7, 7, 2])] });
+		});
+		expect(await keyEventsDaily(id, 'properties/1', '2026-11-18', '2026-11-18', { fetchImpl: f as never })).toEqual([{ date: '2026-11-18', event: 'sign_up', keyEvents: 4, eventCount: 4 }]);
+		expect(bodies[0].metricFilter.filter).toEqual({ fieldName: 'keyEvents', numericFilter: { operation: 'GREATER_THAN', value: { doubleValue: 0 } } });
+		const l = await landingAllChannels(id, 'properties/1', '2026-10-22', '2026-11-18', { fetchImpl: f as never });
+		expect(l.truncated).toBe(false);
+		expect(l.rows).toEqual([
+			{ page: '/jobs', channel: 'Referral', sessions: 15, engagedSessions: 9, keyEvents: 1 },
+			{ page: '/jobs', channel: 'Organic Search', sessions: 7, engagedSessions: 7, keyEvents: 2 }
+		]);
+		expect(bodies[1].dimensions).toEqual([{ name: 'landingPagePlusQueryString' }, { name: 'sessionDefaultChannelGroup' }]);
+		expect(bodies[1].dimensionFilter).toBeUndefined(); // every channel
+		expect(bodies[1].limit).toBe(LANDING_ROW_LIMIT);
+	});
+
+	it('demo sync stores both; reports give each page its channel mix and key events by name with their change', async () => {
+		const { keyEventsReport, landingPagesReport } = await import('../src/lib/server/insights');
+		await linked();
+		const site = getSite(1)!;
+		const l = landingPagesReport(site, 28);
+		if (!l.linked || l.status !== 'ok') throw new Error('expected landing pages, got ' + JSON.stringify(l));
+		expect(l.rows.length).toBeGreaterThan(3);
+		for (const r of l.rows) {
+			expect(r.channels.reduce((a, c) => a + c.sessions, 0)).toBe(r.sessions);
+			expect(r.topChannel).toBe(r.channels[0].channel);
+		}
+		// the demo has one page that lives on referral traffic: it must not look like an organic page
+		const referralPage = l.rows.find((r) => r.topChannel === 'Referral');
+		expect(referralPage, 'a referral-led page').toBeDefined();
+		expect(referralPage!.organicShare).toBeLessThan(0.3);
+		expect(landingPagesReport(site, 28, { search: referralPage!.page }).rows?.[0]?.page).toBe(referralPage!.page);
+		const k = keyEventsReport(site, 28);
+		if (!k.linked || k.status !== 'ok') throw new Error('expected key events, got ' + JSON.stringify(k));
+		expect(k.events.map((e) => e.event).sort()).toEqual(['generate_lead', 'purchase', 'sign_up']);
+		const stored = n('SELECT ROUND(SUM(key_events)) n FROM ga4_event_daily WHERE site_id = 1 AND date BETWEEN ? AND ?', k.window.start, k.window.end);
+		expect(Math.round(k.total)).toBe(stored);
+		expect(k.events.every((e) => e.keyEventsDelta === null || Number.isFinite(e.keyEventsDelta))).toBe(true);
+		// 24h works for key events (stored by day): the window is GA4's newest day
+		const day = keyEventsReport(site, 1);
+		if (!day.linked || day.status !== 'ok') throw new Error('expected key events');
+		expect(day.window.start).toBe(day.window.end);
+		const d = dashboardFor(site, 28);
+		if (!d.ga4?.synced) throw new Error('expected GA4');
+		expect(d.ga4.landing?.rows[0].page).toBe(l.rows[0].page);
+		expect(d.ga4.keyEventsByName).toMatchObject({ status: 'ok' });
+	}, 30_000);
+
+	it('a property with no key events set up says so, rather than showing an empty list or waiting forever', async () => {
+		const { keyEventsReport } = await import('../src/lib/server/insights');
+		const link = await linked();
+		db().prepare('DELETE FROM ga4_event_daily').run();
+		const real = ga4SourceFor(link.account_id!);
+		const none: Ga4Source = { ...real, keyEventsDaily: async () => [] };
+		await pullGa4Dims(1, link.external_id, none, pacificToday());
+		expect(keyEventsReport(getSite(1)!, 28)).toMatchObject({ status: 'none' });
+		const broken: Ga4Source = { ...real, keyEventsDaily: async () => { throw new Error('quota'); } };
+		await pullGa4Dims(1, link.external_id, broken, pacificToday());
+		expect(keyEventsReport(getSite(1)!, 28)).toMatchObject({ status: 'failed', error: 'quota' });
+	}, 30_000);
+});

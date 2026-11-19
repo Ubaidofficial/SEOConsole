@@ -278,7 +278,29 @@ CREATE TABLE IF NOT EXISTS ga4_source_windows (
 	start_date TEXT NOT NULL,
 	end_date TEXT NOT NULL,
 	rows INTEGER NOT NULL,              -- rows GA4 returned; at the row limit the long tail was cut
+	pages_truncated INTEGER NOT NULL DEFAULT 0, -- 1 when the landing-page report hit its row limit
 	PRIMARY KEY (site_id, days, which)
+) WITHOUT ROWID;
+-- Landing pages over a whole window, every channel, per channel group. Pulled with the sources, into the same windows.
+CREATE TABLE IF NOT EXISTS ga4_pages (
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	days INTEGER NOT NULL,
+	which TEXT NOT NULL,                -- now | prev
+	page TEXT NOT NULL,                 -- landing path, no query string
+	channel TEXT NOT NULL,              -- GA4 default channel group
+	sessions INTEGER NOT NULL,
+	engaged_sessions INTEGER NOT NULL,
+	key_events REAL NOT NULL,
+	PRIMARY KEY (site_id, days, which, page, channel)
+) WITHOUT ROWID;
+-- Key events by day and event name (only events marked as key events in GA4).
+CREATE TABLE IF NOT EXISTS ga4_event_daily (
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	date TEXT NOT NULL,
+	event TEXT NOT NULL,
+	key_events REAL NOT NULL,
+	event_count INTEGER NOT NULL,
+	PRIMARY KEY (site_id, date, event)
 ) WITHOUT ROWID;
 -- One row per URL per channel the app (or an agent) pushed it to. "Accepted" means the channel received it, never that the page is indexed:
 -- whether it got indexed is read later from the stored URL Inspection (the submitted URLs are also put on the indexing monitor's watch list).
@@ -758,6 +780,7 @@ function migrate(db: Database.Database) {
 	if (!cols('sites').includes('ga4_sources_error')) db.exec('ALTER TABLE sites ADD COLUMN ga4_sources_error TEXT');
 	// Country / device / new-vs-returning by day: the last failure's message (cleared on success).
 	if (!cols('sites').includes('ga4_dims_error')) db.exec('ALTER TABLE sites ADD COLUMN ga4_dims_error TEXT');
+	if (!cols('ga4_source_windows').includes('pages_truncated')) db.exec('ALTER TABLE ga4_source_windows ADD COLUMN pages_truncated INTEGER NOT NULL DEFAULT 0');
 	if (!cols('sitemap_urls').includes('lastmod_bad')) db.exec('ALTER TABLE sitemap_urls ADD COLUMN lastmod_bad INTEGER NOT NULL DEFAULT 0');
 	if (!cols('index_watch').includes('source')) db.exec('ALTER TABLE index_watch ADD COLUMN source TEXT');
 	// read | submit | delete. Databases from the on/off "can make changes" switch (can_write) carry it over once, as the submit level.

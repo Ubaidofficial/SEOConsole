@@ -161,9 +161,33 @@
 		<h2 class="mb-1 text-sm font-medium">Top searches <span class="font-normal text-muted-foreground">· Google clicks</span></h2>
 		<p class="mb-3 text-xs text-muted-foreground">{range(g.window)} · <a class="underline" href="queries?days={data.days}">all searches</a></p>
 		{#if g.queries.length}<BarList limit={10} items={g.queries.map((r) => ({ label: r.query, value: r.clicks, note: `pos ${fmtPos(r.position)}`, pii: true }))} unit="clicks" />{:else}<p class="text-sm text-muted-foreground">No listed searches with clicks in this period.</p>{/if}
-		{#if a?.synced && a.landing?.length}
-			<h3 class="mt-4 mb-2 text-xs font-medium text-muted-foreground">Google-organic landing pages · GA4 sessions</h3>
-			<BarList limit={5} color="var(--chart-2)" items={a.landing.map((r) => ({ label: r.page, value: r.sessions, pii: true }))} unit="sessions" />
+
+	</section>
+</div>
+
+<!-- Where visits land, and what they convert into (GA4) -->
+<div class="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+	<section class="card p-4">
+		<h2 class="mb-1 text-sm font-medium">Landing pages <span class="font-normal text-muted-foreground">· GA4 sessions, every channel</span></h2>
+		{#if !a}{@render connect('GA4')}
+		{:else if !a.synced}<p class="text-sm text-muted-foreground">Appears after the first GA4 sync.</p>
+		{:else if !a.landing}<p class="text-sm text-muted-foreground">Landing pages are kept for the 7d, 28d, 3m, 6m and 16m periods; pick one of those (or they appear after the next GA4 sync).</p>
+		{:else if !a.landing.rows.length}<p class="text-sm text-muted-foreground">No sessions in {range(a.landing.window)}.</p>
+		{:else}
+			<p class="mb-3 text-xs text-muted-foreground">{range(a.landing.window)} · the note is each page's biggest channel · <a class="underline" href="analytics?days={data.days}">all landing pages</a></p>
+			<BarList limit={10} color="var(--chart-2)" items={a.landing.rows.map((r) => ({ label: r.page, value: r.sessions, note: `${r.topChannel} ${fmtPct(r.channels[0]?.sessions / r.sessions, 0)}`, pii: true }))} unit="sessions" />
+		{/if}
+	</section>
+	<section class="card p-4">
+		<h2 class="mb-1 text-sm font-medium">Key events <span class="font-normal text-muted-foreground">· GA4, by event name</span></h2>
+		{#if !a}{@render connect('GA4')}
+		{:else if !a.synced || !a.keyEventsByName || a.keyEventsByName.status === 'pending'}<p class="text-sm text-muted-foreground">Appears after the next GA4 sync.</p>
+		{:else if a.keyEventsByName.status === 'failed'}<p class="text-sm text-warn">Could not be fetched on the last sync (will retry): {a.keyEventsByName.error}</p>
+		{:else if a.keyEventsByName.status === 'none'}<p class="text-sm text-muted-foreground">GA4 has recorded no key events for this site. Mark the events that matter (a sign-up, an application, a purchase) as key events in GA4 (Admin → Events) and they appear here.</p>
+		{:else if !a.keyEventsByName.events.length}<p class="text-sm text-muted-foreground">No key events in {range(a.keyEventsByName.window)}.</p>
+		{:else}
+			<p class="mb-3 text-xs text-muted-foreground">{range(a.keyEventsByName.window)} · {fmtInt(a.keyEventsByName.total)} in all</p>
+			<BarList limit={8} color="var(--chart-3)" items={a.keyEventsByName.events.map((e) => ({ label: e.event, value: e.keyEvents, note: e.keyEventsDelta == null ? '' : `${e.keyEventsDelta >= 0 ? '+' : ''}${fmtPct(e.keyEventsDelta, 0)}` }))} />
 		{/if}
 	</section>
 </div>

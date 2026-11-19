@@ -149,6 +149,11 @@ describe('traffic sources in sync and report', () => {
 		expect(one.sources.map((s: { source: string }) => s.source)).toEqual(['forum.example']);
 		expect(one.sources[0].change === null || /%$/.test(one.sources[0].change)).toBe(true);
 		expect((await call({ days: 90 })).window).toBeDefined();
+		const pages = await call({ view: 'pages' });
+		expect(pages.pages[0]).toMatchObject({ mainChannel: expect.any(String), fromOrganic: expect.stringMatching(/%$/) });
+		const events = await call({ view: 'events' });
+		expect(events.events.length).toBe(3);
+		expect(events.total).toBeGreaterThan(0);
 		const res = await handleMcp(new Request('http://x/api/mcp', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_ga4_summary', arguments: { site: '1' } } }) }));
 		expect(JSON.parse((await res.json()).result.content[0].text).channels.length).toBeGreaterThan(0);
 	}, 30_000);
