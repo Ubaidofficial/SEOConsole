@@ -8,6 +8,7 @@ import { gtmSnapshot, trackingHealth } from '$lib/server/tracking';
 import { tagTypeLabel } from '$lib/server/gtm';
 import { hasGtmWrite, planTagIdRepair, repairTagIdViaGtm } from '$lib/server/gtmwrite';
 import { enqueueLinkSync } from '$lib/server/jobs';
+import { applyKeyEvent, planKeyEvent } from '$lib/server/keyevents';
 
 /** Can SEOConsole edit this site's container? Only asked about once a Google tag has a malformed ID (the repair button). */
 function repairState(siteId: number, hasBadTag: boolean) {
@@ -30,6 +31,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		window: { days, clicks: health.input.traffic.gscClicks, ga4: health.input.traffic.ga4OrganicSessions },
 		sources: health.sources,
 		repair: repairState(site.id, !!snap?.tags.some((t) => t.badTagId)),
+		keyEvent: (({ canWrite, account }) => ({ canWrite, account, readOnly: config.readOnly, ga4Linked: !!linksFor(site.id).ga4 }))(repairState(site.id, true)),
 		snapshot: snap && {
 			publicId: snap.publicId,
 			published: snap.published,
@@ -41,7 +43,31 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	};
 };
 
+/** The form's event name and parameters ("alert_form, alert_frequency" or one per line). */
+const keyEventInput = (f: FormData) => ({
+	event: String(f.get('event') ?? ''),
+	params: String(f.get('params') ?? '').split(/[\s,]+/).filter(Boolean),
+	measurementId: String(f.get('measurementId') ?? '').trim() || undefined
+});
+
 export const actions: Actions = {
+	/** "Track as a key event": what would be created in Tag Manager and GA4, read live. Changes nothing. */
+	keyEventPlan: async ({ params, request }) => {
+		const input = keyEventInput(await request.formData());
+		const kePlan = await planKeyEvent(Number(params.id), input).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
+		if (!kePlan.ok) return fail(400, { kePlan, keInput: input });
+		return { kePlan, keInput: input };
+	},
+	/** The confirmed change: variables, trigger and GA4 event tag in a new workspace (published if asked and safe), then the key event in GA4. */
+	keyEventApply: async ({ params, request }) => {
+		const f = await request.formData();
+		const input = keyEventInput(f);
+		const mode = f.get('mode') === 'publish' ? 'publish' : 'workspace';
+		const keResult = await applyKeyEvent(Number(params.id), input, mode).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e), published: false }));
+		if (!keResult.ok) return fail(400, { keResult, keInput: input });
+		enqueueLinkSync(Number(params.id), 'gtm');
+		return { keResult, keInput: input };
+	},
 	/** What the fix would change and which IDs it could use, read live from Tag Manager. Changes nothing. */
 	repairPlan: async ({ params }) => {
 		const plan = await planTagIdRepair(Number(params.id)).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));

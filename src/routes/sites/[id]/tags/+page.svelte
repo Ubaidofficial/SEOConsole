@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ago } from '$lib/format';
 	import TagIdRepair from '$lib/components/TagIdRepair.svelte';
+	import KeyEventSetup from '$lib/components/KeyEventSetup.svelte';
 	let { data, form } = $props();
 	const tone = { critical: 'text-bad', warning: 'text-warn', info: 'text-muted-foreground' } as const;
 	const icon = { critical: '✕', warning: '⚠', info: 'ℹ' } as const;
@@ -32,6 +33,8 @@
 		<p class="text-sm text-good">{data.sources.gtm || data.sources.ga4 ? 'No problems found.' : 'Nothing to check yet: link GA4 and a Tag Manager container on the Connect page.'}</p>
 	{/if}
 </section>
+
+{#if data.linked}<KeyEventSetup access={data.keyEvent} {form} />{/if}
 
 {#if data.snapshot}
 	<section class="card overflow-x-auto">

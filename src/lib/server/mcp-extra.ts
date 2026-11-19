@@ -24,6 +24,7 @@ import { autoSubmit, submitUrls } from './indexnow';
 import { addWatch } from './indexmon';
 import { checkUrls, hostAllowed, pagesToCheck } from './onpage';
 import { linksFor } from './links';
+import { applyKeyEvent, planKeyEvent } from './keyevents';
 import { parseScope } from '../experiments';
 import { isRealDate } from '../performance';
 import { parseTerms, pctChange, ctrOf } from '../analytics';
@@ -355,6 +356,25 @@ const writeTools: Tool[] = [
 			db().prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + ?').run(key, String(ok.length), ok.length);
 			const r = await checkUrls(site.id, ok);
 			return { checked: r.ok, couldNotBeFetched: r.failed, skippedNotOnThisSite: skipped, next: 'Read the findings with get_onpage_check.' };
+		}
+	}),
+	w({
+		name: 'track_key_event',
+		description: 'Send a dataLayer event the site already pushes (e.g. job_alert_signup) to GA4 through Tag Manager and mark it as a key event: Data Layer Variables for `params`, a Custom Event trigger, a GA4 Event tag (new workspace), then the GA4 key event. mode preview (default) changes nothing and lists the changes; workspace prepares them; publish also publishes, only when the newest container version is live.',
+		schema: { ...siteArg, event: { type: 'string' }, params: { type: 'array', items: { type: 'string' } }, measurementId: { type: 'string' }, mode: { type: 'string', enum: ['preview', 'workspace', 'publish'] } },
+		run: async (a, sites) => {
+			const site = resolveSite(sites, a.site);
+			const input = { event: String(a.event ?? ''), params: Array.isArray(a.params) ? a.params.map(String) : [], measurementId: a.measurementId ? String(a.measurementId) : undefined };
+			const mode = a.mode == null || a.mode === 'preview' ? 'preview' : a.mode === 'workspace' || a.mode === 'publish' ? a.mode : null;
+			if (!mode) throw new Error('`mode` must be preview, workspace or publish.');
+			if (mode === 'preview') {
+				const p = await planKeyEvent(site.id, input);
+				if (!p.ok) return { ok: false, error: p.error, ...(p.needsGrant ? { fix: 'The owner must allow SEOConsole to edit Tag Manager and GA4 once, on the site\'s Tag Manager tab.' } : {}) };
+				return { ok: true, container: p.container?.publicId, measurementId: p.measurementId, changes: p.changes, canPublish: p.canPublish, ...(p.publishBlocked ? { publishBlocked: p.publishBlocked } : {}), next: 'Call again with mode publish (or workspace) to make these changes.' };
+			}
+			const r = await applyKeyEvent(site.id, input, mode);
+			if (r.ok) enqueueSiteSync(site.id);
+			return { ...r, check: r.ok ? 'Trigger the event on the site, then look in GA4 Realtime; key events reach reports within a day.' : undefined };
 		}
 	}),
 	w({
