@@ -339,12 +339,18 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 	const canMarkKeyEvent = !!a.ga4?.account_id && !!a.ga4Acc && hasGa4Write(a.ga4Acc);
 	let alreadyKeyEvent: boolean | null = null;
 	let newDimensions: string[] = [];
+	let dimensionsError: string | null = null;
 	if (canMarkKeyEvent) {
 		const admin = o.admin ?? (a.ga4Acc!.is_demo ? demoAdmin() : realKeyEventAdmin(a.ga4Acc!.id));
 		alreadyKeyEvent = (await admin.listKeyEvents(a.ga4!.external_id)).includes(c.event);
 		if (admin.listCustomDimensions && c.params.length) {
-			const have = new Set(await admin.listCustomDimensions(a.ga4!.external_id).catch(() => c.params));
-			newDimensions = c.params.filter((p) => !have.has(p));
+			try {
+				const have = new Set(await admin.listCustomDimensions(a.ga4!.external_id));
+				newDimensions = c.params.filter((p) => !have.has(p));
+			} catch (e) {
+				// Said, not hidden: treating an unreadable list as "all exist" would skip them without a word.
+				dimensionsError = e instanceof Error ? e.message : String(e);
+			}
 		}
 	}
 	// An old-style Google tag for the same ID, with no consolidated GA4 destination: Tag Manager will refuse the version.
@@ -361,6 +367,8 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 	if (canMarkKeyEvent) {
 		changes.push(alreadyKeyEvent ? `GA4 already counts ${c.event} as a key event.` : `In GA4 (${a.ga4!.label ?? a.ga4!.external_id}): mark ${c.event} as a key event.`);
 		if (newDimensions.length) changes.push(`In GA4: register event-scoped custom dimensions for ${newDimensions.join(', ')}, so reports can break ${c.event} down by them.`);
+		else if (dimensionsError) changes.push(`GA4: could not read the property's custom dimensions (${dimensionsError}), so none are registered for ${c.params.join(', ')}.`);
+		else if (c.params.length) changes.push(`GA4 already has custom dimensions for ${c.params.join(', ')}.`);
 	}
 	else changes.push(a.ga4 ? `GA4: marking ${c.event} as a key event needs Google Analytics edit permission (Allow below), or mark it by hand in GA4 Admin → Key events.` : `GA4: no property linked to this site, so ${c.event} is not marked as a key event; mark it in GA4 Admin → Key events.`);
 	if (needsConsolidation) changes.unshift(`First: the container still has an old-style Google tag ("${needsConsolidation.tag}") for ${measurementId}. Since Tag Manager's 2026 update it refuses a GA4 event tag next to it ("Conflicting Google tag"). In Tag Manager, Submit the workspace and choose Consolidate (or follow the container's optimization banner), publish, then run this again.`);
