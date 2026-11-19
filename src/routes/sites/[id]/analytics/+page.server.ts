@@ -1,4 +1,5 @@
-import type { PageServerLoad } from './$types';
+import type { Actions, PageServerLoad } from './$types';
+import { realtimeFor } from '$lib/server/realtime';
 import { db } from '$lib/server/db';
 import { getSite } from '$lib/server/clients';
 import { dailySeries, periodFor } from '$lib/server/queries';
@@ -30,4 +31,9 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		series: dailySeries(site.id, p.start, p.end).map((g) => ({ date: g.date, clicks: organic.get(g.date) ?? 0, impressions: g.clicks, position: 0 })),
 		channels: byChannel(p.start, p.end).map((r) => ({ channel: r.channel, sessions: r.sessions, sessionsDelta: pctChange(r.sessions, prev.get(r.channel)?.sessions ?? 0), engagementRate: r.sessions ? r.engaged / r.sessions : 0, users: uniqueUsers.get(r.channel) ?? null, keyEvents: Math.round(r.keyEvents * 10) / 10, pageviews: r.pageviews }))
 	};
+};
+
+export const actions: Actions = {
+	/** GA4 Realtime: events in the last 30 minutes, read live from Google (nothing stored, nothing changed). */
+	realtime: async ({ params }) => ({ realtime: await realtimeFor(Number(params.id)) })
 };

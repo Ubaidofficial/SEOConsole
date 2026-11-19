@@ -8,7 +8,7 @@ import { gtmSnapshot, trackingHealth } from '$lib/server/tracking';
 import { tagTypeLabel } from '$lib/server/gtm';
 import { hasGtmWrite, planTagIdRepair, repairTagIdViaGtm } from '$lib/server/gtmwrite';
 import { enqueueLinkSync } from '$lib/server/jobs';
-import { applyKeyEvent, planKeyEvent } from '$lib/server/keyevents';
+import { applyKeyEvent, discoverSiteEvents, planKeyEvent } from '$lib/server/keyevents';
 
 /** Can SEOConsole edit this site's container? Only asked about once a Google tag has a malformed ID (the repair button). */
 function repairState(siteId: number, hasBadTag: boolean) {
@@ -51,6 +51,11 @@ const keyEventInput = (f: FormData) => ({
 });
 
 export const actions: Actions = {
+	/** The dataLayer events the site's own scripts push, to pick one to track. Reads the site, changes nothing. */
+	keyEventDiscover: async ({ params }) => {
+		const keFound = await discoverSiteEvents(Number(params.id)).catch((e) => ({ events: [], read: { pages: 0, scripts: 0 }, note: e instanceof Error ? e.message : String(e) }));
+		return { keFound };
+	},
 	/** "Track as a key event": what would be created in Tag Manager and GA4, read live. Changes nothing. */
 	keyEventPlan: async ({ params, request }) => {
 		const input = keyEventInput(await request.formData());

@@ -2,6 +2,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { db, openDb } from '../src/lib/server/db';
 import { ensureDemoAccounts, upsertGoogleAccount } from '../src/lib/server/accounts';
 import { autoMatchGa4, autoMatchGtm } from '../src/lib/server/connect';
+import { gtmSourceFor } from '../src/lib/server/channels';
+import type { GtmSource } from '../src/lib/server/gtm';
 import { queueDepth } from '../src/lib/server/jobs';
 import { linksFor } from '../src/lib/server/links';
 import { createApiKey } from '../src/lib/server/apikeys';
@@ -80,6 +82,11 @@ describe('the real clients', () => {
 
 describe('plan and apply on demo data', () => {
 	let siteId = 0;
+	/** The demo container as it is after Tag Manager's 2026 consolidation: its Google tag became a Google Analytics destination tag. */
+	const consolidated = (): GtmSource => {
+		const real = gtmSourceFor(linksFor(siteId).gtm!.account_id!);
+		return { listContainers: () => real.listContainers(), liveVersion: async (p) => { const v = await real.liveVersion(p); return v && { ...v, tags: v.tags.map((t) => (t.type === 'googtag' ? { ...t, type: 'dest_ga' } : t)) }; } };
+	};
 	beforeAll(async () => {
 		process.env.DEMO_MODE = '1';
 		process.env.SCHEDULER = '0';
@@ -94,26 +101,32 @@ describe('plan and apply on demo data', () => {
 	}, 120_000);
 
 	it('the preview lists every change, takes the measurement ID from the linked GA4 property, and changes nothing', async () => {
-		const p = await planKeyEvent(siteId, { event: 'job_alert_signup', params: PARAMS });
+		const p = await planKeyEvent(siteId, { event: 'job_alert_signup', params: PARAMS }, { source: consolidated() });
 		expect(p.ok, p.error).toBe(true);
 		expect(p.measurementId).toMatch(/^G-/);
-		expect(p.changes).toHaveLength(PARAMS.length + 3); // a variable per parameter, the trigger, the tag, the GA4 key event
-		expect(p.changes!.at(-1)).toMatch(/mark job_alert_signup as a key event/);
+		expect(p.changes, JSON.stringify(p.changes, null, 1)).toHaveLength(PARAMS.length + 4); // a variable per parameter, the trigger, the tag, the GA4 key event, the custom dimensions
+		expect(p.changes!.at(-2)).toMatch(/mark job_alert_signup as a key event/);
+		expect(p.changes!.at(-1)).toMatch(/custom dimensions for alert_form, alert_frequency, alert_has_role, alert_remote/);
+		expect(p).toMatchObject({ needsConsolidation: null, newDimensions: PARAMS, canPublish: true });
 		expect(p).toMatchObject({ canMarkKeyEvent: true, alreadyKeyEvent: false, alreadyTagged: false });
 		expect(demoKeyEvents.items.size).toBe(0);
 		expect(demoKeyEvents.keyEvents.size).toBe(0);
 	});
 
 	it('apply creates variables, trigger and tag in a workspace, publishes, marks the key event, and a second run creates nothing new', async () => {
-		const r = await applyKeyEvent(siteId, { event: 'job_alert_signup', params: PARAMS }, 'publish');
+		const r = await applyKeyEvent(siteId, { event: 'job_alert_signup', params: PARAMS }, 'publish', { source: consolidated() });
 		expect(r, r.error).toMatchObject({ ok: true, published: true, keyEvent: 'marked' });
 		const items = [...demoKeyEvents.items.values()][0];
 		expect(items.variables.map((v) => v.name)).toEqual(PARAMS.map((p) => `DLV - ${p}`));
 		expect(items.triggers.map((t) => t.name)).toContain('Event - job_alert_signup');
 		expect(items.tags).toEqual([expect.objectContaining({ type: 'gaawe', eventName: 'job_alert_signup' })]);
 		expect([...demoKeyEvents.keyEvents.values()][0]).toEqual(['job_alert_signup']);
-		const again = await applyKeyEvent(siteId, { event: 'job_alert_signup', params: PARAMS }, 'workspace');
+		expect(r.customDimensions).toEqual({ created: PARAMS });
+		expect([...demoKeyEvents.dimensions.values()][0]).toEqual(PARAMS);
+		expect(r.liveCheck).toMatchObject({ state: 'confirmed' }); // demo: simulated
+		const again = await applyKeyEvent(siteId, { event: 'job_alert_signup', params: PARAMS }, 'workspace', { source: consolidated() });
 		expect(again).toMatchObject({ ok: true, keyEvent: 'already' });
+		expect(again.customDimensions).toBeUndefined(); // all four exist now
 		expect(items.variables).toHaveLength(PARAMS.length);
 		expect(items.tags).toHaveLength(1);
 		const audit = (db().prepare("SELECT action FROM audit_log WHERE action LIKE 'gtm.key_event%' OR action LIKE 'ga4.key_event%' ORDER BY id").all() as { action: string }[]).map((x) => x.action);
@@ -143,10 +156,10 @@ describe('plan and apply on demo data', () => {
 				{ path: `${container}/workspaces/6`, name: 'Marketing changes' }
 			]
 		};
-		const p = await planKeyEvent(siteId, { event: 'lead_form', params: ['plan'] }, { writer });
+		const p = await planKeyEvent(siteId, { event: 'lead_form', params: ['plan'] }, { writer, source: consolidated() });
 		expect(p.reuseWorkspace).toEqual({ path: ws, name: 'SEOConsole key event lead_form 2026-11-19' });
 		expect(p.changes![0]).toMatch(/^Work in the workspace "SEOConsole key event lead_form 2026-11-19"/);
-		const r = await applyKeyEvent(siteId, { event: 'lead_form', params: ['plan'] }, 'publish', { writer });
+		const r = await applyKeyEvent(siteId, { event: 'lead_form', params: ['plan'] }, 'publish', { writer, source: consolidated() });
 		expect(r).toMatchObject({ ok: true, published: true });
 		expect(created).toBe(0);
 		expect(updated).toHaveLength(1);
@@ -171,11 +184,20 @@ describe('plan and apply on demo data', () => {
 		const before = [...demoKeyEvents.keyEvents.values()].flat().length;
 		const p = await call({ event: 'sign_up', params: ['plan'] });
 		expect(p.isError, p.data).toBe(false);
-		expect(p.data).toMatchObject({ ok: true, next: expect.stringMatching(/mode publish/) });
+		// the demo container still has an old-style Google tag for the same ID: the preview says so first, and publishing is refused up front
+		expect(p.data).toMatchObject({ ok: true, canPublish: false });
+		expect(p.data.changes[0]).toMatch(/old-style Google tag .* Consolidate/);
 		expect([...demoKeyEvents.keyEvents.values()].flat().length).toBe(before);
 		expect((await call({ event: 'sign_up', mode: 'later' })).isError).toBe(true);
-		const done = await call({ event: 'sign_up', params: ['plan'], mode: 'publish' });
-		expect(done.data).toMatchObject({ ok: true, keyEvent: 'marked' });
+		const refused = await call({ event: 'sign_up', params: ['plan'], mode: 'publish' });
+		expect(refused.data).toMatchObject({ ok: false, published: false, error: expect.stringMatching(/consolidated/) });
+		// preparing it in a workspace is still allowed: Consolidate is done inside a workspace
+		const prepared = await call({ event: 'sign_up', params: ['plan'], mode: 'workspace' });
+		expect(prepared.data).toMatchObject({ ok: true, published: false, keyEvent: 'marked' });
+		expect(prepared.data.liveCheck).toBeUndefined(); // nothing went live, so nothing to check
+		// discover: the events the site's scripts push (demo: a fixed, labelled answer)
+		const found = await call({ mode: 'discover' });
+		expect(found.data.events.map((e: { event: string }) => e.event)).toEqual(['newsletter_signup', 'quote_request']);
 		// a read-only key may not use it at all
 		const reader = createApiKey('r', null).key;
 		const res = await handleMcp(new Request('http://x/api/mcp', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${reader}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'track_key_event', arguments: { site: String(siteId), event: 'x' } } }) }));

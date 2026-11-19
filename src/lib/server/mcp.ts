@@ -21,6 +21,7 @@ import { coverageMap } from '../property';
 import { gtmSnapshot, trackingHealth } from './tracking';
 import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
+import { realtimeFor } from './realtime';
 import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
 import { evaluateTestCached, listTests } from './seotests';
 import { indexHistory, indexSummary, recentEvents, watchList } from './indexmon';
@@ -396,13 +397,14 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_ga4_summary',
-		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events); `search` filters.',
-		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources', 'pages', 'events'] }, search: { type: 'string' } },
+		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events), realtime (last 30 min); `search` filters.',
+		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources', 'pages', 'events', 'realtime'] }, search: { type: 'string' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			if (!linksFor(site.id).ga4) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
 			if (a.view === 'sources') return ga4Sources(site, days(a), a);
 			if (a.view === 'pages' || a.view === 'events') return ga4PagesOrEvents(site, days(a), a);
+			if (a.view === 'realtime') return realtimeFor(site.id, { search: typeof a.search === 'string' ? a.search : undefined });
 			const p = periodFor(site, days(a));
 			const d = db();
 			const n = days(a);

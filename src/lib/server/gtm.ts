@@ -111,10 +111,15 @@ const MEASUREMENT_ID = /^G-[A-Z0-9]{4,}$/;
 const ID_LIKE = /^(G|GT|AW|DC|UA)-[A-Z0-9-]{3,}$/i;
 const VARIABLE_REF = /^\{\{.+\}\}$/;
 /** The ID parameters a Google tag / GA4 tag may keep its ID in, in the order the reader tries them. */
-export const GA_ID_KEYS = ['tagId', 'measurementId', 'measurementIdOverride'] as const;
+export const GA_ID_KEYS = ['tagId', 'measurementId', 'measurementIdOverride', 'destinationId'] as const;
 /** True for a value that is neither an ID nor a variable reference: text that cannot work as an ID (for example a pasted snippet). */
 export const isBadTagIdValue = (v: string) => !VARIABLE_REF.test(v.trim()) && !ID_LIKE.test(v.trim());
-export const GA4_TAG_TYPES = new Set(['googtag', 'gaawc', 'gaawe']);
+/**
+ * Tag types that send to GA4. dest_ga is the "Google Analytics" destination tag that Tag Manager's 2026 Google tag consolidation puts in
+ * place of a Google tag (its ID in `destinationId`): read from the live gtm.js of a consolidated container (__dest_ga, vtp_destinationId),
+ * not from Google's API reference, which does not list tag types.
+ */
+export const GA4_TAG_TYPES = new Set(['googtag', 'gaawc', 'gaawe', 'dest_ga']);
 
 const param = (item: RawItem, ...keys: string[]) => {
 	for (const k of keys) {
@@ -153,7 +158,7 @@ export function summarizeVersion(v: RawVersion): GtmLive {
 			paused: !!t.paused,
 			firing: (t.firingTriggerId ?? []).map((id) => triggerName.get(id) ?? `trigger ${id}`),
 			blocking: (t.blockingTriggerId ?? []).map((id) => triggerName.get(id) ?? `trigger ${id}`),
-			// googtag keeps its ID in `tagId`; GA4 configuration / event tags in `measurementId` / `measurementIdOverride`.
+			// googtag keeps its ID in `tagId`; GA4 configuration / event tags in `measurementId` / `measurementIdOverride`; dest_ga in `destinationId`.
 			measurementId: ga ? resolve(rawId) : null,
 			badTagId: bad ? bad.replace(/\s+/g, ' ').trim().slice(0, 120) : null,
 			suggestedId: bad ? (/\bG-[A-Z0-9]{4,}\b/i.exec(bad)?.[0]?.toUpperCase() ?? null) : null,
@@ -188,6 +193,7 @@ export const isWebContainer = (c: Pick<GtmContainer, 'usage'>) => !c.usage.lengt
 /** Friendly names for the tag types people see most; anything else shows its raw code. */
 export const TAG_TYPE_LABEL: Record<string, string> = {
 	googtag: 'Google tag',
+	dest_ga: 'Google Analytics destination',
 	gaawc: 'GA4 configuration',
 	gaawe: 'GA4 event',
 	html: 'Custom HTML',

@@ -26,6 +26,8 @@ import { checkUrls, hostAllowed, pagesToCheck } from './onpage';
 import { linksFor } from './links';
 import { applyKeyEvent, planKeyEvent } from './keyevents';
 import { planSetup, runSetup, type SetupPlan } from './setup';
+import { checkLiveScript } from './gtmlive';
+import { discoverSiteEvents } from './keyevents';
 import { parseScope } from '../experiments';
 import { isRealDate } from '../performance';
 import { parseTerms, pctChange, ctrOf } from '../analytics';
@@ -389,18 +391,20 @@ const writeTools: Tool[] = [
 			if (p.tag?.state === 'present') return { ok: true, nothingToDo: true, ...plan };
 			if (mode === 'publish' && !p.tag?.canPublish) return { ok: false, error: p.tag?.publishBlocked ?? 'Publishing is not safe for this container now; use mode workspace.', ...plan };
 			const r = await runSetup(site.id, {}, mode);
-			return { ok: r.ok, ...(r.error ? { error: r.error } : {}), published: r.published, steps: r.steps.map((x) => `${x.status}: ${x.text}`), ...(r.measurementId ? { measurementId: r.measurementId } : {}), ...(r.reviewUrl ? { reviewUrl: r.reviewUrl } : {}), ...(r.snippet ? { siteCodeNeeded: 'A new container must also be added to the site\'s pages; the snippet is on the Connect page.' } : {}), check: r.ok && r.published ? 'Open the site (accept any cookie banner), then look in GA4 Realtime.' : undefined };
+			const live = r.ok && r.published && r.container && r.measurementId ? await checkLiveScript(r.container.publicId, [r.measurementId], { demo: !!(db().prepare('SELECT a.is_demo d FROM sites s JOIN accounts a ON a.id = s.account_id WHERE s.id = ?').get(site.id) as { d: number } | undefined)?.d }) : null;
+			return { ok: r.ok, ...(live ? { liveCheck: live } : {}), ...(r.error ? { error: r.error } : {}), published: r.published, steps: r.steps.map((x) => `${x.status}: ${x.text}`), ...(r.measurementId ? { measurementId: r.measurementId } : {}), ...(r.reviewUrl ? { reviewUrl: r.reviewUrl } : {}), ...(r.snippet ? { siteCodeNeeded: 'A new container must also be added to the site\'s pages; the snippet is on the Connect page.' } : {}), check: r.ok && r.published ? 'Open the site (accept any cookie banner), then look in GA4 Realtime.' : undefined };
 		}
 	}),
 	w({
 		name: 'track_key_event',
-		description: 'Send a dataLayer event the site already pushes (e.g. job_alert_signup) to GA4 via Tag Manager (a variable per `params` entry, a trigger, a GA4 Event tag) and mark it a key event. mode as in setup_google_tag.',
-		schema: { ...siteArg, event: { type: 'string' }, params: { type: 'array', items: { type: 'string' } }, measurementId: { type: 'string' }, mode: { type: 'string', enum: ['preview', 'workspace', 'publish'] } },
+		description: 'Send a dataLayer event the site already pushes (e.g. job_alert_signup) to GA4 via Tag Manager (a variable per `params` entry, a trigger, a GA4 Event tag), mark it a key event and register its params as custom dimensions. mode as in setup_google_tag; discover lists the events found in the site\'s scripts.',
+		schema: { ...siteArg, event: { type: 'string' }, params: { type: 'array', items: { type: 'string' } }, measurementId: { type: 'string' }, mode: { type: 'string', enum: ['preview', 'workspace', 'publish', 'discover'] } },
 		run: async (a, sites) => {
 			const site = resolveSite(sites, a.site);
+			if (a.mode === 'discover') return discoverSiteEvents(site.id);
 			const input = { event: String(a.event ?? ''), params: Array.isArray(a.params) ? a.params.map(String) : [], measurementId: a.measurementId ? String(a.measurementId) : undefined };
 			const mode = a.mode == null || a.mode === 'preview' ? 'preview' : a.mode === 'workspace' || a.mode === 'publish' ? a.mode : null;
-			if (!mode) throw new Error('`mode` must be preview, workspace or publish.');
+			if (!mode) throw new Error('`mode` must be preview, workspace, publish or discover.');
 			if (mode === 'preview') {
 				const p = await planKeyEvent(site.id, input);
 				if (!p.ok) return { ok: false, error: p.error, ...(p.needsGrant ? { fix: 'The owner must allow SEOConsole to edit Tag Manager and GA4 once, on the site\'s Tag Manager tab.' } : {}) };

@@ -9,9 +9,11 @@
 	import { page } from '$app/state';
 	// Local types: client code never imports from $lib/server.
 	type Plan = { ok: boolean; error?: string; needsGrant?: 'gtm-write' | 'setup'; event?: string; params?: string[]; measurementId?: string; container?: { publicId: string }; changes?: string[]; alreadyTagged?: boolean; alreadyKeyEvent?: boolean | null; canMarkKeyEvent?: boolean; canPublish?: boolean; publishBlocked?: string };
-	type Result = { ok: boolean; error?: string; published: boolean; reviewUrl?: string; versionId?: string; keyEvent?: 'marked' | 'already' | 'skipped' | 'failed'; keyEventError?: string; tagAlready?: boolean };
+	type Result = { ok: boolean; error?: string; published: boolean; reviewUrl?: string; versionId?: string; keyEvent?: 'marked' | 'already' | 'skipped' | 'failed'; keyEventError?: string; tagAlready?: boolean; liveCheck?: { state: string; note: string }; customDimensions?: { created: string[]; failed?: string } };
+	type Found = { events: { event: string; params: string[]; how: 'push' | 'helper'; where: string }[]; read: { pages: number; scripts: number }; note: string };
 	type Input = { event: string; params: string[]; measurementId?: string };
-	let { access, form }: { access: { canWrite: boolean; account: string | null; readOnly: boolean; ga4Linked: boolean }; form: { kePlan?: Plan; keResult?: Result; keInput?: Input } | null | undefined } = $props();
+	let { access, form }: { access: { canWrite: boolean; account: string | null; readOnly: boolean; ga4Linked: boolean }; form: { kePlan?: Plan; keResult?: Result; keInput?: Input; keFound?: Found } | null | undefined } = $props();
+	const found = $derived(form?.keFound);
 	let busy = $state('');
 	const back = $derived(`/sites/${page.params.id}/tags`);
 	const plan = $derived(form?.kePlan);
@@ -42,7 +44,31 @@
 				{result.tagAlready ? 'Tag Manager already sent this event to GA4.' : result.published ? `Done: version ${result.versionId ?? ''} is published with the GA4 event tag.` : 'The variables, trigger and tag are ready in a new workspace. Open it in Tag Manager, check it, then Submit and Publish.'}
 				{keyEventText(result)}
 			</p>
+			{#if result.liveCheck}<p class="mt-1 text-xs {result.liveCheck.state === 'confirmed' ? 'text-good' : 'text-muted-foreground'}">{result.liveCheck.note}</p>{/if}
+			{#if result.customDimensions?.created.length}<p class="mt-1 text-xs text-muted-foreground">Registered as GA4 custom dimensions: {result.customDimensions.created.join(', ')}.</p>{/if}
+			{#if result.customDimensions?.failed}<p class="mt-1 text-xs text-warn">Custom dimensions: {result.customDimensions.failed}</p>{/if}
 			<p class="mt-1 text-xs text-muted-foreground">Check it: trigger the event on your site (for example sign up for an alert), then look in GA4 → Reports → Realtime. Key events show in reports within a day.{#if result.reviewUrl}<a class="ml-1 underline" href={result.reviewUrl} target="_blank" rel="noreferrer noopener">Open in Tag Manager</a>{/if}</p>
+		{/if}
+		<form method="POST" action="?/keyEventDiscover" use:enhance={done('discover')} class="mt-3">
+			<button class="btn text-xs" disabled={!!busy}>{busy === 'discover' ? 'Reading the site…' : 'Find events on this site'}</button>
+			<span class="ml-2 text-xs text-muted-foreground">Reads your pages' own scripts for dataLayer events; changes nothing.</span>
+		</form>
+		{#if found}
+			<div class="mt-2 rounded-md border p-3 text-xs" role="region" aria-label="Events found on the site">
+				{#if found.events.length}
+					<ul class="space-y-1.5">
+						{#each found.events as e (e.event)}
+							<li class="flex flex-wrap items-center gap-2">
+								<span class="font-mono font-medium">{e.event}</span>
+								{#if e.params.length}<span class="font-mono text-muted-foreground">{e.params.join(', ')}</span>{/if}
+								<span class="text-muted-foreground">· {e.how === 'push' ? 'pushed directly' : 'through a helper (very likely)'}</span>
+								<form method="POST" action="?/keyEventPlan" use:enhance={done('plan')} class="inline"><input type="hidden" name="event" value={e.event} /><input type="hidden" name="params" value={e.params.join(',')} /><button class="underline" disabled={!!busy}>Preview tracking this</button></form>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+				<p class="mt-2 text-muted-foreground">Read {found.read.pages} page(s) and {found.read.scripts} script(s). {found.note}</p>
+			</div>
 		{/if}
 		<form method="POST" action="?/keyEventPlan" use:enhance={done('plan')} class="mt-3 grid gap-2 text-xs sm:grid-cols-[1fr_2fr_1fr_auto] sm:items-end">
 			<label class="grid gap-1"><span class="text-muted-foreground">dataLayer event name</span><input class="input font-mono" name="event" required placeholder="job_alert_signup" value={input?.event ?? ''} autocomplete="off" /></label>

@@ -288,6 +288,22 @@ export async function landingAllChannels(accountId: number, property: string, st
 	return { rows: [...merged.values()], truncated: (r.rows?.length ?? 0) >= LANDING_ROW_LIMIT };
 }
 
+export interface Ga4RealtimeRow { event: string; count: number }
+
+/**
+ * Events in the last 30 minutes (GA4 Realtime, runRealtimeReport; analytics.readonly), by event name, largest first: the quick way to see
+ * that a newly published tag sends what it should, minutes after publishing, while the normal reports take up to a day.
+ */
+export async function realtimeEvents(accountId: number, property: string, http: HttpOptions = {}): Promise<Ga4RealtimeRow[]> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+		tok(accountId),
+		`${DATA}/${property}:runRealtimeReport`,
+		{ method: 'POST', body: JSON.stringify({ dimensions: [{ name: 'eventName' }], metrics: [{ name: 'eventCount' }], orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }], limit: 250 }) },
+		http
+	);
+	return (r.rows ?? []).map((row) => ({ event: row.dimensionValues[0].value, count: Number(row.metricValues[0].value) }));
+}
+
 export interface Ga4SourceRow { source: string; medium: string; channel: string; sessions: number; engagedSessions: number; keyEvents: number }
 
 /** How many source / medium rows a window keeps: the long tail past this is a handful of sessions each. */
