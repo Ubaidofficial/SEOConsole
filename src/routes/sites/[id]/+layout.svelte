@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { privacy } from '$lib/privacy.svelte';
 	import { page } from '$app/state';
-	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import { ChevronDown, RefreshCw, Sparkles } from '@lucide/svelte';
@@ -33,6 +32,21 @@
 	const isActive = (t: string) => (t === '' ? page.url.pathname === base : page.url.pathname.startsWith(base + t));
 	/** A tab from under More that is open right now is shown in the row too, so you can always see where you are. */
 	const activeExtra = $derived(SITE_TABS.map(([t]) => t as string).find((t) => t !== '' && isActive(t) && !(SITE_PRIMARY_TABS as readonly string[]).includes(t)) ?? null);
+	/**
+	 * Sync is a plain endpoint (POST, then a redirect back), not a form action, so `use:enhance` cannot read its answer (it expects a form
+	 * action's JSON and got the HTML page: "Unexpected token '<'"). Post it directly and reload the data; the layout then shows the sync
+	 * running and polls until it ends. Without JavaScript the form still posts normally and the redirect brings you back.
+	 */
+	async function startSync(e: SubmitEvent) {
+		e.preventDefault();
+		const res = await fetch(`${base}/sync`, { method: 'POST', body: new FormData(e.currentTarget as HTMLFormElement), redirect: 'manual' }).catch(() => null);
+		// The endpoint answers 303; with redirect: 'manual' that arrives as an opaque redirect, which is success here.
+		if (!res || (res.type !== 'opaqueredirect' && !res.ok)) {
+			toast.error('Sync could not start', { description: res ? (res.status === 403 ? 'Your role cannot start a sync.' : `The server answered ${res.status}.`) : 'The server could not be reached.' });
+			return;
+		}
+		await invalidateAll();
+	}
 	let moreOpen = $state(false);
 	$effect(() => {
 		void page.url.pathname;
@@ -66,7 +80,7 @@
 		<PeriodPicker days={data.days} latest={data.latest} />
 		{#if data.openseo?.url}<a class="btn" href={data.openseo.url} target="_blank" rel="noreferrer noopener" title={privacy.on ? undefined : `OpenSEO project: ${data.openseo.name}`}>OpenSEO ↗</a>{/if}
 		<a class="btn" href="/chat?draft={encodeURIComponent(`About ${data.site.name}: `)}" title="Open the chat with this site named in the question"><Sparkles class="size-3.5" />Ask about this site</a>
-		<form method="POST" action="{base}/sync" use:enhance><button class="btn" disabled={syncing}><RefreshCw class="size-3.5 {syncing ? 'animate-spin' : ''}" />{syncing ? 'Syncing…' : 'Sync'}</button></form>
+		<form method="POST" action="{base}/sync" onsubmit={startSync}><button class="btn" disabled={syncing}><RefreshCw class="size-3.5 {syncing ? 'animate-spin' : ''}" />{syncing ? 'Syncing…' : 'Sync'}</button></form>
 	</div>
 </div>
 
