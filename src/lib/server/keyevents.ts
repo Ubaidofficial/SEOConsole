@@ -5,6 +5,10 @@ import { linksFor } from './links';
 import { ga4SourceFor, gtmSourceFor } from './channels';
 import { demoGtmWriter, hasGtmWrite, installTagViaWorkspace, realGtmWriter, type GtmTagEditor, type InstallResult, type RawTag } from './gtmwrite';
 import { hasGa4Write } from './ga4write';
+import { checkLiveScript, type LiveCheck } from './gtmlive';
+import type { GtmSource } from './gtm';
+import { discoverEvents, type FoundEvent } from './datalayer';
+import { pagesToScan } from './clarityscan';
 
 /**
  * "Track as a key event": a site already pushes an event to the dataLayer (window.dataLayer.push({event: 'job_alert_signup', …})), and
@@ -105,6 +109,10 @@ export interface KeyEventAdmin {
 	/** Event names already marked as key events on the property. */
 	listKeyEvents(property: string): Promise<string[]>;
 	createKeyEvent(property: string, eventName: string): Promise<void>;
+	/** Parameter names that already have a custom dimension (any scope) on the property. Optional so a test double can leave it out. */
+	listCustomDimensions?(property: string): Promise<string[]>;
+	/** An event-scoped custom dimension for one event parameter, so GA4 reports can use it. */
+	createCustomDimension?(property: string, parameterName: string, description: string): Promise<void>;
 }
 
 export function realEventWriter(accountId: number, http: HttpOptions = {}): GtmEventWriter {
@@ -162,13 +170,33 @@ export function realKeyEventAdmin(accountId: number, http: HttpOptions = {}): Ke
 				if (e instanceof GoogleApiError && e.status === 409) return;
 				throw e;
 			}
+		},
+		async listCustomDimensions(property) {
+			const out: string[] = [];
+			let pageToken = '';
+			do {
+				const q = new URLSearchParams({ pageSize: '200', ...(pageToken ? { pageToken } : {}) });
+				const r = await call<{ customDimensions?: { parameterName?: string }[]; nextPageToken?: string }>(`${ADMIN}/${property}/customDimensions?${q}`);
+				for (const d of r.customDimensions ?? []) if (d.parameterName) out.push(d.parameterName);
+				pageToken = r.nextPageToken ?? '';
+			} while (pageToken);
+			return out;
+		},
+		async createCustomDimension(property, parameterName, description) {
+			// customDimensions.create: parameterName, displayName (letters, digits, underscores, spaces; a letter first), scope EVENT.
+			try {
+				await call(`${ADMIN}/${property}/customDimensions`, { method: 'POST', body: JSON.stringify({ parameterName, displayName: parameterName, scope: 'EVENT', description: description.slice(0, 150) }) });
+			} catch (e) {
+				if (e instanceof GoogleApiError && e.status === 409) return;
+				throw e;
+			}
 		}
 	};
 }
 
 // ── demo ─────────────────────────────────────────────────────────────────────
 /** What the demo "created", so a second run reuses it like a real container would. Keyed by container path / property. */
-export const demoKeyEvents = { items: new Map<string, { variables: Named[]; triggers: Named[]; tags: (Named & { type: string; eventName: string | null })[] }>(), keyEvents: new Map<string, string[]>(), workspaces: new Map<string, { path: string; name: string }[]>(), rewritten: [] as string[] };
+export const demoKeyEvents = { items: new Map<string, { variables: Named[]; triggers: Named[]; tags: (Named & { type: string; eventName: string | null })[] }>(), keyEvents: new Map<string, string[]>(), workspaces: new Map<string, { path: string; name: string }[]>(), rewritten: [] as string[], dimensions: new Map<string, string[]>() };
 
 function demoEventWriter(container: string): GtmEventWriter {
 	const base = demoGtmWriter();
@@ -212,7 +240,9 @@ function demoEventWriter(container: string): GtmEventWriter {
 function demoAdmin(): KeyEventAdmin {
 	return {
 		listKeyEvents: async (p) => [...(demoKeyEvents.keyEvents.get(p) ?? [])],
-		createKeyEvent: async (p, e) => void demoKeyEvents.keyEvents.set(p, [...(demoKeyEvents.keyEvents.get(p) ?? []), e])
+		createKeyEvent: async (p, e) => void demoKeyEvents.keyEvents.set(p, [...(demoKeyEvents.keyEvents.get(p) ?? []), e]),
+		listCustomDimensions: async (p) => [...(demoKeyEvents.dimensions.get(p) ?? [])],
+		createCustomDimension: async (p, name) => void demoKeyEvents.dimensions.set(p, [...(demoKeyEvents.dimensions.get(p) ?? []), name])
 	};
 }
 
@@ -240,6 +270,13 @@ export interface KeyEventPlan {
 	reuseWorkspace?: { path: string; name: string } | null;
 	canPublish?: boolean;
 	publishBlocked?: string;
+	/**
+	 * The live container still has an old-style Google tag for this measurement ID. Since Tag Manager's 2026 Google tag consolidation,
+	 * Tag Manager refuses to build a version with a GA4 event tag next to it ("Conflicting Google tag"), so publishing is refused up front.
+	 */
+	needsConsolidation?: { tag: string } | null;
+	/** Event parameters that will get an event-scoped custom dimension in GA4 (those without one). */
+	newDimensions?: string[];
 }
 export interface KeyEventResult extends InstallResult {
 	/** marked: done now; already: it was one; skipped: no GA4 edit permission or no linked property; failed: see keyEventError. */
@@ -247,8 +284,12 @@ export interface KeyEventResult extends InstallResult {
 	keyEventError?: string;
 	/** Tag Manager already sent this event to GA4, so no workspace was made. */
 	tagAlready?: boolean;
+	/** What the container script Google serves now shows (after a publish, or when the tag was already live). */
+	liveCheck?: LiveCheck;
+	/** Custom dimensions registered for the event's parameters; failures do not fail the run. */
+	customDimensions?: { created: string[]; failed?: string };
 }
-export interface KeyEventDeps { writer?: GtmEventWriter; admin?: KeyEventAdmin; measurementIds?: string[] }
+export interface KeyEventDeps { writer?: GtmEventWriter; admin?: KeyEventAdmin; measurementIds?: string[]; fetchImpl?: typeof fetch; source?: GtmSource }
 
 /** Event name, parameters and measurement ID, checked; or why not. */
 export function checkInput(i: KeyEventInput): { event: string; params: string[]; measurementId: string | null } | { error: string } {
@@ -278,13 +319,13 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 	if (!a.gtm?.account_id || !a.gtmAcc) return { ok: false, error: 'Link a Tag Manager container to this site first (Connect page): the event reaches GA4 through a tag in it.' };
 	if (!hasGtmWrite(a.gtmAcc)) return { ok: false, needsGrant: 'gtm-write', error: 'SEOConsole can read this container but not edit it yet.' };
 	const container = a.gtm.external_id;
-	const src = gtmSourceFor(a.gtmAcc.id);
+	const src = o.source ?? gtmSourceFor(a.gtmAcc.id);
 	const [containers, live] = await Promise.all([src.listContainers(), src.liveVersion(container)]);
 	const publicId = containers.find((x) => x.path === container)?.publicId ?? a.gtm.label ?? container;
 	// The measurement ID: the one asked for, else the linked GA4 property's web stream, else the Google tag already in the container.
 	let measurementId = c.measurementId;
 	if (!measurementId && a.ga4?.account_id) measurementId = (o.measurementIds ?? (await ga4SourceFor(a.ga4.account_id).measurementIds(a.ga4.external_id).catch(() => [])))[0] ?? null;
-	if (!measurementId) measurementId = live?.tags.find((t) => t.type === 'googtag' && t.measurementId)?.measurementId ?? null;
+	if (!measurementId) measurementId = live?.tags.find((t) => (t.type === 'googtag' || t.type === 'dest_ga') && t.measurementId)?.measurementId ?? null;
 	if (!measurementId) return { ok: false, error: 'No GA4 measurement ID found: link a GA4 property to this site, or give the measurement ID (G-…).' };
 	const writer = o.writer ?? (a.gtmAcc.is_demo ? demoEventWriter(container) : realEventWriter(a.gtmAcc.id));
 	const latest = await writer.latestVersionId(container);
@@ -297,7 +338,18 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 	const haveTrigger = !!live?.triggers.some((t) => t.name === triggerName(c.event));
 	const canMarkKeyEvent = !!a.ga4?.account_id && !!a.ga4Acc && hasGa4Write(a.ga4Acc);
 	let alreadyKeyEvent: boolean | null = null;
-	if (canMarkKeyEvent) alreadyKeyEvent = (await (o.admin ?? (a.ga4Acc!.is_demo ? demoAdmin() : realKeyEventAdmin(a.ga4Acc!.id))).listKeyEvents(a.ga4!.external_id)).includes(c.event);
+	let newDimensions: string[] = [];
+	if (canMarkKeyEvent) {
+		const admin = o.admin ?? (a.ga4Acc!.is_demo ? demoAdmin() : realKeyEventAdmin(a.ga4Acc!.id));
+		alreadyKeyEvent = (await admin.listKeyEvents(a.ga4!.external_id)).includes(c.event);
+		if (admin.listCustomDimensions && c.params.length) {
+			const have = new Set(await admin.listCustomDimensions(a.ga4!.external_id).catch(() => c.params));
+			newDimensions = c.params.filter((p) => !have.has(p));
+		}
+	}
+	// An old-style Google tag for the same ID, with no consolidated GA4 destination: Tag Manager will refuse the version.
+	const legacy = alreadyTagged ? undefined : live?.tags.find((t) => t.type === 'googtag' && !t.paused && t.measurementId === measurementId);
+	const needsConsolidation = legacy && !live?.tags.some((t) => t.type === 'dest_ga' && t.measurementId === measurementId) ? { tag: legacy.name } : null;
 	const changes = alreadyTagged
 		? [`Tag Manager already has a GA4 event tag for "${c.event}" in the live version: nothing to add there.`]
 		: [
@@ -306,8 +358,12 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 				haveTrigger ? `Reuse the trigger "${triggerName(c.event)}"` : `Add a Custom Event trigger "${triggerName(c.event)}" for the dataLayer event ${c.event}`,
 				`Add a GA4 Event tag "${tagName(c.event)}" sending ${c.event}${c.params.length ? ` with ${c.params.join(', ')}` : ''} to ${measurementId}`
 			];
-	if (canMarkKeyEvent) changes.push(alreadyKeyEvent ? `GA4 already counts ${c.event} as a key event.` : `In GA4 (${a.ga4!.label ?? a.ga4!.external_id}): mark ${c.event} as a key event.`);
+	if (canMarkKeyEvent) {
+		changes.push(alreadyKeyEvent ? `GA4 already counts ${c.event} as a key event.` : `In GA4 (${a.ga4!.label ?? a.ga4!.external_id}): mark ${c.event} as a key event.`);
+		if (newDimensions.length) changes.push(`In GA4: register event-scoped custom dimensions for ${newDimensions.join(', ')}, so reports can break ${c.event} down by them.`);
+	}
 	else changes.push(a.ga4 ? `GA4: marking ${c.event} as a key event needs Google Analytics edit permission (Allow below), or mark it by hand in GA4 Admin → Key events.` : `GA4: no property linked to this site, so ${c.event} is not marked as a key event; mark it in GA4 Admin → Key events.`);
+	if (needsConsolidation) changes.unshift(`First: the container still has an old-style Google tag ("${needsConsolidation.tag}") for ${measurementId}. Since Tag Manager's 2026 update it refuses a GA4 event tag next to it ("Conflicting Google tag"). In Tag Manager, Submit the workspace and choose Consolidate (or follow the container's optimization banner), publish, then run this again.`);
 	return {
 		ok: true,
 		event: c.event,
@@ -320,9 +376,11 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 		alreadyKeyEvent,
 		canMarkKeyEvent,
 		reuseWorkspace,
+		needsConsolidation,
+		newDimensions,
 		...(canMarkKeyEvent || !a.ga4 ? {} : { needsGrant: 'setup' as const }),
-		canPublish,
-		publishBlocked: canPublish ? undefined : !liveId ? 'The container has never been published, so publishing now would put everything in it live for the first time.' : `The container has a newer version (${latest}) than the live one (${liveId}). Publishing would put that version live too, so SEOConsole only prepares the change for you to publish.`
+		canPublish: canPublish && !needsConsolidation,
+		publishBlocked: needsConsolidation ? `Tag Manager would refuse this version until the old-style Google tag "${needsConsolidation.tag}" is consolidated into the container. Prepare it in a workspace instead ("Create, I'll publish in Tag Manager", or mode workspace) and choose Consolidate there before publishing, or consolidate first and run this again.` : canPublish ? undefined : !liveId ? 'The container has never been published, so publishing now would put everything in it live for the first time.' : `The container has a newer version (${latest}) than the live one (${liveId}). Publishing would put that version live too, so SEOConsole only prepares the change for you to publish.`
 	};
 }
 
@@ -378,15 +436,53 @@ export async function applyKeyEvent(siteId: number, input: KeyEventInput, mode: 
 		);
 		if (!gtm.ok) return gtm;
 	}
-	if (!plan.canMarkKeyEvent) return { ...gtm, tagAlready: plan.alreadyTagged, keyEvent: 'skipped' };
-	if (plan.alreadyKeyEvent) return { ...gtm, tagAlready: plan.alreadyTagged, keyEvent: 'already' };
-	try {
-		await (o.admin ?? (a.ga4Acc!.is_demo ? demoAdmin() : realKeyEventAdmin(a.ga4Acc!.id))).createKeyEvent(a.ga4!.external_id, event);
-		audit('ga4.key_event_created', { siteId, accountId: a.ga4Acc!.id, detail: `${a.ga4!.external_id}: ${event}` });
-		return { ...gtm, tagAlready: plan.alreadyTagged, keyEvent: 'marked' };
-	} catch (e) {
-		const msg = e instanceof Error ? e.message : String(e);
-		audit('ga4.key_event_failed', { siteId, accountId: a.ga4Acc!.id, detail: msg });
-		return { ...gtm, tagAlready: plan.alreadyTagged, keyEvent: 'failed', keyEventError: `Google Analytics said: ${msg}` };
+	const out: KeyEventResult = { ...gtm, tagAlready: plan.alreadyTagged };
+	// GA4: the key event, then a custom dimension per parameter. Neither fails the run: Tag Manager is already done.
+	if (!plan.canMarkKeyEvent) out.keyEvent = 'skipped';
+	else {
+		const admin = o.admin ?? (a.ga4Acc!.is_demo ? demoAdmin() : realKeyEventAdmin(a.ga4Acc!.id));
+		const property = a.ga4!.external_id;
+		if (plan.alreadyKeyEvent) out.keyEvent = 'already';
+		else {
+			try {
+				await admin.createKeyEvent(property, event);
+				audit('ga4.key_event_created', { siteId, accountId: a.ga4Acc!.id, detail: `${property}: ${event}` });
+				out.keyEvent = 'marked';
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e);
+				audit('ga4.key_event_failed', { siteId, accountId: a.ga4Acc!.id, detail: msg });
+				out.keyEvent = 'failed';
+				out.keyEventError = `Google Analytics said: ${msg}`;
+			}
+		}
+		if (plan.newDimensions?.length && admin.createCustomDimension) {
+			const created: string[] = [];
+			try {
+				for (const p of plan.newDimensions) {
+					await admin.createCustomDimension(property, p, `Parameter of the ${event} event, sent from the dataLayer (added by SEOConsole).`);
+					created.push(p);
+				}
+				audit('ga4.custom_dimensions_created', { siteId, accountId: a.ga4Acc!.id, detail: `${property}: ${created.join(', ')}` });
+				out.customDimensions = { created };
+			} catch (e) {
+				// A standard property allows 50 event-scoped custom dimensions; the most likely refusal once that is reached.
+				out.customDimensions = { created, failed: `Google Analytics said: ${e instanceof Error ? e.message : String(e)}` };
+			}
+		}
 	}
+	// What visitors load: only meaningful once something is live.
+	if (out.published || plan.alreadyTagged) out.liveCheck = await checkLiveScript(plan.container!.publicId, [event, measurementId], { demo: !!a.gtmAcc!.is_demo, fetchImpl: o.fetchImpl });
+	return out;
+}
+
+/**
+ * The dataLayer events the site's own JavaScript pushes (see datalayer.ts), as candidates for a key event: read from the home page and the
+ * two pages earning the most clicks, one request at a time. Demo sites get a fixed, labelled answer (their domains do not exist).
+ */
+export async function discoverSiteEvents(siteId: number, o: { fetchImpl?: typeof fetch } = {}): Promise<{ events: FoundEvent[]; read: { pages: number; scripts: number }; note: string; errors?: string[] }> {
+	const demo = !!(db().prepare('SELECT a.is_demo d FROM sites s JOIN accounts a ON a.id = s.account_id WHERE s.id = ?').get(siteId) as { d: number } | undefined)?.d;
+	const note = '"push" = a literal dataLayer.push({event: …}); "helper" = a call to a function that pushes the event, which is very likely but not certain. Events built at run time are not found.';
+	if (demo) return { events: [{ event: 'newsletter_signup', params: ['form_location', 'plan'], how: 'push', where: '/assets/app.js' }, { event: 'quote_request', params: ['product'], how: 'helper', where: '/assets/forms.js' }], read: { pages: 1, scripts: 2 }, note: `Demo site: simulated. ${note}` };
+	const r = await discoverEvents(pagesToScan(siteId), o);
+	return { events: r.events, read: { pages: r.pages, scripts: r.scripts }, note: r.events.length ? note : 'No dataLayer events found in the scripts read. The site may build them at run time, or push none yet.', ...(r.errors.length ? { errors: r.errors } : {}) };
 }

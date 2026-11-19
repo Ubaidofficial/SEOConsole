@@ -3,7 +3,9 @@
 	import Chart from '$lib/components/Chart.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import { ago } from '$lib/format';
-	let { data } = $props();
+	import { enhance } from '$app/forms';
+	let { data, form } = $props();
+	let rtBusy = $state(false);
 	const cols = [
 		{ key: 'channel', label: 'Channel group', type: 'text' as const },
 		{ key: 'sessions', label: 'Sessions', type: 'int' as const },
@@ -55,6 +57,23 @@
 			{/if}
 		</section>
 	{/if}
+	<section class="mt-6">
+		<h2 class="mb-1 font-medium">Right now</h2>
+		<form method="POST" action="?/realtime" use:enhance={() => { rtBusy = true; return async ({ update }) => { await update({ reset: false }); rtBusy = false; }; }} class="mb-2 flex items-center gap-2">
+			<button class="btn text-xs" disabled={rtBusy}>{rtBusy ? 'Asking GA4…' : 'Show the last 30 minutes'}</button>
+			<span class="text-xs text-muted-foreground">GA4 Realtime, read live: the quick check that a new tag sends its event.</span>
+		</form>
+		{#if form?.realtime}
+			{@const rt = form.realtime}
+			{#if !rt.linked}<p class="text-xs text-muted-foreground">No GA4 property is linked.</p>
+			{:else if !rt.ok}<p class="text-xs text-warn">GA4 Realtime could not be read: {rt.error}</p>
+			{:else if !rt.events.length}<p class="text-xs text-muted-foreground">No events in the last 30 minutes.</p>
+			{:else}
+				<DataTable rows={rt.events} cols={[{ key: 'event', label: 'Event (last 30 min)', type: 'text' }, { key: 'count', label: 'Count', type: 'int', bar: true }]} sortKey="count" filterable={false} pageSize={10} />
+				{#if rt.demo}<p class="mt-1 text-xs text-muted-foreground">Demo data.</p>{/if}
+			{/if}
+		{/if}
+	</section>
 	{#if data.keyEvents.linked}
 		<section class="mt-6">
 			<h2 class="mb-1 font-medium">Key events by name</h2>
