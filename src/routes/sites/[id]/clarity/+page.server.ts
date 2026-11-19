@@ -37,7 +37,7 @@ export const load: PageServerLoad = ({ params }) => {
 		.map((r) => {
 			const traffic = (JSON.parse(r.payload) as ClarityMetric[]).find((m) => m.metricName === 'Traffic')?.information ?? [];
 			const sum = (k: string) => traffic.reduce((a, x) => a + Number(x[k] ?? 0), 0);
-			return { day: r.day, sessions: sum('totalSessionCount'), botSessions: sum('totalBotSessionCount'), users: sum('distantUserCount') };
+			return { day: r.day, sessions: sum('totalSessionCount'), botSessions: sum('totalBotSessionCount'), users: sum('distinctUserCount') || sum('distantUserCount') };
 		})
 		.reverse();
 	return {

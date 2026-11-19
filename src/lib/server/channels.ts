@@ -2,7 +2,7 @@ import { db } from './db';
 import { config } from './config';
 import { RealBingClient, type BingClient, type BingLinksClient } from './bing';
 import { bingLinksDue, syncBingLinks } from './binglinks';
-import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGtmContainers, demoGtmLive } from './demo-channels';
+import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGtmContainers, demoGtmLive } from './demo-channels';
 import { callsLeft, CLARITY_FRESH_MS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
 import * as ga4 from './ga4';
 import * as gtm from './gtm';
@@ -36,6 +36,8 @@ export interface Ga4Source {
 	aiDaily?(property: string, start: string, end: string): Promise<ga4.Ga4AiDay[]>;
 	/** Sessions by source / medium over a whole window (which sites and campaigns send traffic). Optional so a test double can leave it out. */
 	sources?(property: string, start: string, end: string): Promise<ga4.Ga4SourceRow[]>;
+	/** Sessions by day for one dimension (country, device, new vs returning). Optional so a test double can leave it out. */
+	dimDaily?(property: string, dim: ga4.Ga4Dim, start: string, end: string): Promise<ga4.Ga4DimDay[]>;
 }
 
 export function ga4SourceFor(accountId: number): Ga4Source {
@@ -53,7 +55,8 @@ export function ga4SourceFor(accountId: number): Ga4Source {
 			aiTraffic: (property, s, e) => demoGa4AiTraffic(property, s, e),
 			organicDaily: (property, s, e) => demoGa4OrganicDaily(property, s, e),
 			aiDaily: async (property, s, e) => demoGa4AiDaily(property, s, e),
-			sources: async (property, s, e) => demoGa4Sources(property, s, e)
+			sources: async (property, s, e) => demoGa4Sources(property, s, e),
+			dimDaily: async (property, dim, s, e) => demoGa4DimDaily(property, dim, s, e)
 		};
 	}
 	return {
@@ -66,7 +69,8 @@ export function ga4SourceFor(accountId: number): Ga4Source {
 		aiTraffic: (p, s, e) => ga4.aiAssistantTraffic(accountId, p, s, e),
 		organicDaily: (p, s, e) => ga4.organicLandingDaily(accountId, p, s, e),
 		aiDaily: (p, s, e) => ga4.aiAssistantDaily(accountId, p, s, e),
-		sources: (p, s, e) => ga4.trafficSources(accountId, p, s, e)
+		sources: (p, s, e) => ga4.trafficSources(accountId, p, s, e),
+		dimDaily: (p, dim, s, e) => ga4.dailyByDimension(accountId, p, dim, s, e)
 	};
 }
 
@@ -197,6 +201,33 @@ export async function pullGa4Sources(siteId: number, property: string, src: Ga4S
 	}
 }
 
+/**
+ * Sessions by day by country, device category and new vs returning, for the all-sources dashboard. Like the channel data: the
+ * whole retained history the first time a dimension is pulled, then the last 10 days (GA4 reprocesses recent days). Extra data: a
+ * failure is recorded on the site and retried on the next sync, and never fails it. Never throws.
+ */
+export async function pullGa4Dims(siteId: number, property: string, src: Ga4Source, today: string): Promise<{ ok: boolean }> {
+	if (!src.dimDaily) return { ok: true };
+	const d = db();
+	const ins = d.prepare('INSERT OR REPLACE INTO ga4_dim_daily VALUES (?,?,?,?,?,?,?,?)');
+	try {
+		for (const dim of Object.keys(ga4.GA4_DIMS) as ga4.Ga4Dim[]) {
+			const have = !!d.prepare('SELECT 1 FROM ga4_dim_daily WHERE site_id = ? AND dim = ? LIMIT 1').get(siteId, dim);
+			const start = have ? addDays(today, -10) : retentionHorizon(today);
+			const rows = await src.dimDaily(property, dim, start, today);
+			d.transaction(() => {
+				d.prepare('DELETE FROM ga4_dim_daily WHERE site_id = ? AND dim = ? AND date >= ?').run(siteId, dim, start);
+				for (const r of rows) ins.run(siteId, dim, r.date, r.value, r.sessions, r.engagedSessions, r.keyEvents, r.pageviews);
+			})();
+		}
+		d.prepare('UPDATE sites SET ga4_dims_error = NULL WHERE id = ?').run(siteId);
+		return { ok: true };
+	} catch (e) {
+		d.prepare('UPDATE sites SET ga4_dims_error = ? WHERE id = ?').run((e instanceof Error ? e.message : String(e)).slice(0, 500), siteId);
+		return { ok: false };
+	}
+}
+
 // ── sync: GA4 ────────────────────────────────────────────────────────────────
 export async function syncGa4(siteId: number, source?: Ga4Source, today = pacificToday()) {
 	const link = linksFor(siteId).ga4;
@@ -217,6 +248,7 @@ export async function syncGa4(siteId: number, source?: Ga4Source, today = pacifi
 		const periods = await pullGa4Periods(siteId, link.external_id, src, today);
 		// Recorded on the site and shown with the sources table; it does not change the sync status.
 		await pullGa4Sources(siteId, link.external_id, src, today);
+		await pullGa4Dims(siteId, link.external_id, src, today);
 		markLink(siteId, 'ga4', 'idle', periods.ok ? null : 'Daily data synced; user and landing-page reports could not be fetched (will retry).', true);
 		return { rows: rows.length };
 	} catch (e) {

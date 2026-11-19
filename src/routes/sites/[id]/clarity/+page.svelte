@@ -14,7 +14,7 @@
 	const headline = $derived.by(() => {
 		const t = (data.linked && data.totals?.metrics.find((m: Metric) => m.metricName === 'Traffic')?.information) || [];
 		const sum = (k: string) => t.reduce((a: number, x: Record<string, string | number>) => a + Number(x[k] ?? 0), 0);
-		return { sessions: sum('totalSessionCount'), bots: sum('totalBotSessionCount'), users: sum('distantUserCount') };
+		return { sessions: sum('totalSessionCount'), bots: sum('totalBotSessionCount'), users: sum('distinctUserCount') || sum('distantUserCount') };
 	});
 </script>
 

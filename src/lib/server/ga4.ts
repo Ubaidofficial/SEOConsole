@@ -174,6 +174,46 @@ export async function aiAssistantTraffic(accountId: number, property: string, st
 	return [...merged.values()];
 }
 
+/** Breakdowns stored by day, so any period (24h included) can be summed: GA4 dimension name → what the app calls it. */
+export const GA4_DIMS = { country: 'country', deviceCategory: 'device', newVsReturning: 'visitor' } as const;
+export type Ga4Dim = keyof typeof GA4_DIMS;
+export interface Ga4DimDay { date: string; value: string; sessions: number; engagedSessions: number; keyEvents: number; pageviews: number }
+
+/**
+ * Sessions, engaged sessions, key events and views by day for one dimension (country, device category, new vs returning). Paged
+ * (100,000 rows a request); a load past the cap throws rather than storing a partial history whose newest days are missing.
+ */
+export async function dailyByDimension(accountId: number, property: string, dim: Ga4Dim, startDate: string, endDate: string, http: HttpOptions = {}): Promise<Ga4DimDay[]> {
+	const LIMIT = 100_000;
+	const MAX_ROWS = 400_000;
+	const out: Ga4DimDay[] = [];
+	for (let offset = 0; offset < MAX_ROWS; offset += LIMIT) {
+		const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+			tok(accountId),
+			`${DATA}/${property}:runReport`,
+			{
+				method: 'POST',
+				body: JSON.stringify({
+					dateRanges: [{ startDate, endDate }],
+					dimensions: [{ name: 'date' }, { name: dim }],
+					metrics: ['sessions', 'engagedSessions', 'keyEvents', 'screenPageViews'].map((name) => ({ name })),
+					orderBys: [{ dimension: { dimensionName: 'date' } }, { dimension: { dimensionName: dim } }],
+					limit: LIMIT,
+					offset
+				})
+			},
+			http
+		);
+		const rows = r.rows ?? [];
+		for (const row of rows) {
+			const m = row.metricValues.map((v) => Number(v.value));
+			out.push({ date: ymd(row.dimensionValues[0].value), value: row.dimensionValues[1].value || '(not set)', sessions: m[0], engagedSessions: m[1], keyEvents: m[2], pageviews: m[3] });
+		}
+		if (rows.length < LIMIT) return out;
+	}
+	throw new Error(`GA4 returned more than ${MAX_ROWS.toLocaleString('en-US')} ${dim} rows for ${startDate} to ${endDate}.`);
+}
+
 export interface Ga4SourceRow { source: string; medium: string; channel: string; sessions: number; engagedSessions: number; keyEvents: number }
 
 /** How many source / medium rows a window keeps: the long tail past this is a handful of sessions each. */

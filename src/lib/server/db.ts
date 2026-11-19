@@ -247,6 +247,17 @@ CREATE TABLE IF NOT EXISTS ga4_ai_prev (
 	pulled_on TEXT NOT NULL,
 	PRIMARY KEY (site_id, days, assistant, page)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS ga4_dim_daily (
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	dim TEXT NOT NULL,                  -- country | deviceCategory | newVsReturning (GA4 dimension names)
+	date TEXT NOT NULL,
+	value TEXT NOT NULL,                -- e.g. United States, mobile, new
+	sessions INTEGER NOT NULL,
+	engaged_sessions INTEGER NOT NULL,
+	key_events REAL NOT NULL,
+	pageviews INTEGER NOT NULL,
+	PRIMARY KEY (site_id, dim, date, value)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS ga4_sources (
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	days INTEGER NOT NULL,              -- window length
@@ -745,6 +756,8 @@ function migrate(db: Database.Database) {
 	// Traffic sources: day of the last successful pull, and the last failure's message (cleared on success).
 	if (!cols('sites').includes('ga4_sources_on')) db.exec('ALTER TABLE sites ADD COLUMN ga4_sources_on TEXT');
 	if (!cols('sites').includes('ga4_sources_error')) db.exec('ALTER TABLE sites ADD COLUMN ga4_sources_error TEXT');
+	// Country / device / new-vs-returning by day: the last failure's message (cleared on success).
+	if (!cols('sites').includes('ga4_dims_error')) db.exec('ALTER TABLE sites ADD COLUMN ga4_dims_error TEXT');
 	if (!cols('sitemap_urls').includes('lastmod_bad')) db.exec('ALTER TABLE sitemap_urls ADD COLUMN lastmod_bad INTEGER NOT NULL DEFAULT 0');
 	if (!cols('index_watch').includes('source')) db.exec('ALTER TABLE index_watch ADD COLUMN source TEXT');
 	// read | submit | delete. Databases from the on/off "can make changes" switch (can_write) carry it over once, as the submit level.

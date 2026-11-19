@@ -1,5 +1,5 @@
 import type { BingClient, BingDay, BingLinksClient, BingSite, BingTermRow } from './bing';
-import type { Ga4Day, Ga4Property, Ga4SourceRow } from './ga4';
+import type { Ga4Day, Ga4Dim, Ga4DimDay, Ga4Property, Ga4SourceRow } from './ga4';
 import type { ClarityMetric } from './clarity';
 import type { GtmContainer, GtmLive } from './gtm';
 import { DEMO_ACCOUNTS, DEMO_HISTORY_DAYS, DemoClient, demoSearches, h01, plantedQuery } from './demo';
@@ -232,6 +232,35 @@ export function demoGa4Sources(property: string, startDate: string, endDate: str
 		out.push(...parts.filter((x) => x.sessions > 0));
 	}
 	return out.sort((a, b) => b.sessions - a.sessions);
+}
+
+/** How a demo day's sessions split by country, device and new vs returning. Shares in a dimension add up to 1. */
+const DEMO_DIM_SHARES: Record<Ga4Dim, [string, number][]> = {
+	country: [['United States', 0.46], ['United Kingdom', 0.14], ['Canada', 0.09], ['Germany', 0.08], ['India', 0.07], ['Australia', 0.06], ['Netherlands', 0.05], ['France', 0.05]],
+	deviceCategory: [['mobile', 0.58], ['desktop', 0.38], ['tablet', 0.04]],
+	newVsReturning: [['new', 0.71], ['returning', 0.27], ['(not set)', 0.02]]
+};
+
+/** Sessions by day for one dimension, consistent with the demo daily totals (the first value takes the rounding). */
+export function demoGa4DimDaily(property: string, dim: Ga4Dim, startDate: string, endDate: string): Ga4DimDay[] {
+	const byDate = new Map<string, { sessions: number; engaged: number; keyEvents: number; pageviews: number }>();
+	for (const r of demoGa4Daily(property, startDate, endDate)) {
+		const cur = byDate.get(r.date) ?? { sessions: 0, engaged: 0, keyEvents: 0, pageviews: 0 };
+		cur.sessions += r.sessions;
+		cur.engaged += r.engagedSessions;
+		cur.keyEvents += r.keyEvents;
+		cur.pageviews += r.pageviews;
+		byDate.set(r.date, cur);
+	}
+	const out: Ga4DimDay[] = [];
+	for (const [date, t] of byDate) {
+		const parts = DEMO_DIM_SHARES[dim].map(([value, share]) => ({ date, value, sessions: Math.floor(t.sessions * share), engagedSessions: Math.floor(t.engaged * share), keyEvents: Math.round(t.keyEvents * share * 10) / 10, pageviews: Math.floor(t.pageviews * share) }));
+		parts[0].sessions += t.sessions - parts.reduce((a, b) => a + b.sessions, 0);
+		parts[0].engagedSessions += t.engaged - parts.reduce((a, b) => a + b.engagedSessions, 0);
+		parts[0].pageviews += t.pageviews - parts.reduce((a, b) => a + b.pageviews, 0);
+		out.push(...parts.filter((x) => x.sessions > 0));
+	}
+	return out;
 }
 
 /** A fetch stand-in so the real budget/sync code path runs against synthetic Clarity data. */
