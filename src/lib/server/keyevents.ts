@@ -3,7 +3,7 @@ import { db, audit } from './db';
 import { config } from './config';
 import { linksFor } from './links';
 import { ga4SourceFor, gtmSourceFor } from './channels';
-import { demoGtmWriter, hasGtmWrite, installTagViaWorkspace, realGtmWriter, type GtmWriter, type InstallResult } from './gtmwrite';
+import { demoGtmWriter, hasGtmWrite, installTagViaWorkspace, realGtmWriter, type GtmTagEditor, type InstallResult, type RawTag } from './gtmwrite';
 import { hasGa4Write } from './ga4write';
 
 /**
@@ -85,14 +85,17 @@ export function tagBody(event: string, measurementId: string, params: string[], 
 
 // ── Google clients ───────────────────────────────────────────────────────────
 type Named = { id: string; name: string };
-/** What this flow needs from Tag Manager on top of the shared writer: the items already in a workspace, and creating variables and triggers. */
-export interface GtmEventWriter extends GtmWriter {
+/**
+ * What this flow needs from Tag Manager on top of the shared writer (which can already read and rewrite a tag): the items already in a
+ * workspace, creating variables and triggers, and the container's workspaces. No delete: deleting a workspace needs Google's
+ * tagmanager.delete.containers permission, which also allows deleting whole containers, so SEOConsole reuses its own leftover workspace instead.
+ */
+export interface GtmEventWriter extends GtmTagEditor {
 	list(workspace: string): Promise<{ variables: Named[]; triggers: Named[]; tags: (Named & { type: string; eventName: string | null })[] }>;
 	createVariable(workspace: string, body: object): Promise<{ variableId: string }>;
 	createTrigger(workspace: string, body: object): Promise<{ triggerId: string }>;
 	/** The container's workspaces (path, name). */
 	listWorkspaces(container: string): Promise<{ path: string; name: string }[]>;
-	deleteWorkspace(workspace: string): Promise<void>;
 }
 
 /** The name prefix of the workspaces this flow creates for one event; a leftover one is an earlier attempt that never became a version. */
@@ -133,9 +136,6 @@ export function realEventWriter(accountId: number, http: HttpOptions = {}): GtmE
 		async listWorkspaces(container) {
 			const r = await call<{ workspace?: { path?: string; name?: string }[] }>(`${GTM}/${container}/workspaces`);
 			return (r.workspace ?? []).filter((w) => w.path).map((w) => ({ path: w.path!, name: w.name ?? '' }));
-		},
-		async deleteWorkspace(ws) {
-			await call(`${GTM}/${ws}`, { method: 'DELETE' });
 		}
 	};
 }
@@ -168,7 +168,7 @@ export function realKeyEventAdmin(accountId: number, http: HttpOptions = {}): Ke
 
 // ── demo ─────────────────────────────────────────────────────────────────────
 /** What the demo "created", so a second run reuses it like a real container would. Keyed by container path / property. */
-export const demoKeyEvents = { items: new Map<string, { variables: Named[]; triggers: Named[]; tags: (Named & { type: string; eventName: string | null })[] }>(), keyEvents: new Map<string, string[]>(), workspaces: new Map<string, { path: string; name: string }[]>() };
+export const demoKeyEvents = { items: new Map<string, { variables: Named[]; triggers: Named[]; tags: (Named & { type: string; eventName: string | null })[] }>(), keyEvents: new Map<string, string[]>(), workspaces: new Map<string, { path: string; name: string }[]>(), rewritten: [] as string[] };
 
 function demoEventWriter(container: string): GtmEventWriter {
 	const base = demoGtmWriter();
@@ -191,8 +191,14 @@ function demoEventWriter(container: string): GtmEventWriter {
 			return { triggerId: id };
 		},
 		listWorkspaces: async (c) => [...(demoKeyEvents.workspaces.get(c) ?? [])],
-		deleteWorkspace: async (w) => {
-			for (const [c, list] of demoKeyEvents.workspaces) demoKeyEvents.workspaces.set(c, list.filter((x) => x.path !== w));
+		getTag: async (_w, tagId) => {
+			const t = items().tags.find((x) => x.id === tagId);
+			return { tagId, name: t?.name, type: t?.type, fingerprint: 'demo', parameter: [{ type: 'template', key: 'eventName', value: t?.eventName ?? '' }] };
+		},
+		updateTag: async (_w, tagId, tag) => {
+			const t = items().tags.find((x) => x.id === tagId);
+			if (t) t.name = tag.name ?? t.name;
+			demoKeyEvents.rewritten.push(tagId);
 		},
 		createTag: async (_w, body) => {
 			const b = body as { name: string; type: string; parameter: { key: string; value?: string }[] };
@@ -230,8 +236,8 @@ export interface KeyEventPlan {
 	alreadyKeyEvent?: boolean | null;
 	/** SEOConsole may mark the key event (GA4 linked and editable). */
 	canMarkKeyEvent?: boolean;
-	/** Workspaces an earlier attempt for this event left behind (never turned into a version); deleted before the new one is made. */
-	staleWorkspaces?: { path: string; name: string }[];
+	/** A workspace an earlier run for this event left behind (never turned into a version): the change is made in it instead of a new one. */
+	reuseWorkspace?: { path: string; name: string } | null;
 	canPublish?: boolean;
 	publishBlocked?: string;
 }
@@ -286,7 +292,7 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 	const canPublish = !!liveId && latest === liveId;
 	const alreadyTagged = !!live?.tags.some((t) => t.type === 'gaawe' && t.eventName === c.event && !t.paused);
 	// Only workspaces this flow named for this very event: someone else's work is never touched.
-	const staleWorkspaces = alreadyTagged ? [] : (await writer.listWorkspaces(container)).filter((w) => w.name.startsWith(workspacePrefix(c.event)));
+	const reuseWorkspace = alreadyTagged ? null : ((await writer.listWorkspaces(container)).find((w) => w.name.startsWith(workspacePrefix(c.event))) ?? null);
 	const haveVar = new Set(live?.variables.map((v) => v.name));
 	const haveTrigger = !!live?.triggers.some((t) => t.name === triggerName(c.event));
 	const canMarkKeyEvent = !!a.ga4?.account_id && !!a.ga4Acc && hasGa4Write(a.ga4Acc);
@@ -295,7 +301,7 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 	const changes = alreadyTagged
 		? [`Tag Manager already has a GA4 event tag for "${c.event}" in the live version: nothing to add there.`]
 		: [
-				...staleWorkspaces.map((w) => `Delete the workspace "${w.name}" from an earlier SEOConsole run for this event that was never published`),
+				...(reuseWorkspace ? [`Work in the workspace "${reuseWorkspace.name}" from an earlier SEOConsole run for this event that was never published, instead of making a new one; its GA4 event tag is rewritten`] : []),
 				...c.params.map((p) => (haveVar.has(variableName(p)) ? `Reuse the variable "${variableName(p)}"` : `Add a Data Layer Variable "${variableName(p)}" reading ${p}`)),
 				haveTrigger ? `Reuse the trigger "${triggerName(c.event)}"` : `Add a Custom Event trigger "${triggerName(c.event)}" for the dataLayer event ${c.event}`,
 				`Add a GA4 Event tag "${tagName(c.event)}" sending ${c.event}${c.params.length ? ` with ${c.params.join(', ')}` : ''} to ${measurementId}`
@@ -313,7 +319,7 @@ export async function planKeyEvent(siteId: number, input: KeyEventInput, o: KeyE
 		alreadyTagged,
 		alreadyKeyEvent,
 		canMarkKeyEvent,
-		staleWorkspaces,
+		reuseWorkspace,
 		...(canMarkKeyEvent || !a.ga4 ? {} : { needsGrant: 'setup' as const }),
 		canPublish,
 		publishBlocked: canPublish ? undefined : !liveId ? 'The container has never been published, so publishing now would put everything in it live for the first time.' : `The container has a newer version (${latest}) than the live one (${liveId}). Publishing would put that version live too, so SEOConsole only prepares the change for you to publish.`
@@ -333,14 +339,7 @@ export async function applyKeyEvent(siteId: number, input: KeyEventInput, mode: 
 	let gtm: InstallResult = { ok: true, published: false };
 	if (!plan.alreadyTagged) {
 		const writer = o.writer ?? (a.gtmAcc!.is_demo ? demoEventWriter(plan.container!.path) : realEventWriter(a.gtmAcc!.id));
-		for (const w of plan.staleWorkspaces ?? []) {
-			try {
-				await writer.deleteWorkspace(w.path);
-				audit('gtm.key_event_workspace_deleted', { siteId, accountId: a.gtmAcc!.id, detail: `${plan.container!.publicId}: ${w.name}` });
-			} catch (e) {
-				return { ok: false, published: false, error: `Could not delete the earlier workspace "${w.name}": ${e instanceof Error ? e.message : String(e)}. Delete it in Tag Manager and try again.` };
-			}
-		}
+		const reuse = plan.reuseWorkspace ? { path: plan.reuseWorkspace.path, workspaceId: plan.reuseWorkspace.path.split('/').pop()! } : undefined;
 		gtm = await installTagViaWorkspace(
 			writer,
 			{
@@ -350,20 +349,29 @@ export async function applyKeyEvent(siteId: number, input: KeyEventInput, mode: 
 				container: plan.container!.path,
 				publicId: plan.container!.publicId,
 				audit: 'gtm.key_event',
-				// no colon: Tag Manager rejects ":" in a name
-				workspaceName: `${workspacePrefix(event)}${new Date().toISOString().slice(0, 10)}`.slice(0, 100),
+				existing: reuse,
+				// no colon (Tag Manager rejects ":" in a name); the time keeps two runs on one day from clashing ("Found entity with duplicate name")
+				workspaceName: `${workspacePrefix(event)}${new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '-')}`.slice(0, 100),
 				workspaceDescription: `Sends the dataLayer event ${event} to GA4 (${measurementId}). Created from SEOConsole.`,
 				versionName: `Track ${event} in GA4 (SEOConsole)`.slice(0, 100),
 				versionNotes: `GA4 event tag for the dataLayer event ${event}${params.length ? `, with ${params.join(', ')}` : ''}, sent to ${measurementId}.`,
 				what: `GA4 event ${event}`,
 				apply: async (ws) => {
-					// The new workspace starts from the newest version: reuse what is already there under the same names.
+					// The workspace starts from the newest version (or is our earlier one): reuse what is already there under the same names.
 					const have = await writer.list(ws.path);
-					if (have.tags.some((t) => t.type === 'gaawe' && t.eventName === event)) return;
 					const vars = new Set(have.variables.map((v) => v.name));
 					for (const p of params) if (!vars.has(variableName(p))) await writer.createVariable(ws.path, variableBody(p));
 					const trig = have.triggers.find((t) => t.name === triggerName(event))?.id ?? (await writer.createTrigger(ws.path, triggerBody(event))).triggerId;
-					await writer.createTag(ws.path, tagBody(event, measurementId, params, trig));
+					const body = tagBody(event, measurementId, params, trig);
+					const ours = have.tags.find((t) => t.type === 'gaawe' && (t.eventName === event || t.name === tagName(event)));
+					if (!ours) await writer.createTag(ws.path, body);
+					// A tag an earlier run wrote (perhaps the way Tag Manager refused): rewrite it whole, keeping its ID; the fingerprint makes
+					// Tag Manager refuse the write if the tag changed since it was read.
+					else if (ours.name === tagName(event)) {
+						const current: RawTag = await writer.getTag(ws.path, ours.id);
+						await writer.updateTag(ws.path, ours.id, { ...body, tagId: ours.id, ...(current.fingerprint ? { fingerprint: current.fingerprint } : {}) });
+					}
+					// a GA4 event tag for this event that someone else made is left as it is
 				}
 			},
 			mode
