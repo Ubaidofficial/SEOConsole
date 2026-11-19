@@ -167,6 +167,15 @@ describe('plan and apply on demo data', () => {
 		expect(updated[0].tag.parameter).toContainEqual({ type: 'boolean', key: 'migratedToV2', value: 'true' });
 	});
 
+	it('says when GA4 will not list custom dimensions, instead of skipping them silently', async () => {
+		const admin = { listKeyEvents: async () => [], createKeyEvent: async () => {}, listCustomDimensions: async () => { throw new Error('The caller does not have permission'); }, createCustomDimension: async () => { throw new Error('must not be called'); } };
+		const p = await planKeyEvent(siteId, { event: 'job_alert_signup', params: ['alert_form'] }, { source: consolidated(), admin });
+		expect(p.newDimensions).toEqual([]);
+		expect(p.changes!.at(-1)).toMatch(/could not read the property's custom dimensions \(The caller does not have permission\)/);
+		const ok = await planKeyEvent(siteId, { event: 'job_alert_signup', params: ['alert_form'] }, { source: consolidated(), admin: { ...admin, listCustomDimensions: async () => ['alert_form'] } });
+		expect(ok.changes!.at(-1)).toBe('GA4 already has custom dimensions for alert_form.');
+	});
+
 	it('refuses without permission, on a read-only server, and for bad input; MCP preview changes nothing', async () => {
 		expect(await planKeyEvent(siteId, { event: 'bad-name' })).toMatchObject({ ok: false });
 		process.env.READ_ONLY = '1';
