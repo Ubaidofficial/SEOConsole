@@ -174,6 +174,152 @@ export async function aiAssistantTraffic(accountId: number, property: string, st
 	return [...merged.values()];
 }
 
+/** Breakdowns stored by day, so any period (24h included) can be summed: GA4 dimension name → what the app calls it. */
+export const GA4_DIMS = { country: 'country', deviceCategory: 'device', newVsReturning: 'visitor' } as const;
+export type Ga4Dim = keyof typeof GA4_DIMS;
+export interface Ga4DimDay { date: string; value: string; sessions: number; engagedSessions: number; keyEvents: number; pageviews: number }
+
+/**
+ * Sessions, engaged sessions, key events and views by day for one dimension (country, device category, new vs returning). Paged
+ * (100,000 rows a request); a load past the cap throws rather than storing a partial history whose newest days are missing.
+ */
+export async function dailyByDimension(accountId: number, property: string, dim: Ga4Dim, startDate: string, endDate: string, http: HttpOptions = {}): Promise<Ga4DimDay[]> {
+	const LIMIT = 100_000;
+	const MAX_ROWS = 400_000;
+	const out: Ga4DimDay[] = [];
+	for (let offset = 0; offset < MAX_ROWS; offset += LIMIT) {
+		const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+			tok(accountId),
+			`${DATA}/${property}:runReport`,
+			{
+				method: 'POST',
+				body: JSON.stringify({
+					dateRanges: [{ startDate, endDate }],
+					dimensions: [{ name: 'date' }, { name: dim }],
+					metrics: ['sessions', 'engagedSessions', 'keyEvents', 'screenPageViews'].map((name) => ({ name })),
+					orderBys: [{ dimension: { dimensionName: 'date' } }, { dimension: { dimensionName: dim } }],
+					limit: LIMIT,
+					offset
+				})
+			},
+			http
+		);
+		const rows = r.rows ?? [];
+		for (const row of rows) {
+			const m = row.metricValues.map((v) => Number(v.value));
+			out.push({ date: ymd(row.dimensionValues[0].value), value: row.dimensionValues[1].value || '(not set)', sessions: m[0], engagedSessions: m[1], keyEvents: m[2], pageviews: m[3] });
+		}
+		if (rows.length < LIMIT) return out;
+	}
+	throw new Error(`GA4 returned more than ${MAX_ROWS.toLocaleString('en-US')} ${dim} rows for ${startDate} to ${endDate}.`);
+}
+
+export interface Ga4EventDay { date: string; event: string; keyEvents: number; eventCount: number }
+
+/**
+ * Key events by day and event name (sign_up, purchase, …): which conversions happen, not just how many. Only events marked as key
+ * events in GA4 have a non-zero `keyEvents`, so the rest are filtered out on GA4's side. Paged like dailyByDimension.
+ */
+export async function keyEventsDaily(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}): Promise<Ga4EventDay[]> {
+	const LIMIT = 100_000;
+	const MAX_ROWS = 300_000;
+	const out: Ga4EventDay[] = [];
+	for (let offset = 0; offset < MAX_ROWS; offset += LIMIT) {
+		const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+			tok(accountId),
+			`${DATA}/${property}:runReport`,
+			{
+				method: 'POST',
+				body: JSON.stringify({
+					dateRanges: [{ startDate, endDate }],
+					dimensions: [{ name: 'date' }, { name: 'eventName' }],
+					metrics: [{ name: 'keyEvents' }, { name: 'eventCount' }],
+					metricFilter: { filter: { fieldName: 'keyEvents', numericFilter: { operation: 'GREATER_THAN', value: { doubleValue: 0 } } } },
+					orderBys: [{ dimension: { dimensionName: 'date' } }, { dimension: { dimensionName: 'eventName' } }],
+					limit: LIMIT,
+					offset
+				})
+			},
+			http
+		);
+		const rows = r.rows ?? [];
+		for (const row of rows) out.push({ date: ymd(row.dimensionValues[0].value), event: row.dimensionValues[1].value, keyEvents: Number(row.metricValues[0].value), eventCount: Number(row.metricValues[1].value) });
+		if (rows.length < LIMIT) return out;
+	}
+	throw new Error(`GA4 returned more than ${MAX_ROWS.toLocaleString('en-US')} key-event rows for ${startDate} to ${endDate}.`);
+}
+
+export interface Ga4LandingChannel { page: string; channel: string; sessions: number; engagedSessions: number; keyEvents: number }
+/** How many landing page × channel rows a window keeps (largest first). */
+export const LANDING_ROW_LIMIT = 10_000;
+
+/**
+ * Sessions by landing page and channel group over a whole window, every channel (organic, direct, referral, social, email…), so a
+ * page that lives on referral or social traffic shows up too. Rows that differ only by query string are merged.
+ */
+export async function landingAllChannels(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}): Promise<{ rows: Ga4LandingChannel[]; truncated: boolean }> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				dateRanges: [{ startDate, endDate }],
+				dimensions: [{ name: 'landingPagePlusQueryString' }, { name: 'sessionDefaultChannelGroup' }],
+				metrics: ['sessions', 'engagedSessions', 'keyEvents'].map((name) => ({ name })),
+				orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+				limit: LANDING_ROW_LIMIT
+			})
+		},
+		http
+	);
+	const merged = new Map<string, Ga4LandingChannel>();
+	for (const row of r.rows ?? []) {
+		const page = landingPath(row.dimensionValues[0].value);
+		const channel = row.dimensionValues[1].value;
+		const m = row.metricValues.map((v) => Number(v.value));
+		const k = `${page}\n${channel}`;
+		const cur = merged.get(k) ?? { page, channel, sessions: 0, engagedSessions: 0, keyEvents: 0 };
+		cur.sessions += m[0];
+		cur.engagedSessions += m[1];
+		cur.keyEvents += m[2];
+		merged.set(k, cur);
+	}
+	return { rows: [...merged.values()], truncated: (r.rows?.length ?? 0) >= LANDING_ROW_LIMIT };
+}
+
+export interface Ga4SourceRow { source: string; medium: string; channel: string; sessions: number; engagedSessions: number; keyEvents: number }
+
+/** How many source / medium rows a window keeps: the long tail past this is a handful of sessions each. */
+export const SOURCE_ROW_LIMIT = 1000;
+
+/**
+ * Sessions by source and medium (with the channel group GA4 put them in) over a whole window: which sites, newsletters and
+ * campaigns send traffic, e.g. `example.com / referral`. Every channel, Direct included, so a link that arrives without a referrer
+ * is visible as `(direct) / (none)` rather than missing. The largest SOURCE_ROW_LIMIT rows by sessions.
+ */
+export async function trafficSources(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}): Promise<Ga4SourceRow[]> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				dateRanges: [{ startDate, endDate }],
+				dimensions: [{ name: 'sessionSource' }, { name: 'sessionMedium' }, { name: 'sessionDefaultChannelGroup' }],
+				metrics: ['sessions', 'engagedSessions', 'keyEvents'].map((name) => ({ name })),
+				orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+				limit: SOURCE_ROW_LIMIT
+			})
+		},
+		http
+	);
+	return (r.rows ?? []).map((row) => {
+		const m = row.metricValues.map((v) => Number(v.value));
+		return { source: row.dimensionValues[0].value, medium: row.dimensionValues[1].value, channel: row.dimensionValues[2].value, sessions: m[0], engagedSessions: m[1], keyEvents: m[2] };
+	});
+}
+
 export interface Ga4PageDay { date: string; page: string; sessions: number; keyEvents: number }
 
 /**

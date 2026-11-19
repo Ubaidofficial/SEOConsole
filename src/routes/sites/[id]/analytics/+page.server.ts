@@ -4,7 +4,7 @@ import { getSite } from '$lib/server/clients';
 import { dailySeries, periodFor } from '$lib/server/queries';
 import { linksFor } from '$lib/server/links';
 import { pctChange } from '$lib/analytics';
-import { aiTrafficReport } from '$lib/server/insights';
+import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport } from '$lib/server/insights';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	const { days } = await parent();
@@ -22,6 +22,9 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	return {
 		linked: true as const,
 		ai: aiTrafficReport(site, days),
+		sources: trafficSourcesReport(site, days),
+		landing: landingPagesReport(site, days),
+		keyEvents: keyEventsReport(site, days),
 		property: link.label ?? link.external_id,
 		status: { state: link.sync_status, message: link.sync_message, lastSync: link.last_sync_at },
 		series: dailySeries(site.id, p.start, p.end).map((g) => ({ date: g.date, clicks: organic.get(g.date) ?? 0, impressions: g.clicks, position: 0 })),

@@ -1,5 +1,5 @@
 import type { BingClient, BingDay, BingLinksClient, BingSite, BingTermRow } from './bing';
-import type { Ga4Day, Ga4Property } from './ga4';
+import type { Ga4Day, Ga4Dim, Ga4DimDay, Ga4EventDay, Ga4LandingChannel, Ga4Property, Ga4SourceRow } from './ga4';
 import type { ClarityMetric } from './clarity';
 import type { GtmContainer, GtmLive } from './gtm';
 import { DEMO_ACCOUNTS, DEMO_HISTORY_DAYS, DemoClient, demoSearches, h01, plantedQuery } from './demo';
@@ -202,6 +202,94 @@ export function demoGa4Daily(property: string, startDate: string, endDate: strin
 		}
 	}
 	return out;
+}
+
+/** How each demo channel's sessions split into GA4 source / medium pairs. Shares in a channel add up to 1. */
+const DEMO_SOURCES: Record<string, [string, string, number][]> = {
+	'Organic Search': [['google', 'organic', 0.88], ['bing', 'organic', 0.09], ['duckduckgo', 'organic', 0.03]],
+	Direct: [['(direct)', '(none)', 1]],
+	Referral: [['partner-blog.example', 'referral', 0.45], ['forum.example', 'referral', 0.35], ['directory.example', 'referral', 0.2]],
+	'Organic Social': [['facebook.com', 'referral', 0.6], ['linkedin.com', 'referral', 0.4]],
+	Email: [['newsletter', 'email', 1]]
+};
+
+/** Sessions by source and medium over a window, consistent with the demo channel totals (the first source in a channel takes the rounding). */
+export function demoGa4Sources(property: string, startDate: string, endDate: string): Ga4SourceRow[] {
+	const byChannel = new Map<string, { sessions: number; engaged: number; keyEvents: number }>();
+	for (const r of demoGa4Daily(property, startDate, endDate)) {
+		const cur = byChannel.get(r.channel) ?? { sessions: 0, engaged: 0, keyEvents: 0 };
+		cur.sessions += r.sessions;
+		cur.engaged += r.engagedSessions;
+		cur.keyEvents += r.keyEvents;
+		byChannel.set(r.channel, cur);
+	}
+	const out: Ga4SourceRow[] = [];
+	for (const [channel, t] of byChannel) {
+		const split = DEMO_SOURCES[channel] ?? [['(other)', '(not set)', 1]];
+		const parts = split.map(([source, medium, share]) => ({ source, medium, channel, sessions: Math.floor(t.sessions * share), engagedSessions: Math.floor(t.engaged * share), keyEvents: Math.round(t.keyEvents * share * 10) / 10 }));
+		parts[0].sessions += t.sessions - parts.reduce((a, b) => a + b.sessions, 0);
+		parts[0].engagedSessions += t.engaged - parts.reduce((a, b) => a + b.engagedSessions, 0);
+		out.push(...parts.filter((x) => x.sessions > 0));
+	}
+	return out.sort((a, b) => b.sessions - a.sessions);
+}
+
+/** How a demo day's sessions split by country, device and new vs returning. Shares in a dimension add up to 1. */
+const DEMO_DIM_SHARES: Record<Ga4Dim, [string, number][]> = {
+	country: [['United States', 0.46], ['United Kingdom', 0.14], ['Canada', 0.09], ['Germany', 0.08], ['India', 0.07], ['Australia', 0.06], ['Netherlands', 0.05], ['France', 0.05]],
+	deviceCategory: [['mobile', 0.58], ['desktop', 0.38], ['tablet', 0.04]],
+	newVsReturning: [['new', 0.71], ['returning', 0.27], ['(not set)', 0.02]]
+};
+
+/** Sessions by day for one dimension, consistent with the demo daily totals (the first value takes the rounding). */
+export function demoGa4DimDaily(property: string, dim: Ga4Dim, startDate: string, endDate: string): Ga4DimDay[] {
+	const byDate = new Map<string, { sessions: number; engaged: number; keyEvents: number; pageviews: number }>();
+	for (const r of demoGa4Daily(property, startDate, endDate)) {
+		const cur = byDate.get(r.date) ?? { sessions: 0, engaged: 0, keyEvents: 0, pageviews: 0 };
+		cur.sessions += r.sessions;
+		cur.engaged += r.engagedSessions;
+		cur.keyEvents += r.keyEvents;
+		cur.pageviews += r.pageviews;
+		byDate.set(r.date, cur);
+	}
+	const out: Ga4DimDay[] = [];
+	for (const [date, t] of byDate) {
+		const parts = DEMO_DIM_SHARES[dim].map(([value, share]) => ({ date, value, sessions: Math.floor(t.sessions * share), engagedSessions: Math.floor(t.engaged * share), keyEvents: Math.round(t.keyEvents * share * 10) / 10, pageviews: Math.floor(t.pageviews * share) }));
+		parts[0].sessions += t.sessions - parts.reduce((a, b) => a + b.sessions, 0);
+		parts[0].engagedSessions += t.engaged - parts.reduce((a, b) => a + b.engagedSessions, 0);
+		parts[0].pageviews += t.pageviews - parts.reduce((a, b) => a + b.pageviews, 0);
+		out.push(...parts.filter((x) => x.sessions > 0));
+	}
+	return out;
+}
+
+/** Demo key events by day: each day's key events split between three named conversions (rounded to whole events). */
+export function demoGa4KeyEvents(property: string, startDate: string, endDate: string): Ga4EventDay[] {
+	const byDate = new Map<string, number>();
+	for (const r of demoGa4Daily(property, startDate, endDate)) byDate.set(r.date, (byDate.get(r.date) ?? 0) + r.keyEvents);
+	const out: Ga4EventDay[] = [];
+	for (const [date, k] of byDate) {
+		const total = Math.round(k);
+		const parts: [string, number][] = [['generate_lead', Math.floor(total * 0.5)], ['sign_up', Math.floor(total * 0.3)]];
+		parts.push(['purchase', total - parts[0][1] - parts[1][1]]);
+		for (const [event, n] of parts) if (n > 0) out.push({ date, event, keyEvents: n, eventCount: n });
+	}
+	return out;
+}
+
+/** Demo landing pages for every channel: the organic landing pages, plus Direct and Referral visits to the same pages. */
+export async function demoGa4LandingAll(property: string, startDate: string, endDate: string): Promise<{ rows: Ga4LandingChannel[]; truncated: boolean }> {
+	const organic = await demoGa4Landing(property, startDate, endDate);
+	const rows: Ga4LandingChannel[] = [];
+	organic.forEach((l, i) => {
+		rows.push({ page: l.page, channel: 'Organic Search', sessions: l.sessions, engagedSessions: l.engagedSessions, keyEvents: l.keyEvents });
+		const direct = Math.round(l.sessions * 0.3);
+		if (direct) rows.push({ page: l.page, channel: 'Direct', sessions: direct, engagedSessions: Math.round(direct * 0.6), keyEvents: Math.round(direct * 0.03 * 10) / 10 });
+		// one page lives on referral traffic, so the all-channel list differs from the organic one
+		const referral = i === 3 ? l.sessions * 4 : Math.round(l.sessions * 0.05);
+		if (referral) rows.push({ page: l.page, channel: 'Referral', sessions: referral, engagedSessions: Math.round(referral * 0.6), keyEvents: Math.round(referral * 0.03 * 10) / 10 });
+	});
+	return { rows, truncated: false };
 }
 
 /** A fetch stand-in so the real budget/sync code path runs against synthetic Clarity data. */

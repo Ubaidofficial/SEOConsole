@@ -87,6 +87,7 @@ export const PORTFOLIO_TAB_EXPLAIN: Record<string, string> = {
 /** The tabs on a site's page: path under /sites/<id>, label, and what the tab is for (shown on hover). One list, so the tab bar, the hover text and the browser titles cannot drift apart. */
 export const SITE_TABS = [
 	['', 'Overview', 'Your plan for the next two weeks, then the traffic chart, unusual days and your change log.'],
+	['/dashboard', 'All sources', 'Search Console, GA4, Bing and Clarity on one screen: traffic by channel, top sources, countries, devices, top pages and queries, and how visitors behave.'],
 	['/quickwins', 'Quick wins', 'The easiest improvements first: titles to rewrite, searches one push from page 1, questions you already rank for, and quick fixes.'],
 	['/actions', 'Actions', 'This site\'s to-do list, in the order to do it.'],
 	['/queries', 'Queries', 'Search queries, with filters for brand, country and device.'],
@@ -132,7 +133,7 @@ export const SYNC_RUNS_EXPLAIN = 'Every run re-pulls the newest few days, becaus
 export const SITE_PRIMARY_TABS = ['', '/quickwins', '/actions', '/opportunities', '/queries', '/pages', '/indexing', '/tests'] as const;
 
 export const SITE_TAB_GROUPS = [
-	['Traffic', ['', '/queries', '/pages', '/trends', '/groups', '/segments', '/types']],
+	['Traffic', ['', '/dashboard', '/queries', '/pages', '/trends', '/groups', '/segments', '/types']],
 	['Findings', ['/quickwins', '/actions', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests']],
 	['Indexing', ['/submit', '/request', '/indexing', '/indexnow', '/sitemaps', '/inspect']],
 	['Other sources', ['/bing', '/analytics', '/tags', '/clarity', '/ai']],
