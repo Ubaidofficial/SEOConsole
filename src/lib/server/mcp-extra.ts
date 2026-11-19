@@ -25,6 +25,7 @@ import { addWatch } from './indexmon';
 import { checkUrls, hostAllowed, pagesToCheck } from './onpage';
 import { linksFor } from './links';
 import { applyKeyEvent, planKeyEvent } from './keyevents';
+import { planSetup, runSetup, type SetupPlan } from './setup';
 import { parseScope } from '../experiments';
 import { isRealDate } from '../performance';
 import { parseTerms, pctChange, ctrOf } from '../analytics';
@@ -238,6 +239,20 @@ const readTools: Tool[] = [
 
 const w = (t: Omit<Tool, 'write'>): Tool => ({ ...t, write: true });
 
+/** setup_google_tag preview: what planSetup would do, as short lines an agent can repeat to the person. */
+function setupChanges(p: SetupPlan): string[] {
+	const out: string[] = [];
+	const g = p.ga4, m = p.gtm, t = p.tag;
+	if (g?.state === 'linked' || g?.state === 'match') out.push(`GA4: use the property ${g.label}${g.measurementId ? ` (${g.measurementId})` : ''}${g.state === 'match' ? ' and link it to this site' : ''}.`);
+	if (g?.state === 'stream') out.push(`GA4: add a web data stream for ${g.uri} to ${g.label}.`);
+	if (g?.state === 'create') out.push(`GA4: create the property ${g.displayName} (${g.timeZone}, ${g.currencyCode}) with a web data stream for ${g.uri}.`);
+	if (m?.state === 'linked' || m?.state === 'match') out.push(`Tag Manager: the container ${m.label}${m.state === 'match' ? ', linked to this site' : ''}.`);
+	if (m?.state === 'create') out.push(`Tag Manager: create the web container ${m.name} for ${m.domain}.`);
+	if (t?.state === 'present') out.push(`The live container already has ${t.existing.map((e) => `"${e.name}"${e.measurementId ? ` (${e.measurementId})` : ''}`).join(', ')}: no tag is added.${t.mismatch ? ` ${t.mismatch}` : ''}`);
+	if (t?.state === 'add') out.push(`Add "${t.tagName}" for ${t.measurementId ?? 'the new property'} on all pages, in a new workspace${t.canPublish ? ', then publish' : ''}.`);
+	return out;
+}
+
 const writeTools: Tool[] = [
 	w({
 		name: 'mark_action',
@@ -359,8 +374,27 @@ const writeTools: Tool[] = [
 		}
 	}),
 	w({
+		name: 'setup_google_tag',
+		description: 'Add a Google tag for the site\'s GA4 measurement ID to its Tag Manager container (creating or linking the GA4 property and container if missing), like Connect → Set up GA4 & Tag Manager. mode: preview (default, changes nothing), workspace, or publish (only when the newest version is live).',
+		schema: { ...siteArg, mode: { type: 'string', enum: ['preview', 'workspace', 'publish'] } },
+		run: async (a, sites) => {
+			const site = resolveSite(sites, a.site);
+			const mode = a.mode == null || a.mode === 'preview' ? 'preview' : a.mode === 'workspace' || a.mode === 'publish' ? a.mode : null;
+			if (!mode) throw new Error('`mode` must be preview, workspace or publish.');
+			const p = await planSetup(site.id);
+			if (!p.ok) return { ok: false, error: p.error };
+			const plan = { changes: setupChanges(p), blockers: p.blockers, ...(p.needsGrant ? { needsGrant: `Allow SEOConsole to edit Google Analytics and Tag Manager for ${p.needsGrant.join(', ')} (Connect page, Set up GA4 & Tag Manager).` } : {}), canPublish: p.tag?.canPublish ?? false, ...(p.tag?.publishBlocked ? { publishBlocked: p.tag.publishBlocked } : {}) };
+			if (mode === 'preview') return { ok: true, ready: p.ready, ...plan, next: p.tag?.state === 'present' ? 'Nothing to add: the container already has a Google tag.' : p.ready ? 'Call again with mode publish (or workspace) to make these changes.' : 'Resolve the blockers first; choices between several properties or containers are made in the app.' };
+			if (!p.ready) return { ok: false, error: 'Not ready yet.', ...plan };
+			if (p.tag?.state === 'present') return { ok: true, nothingToDo: true, ...plan };
+			if (mode === 'publish' && !p.tag?.canPublish) return { ok: false, error: p.tag?.publishBlocked ?? 'Publishing is not safe for this container now; use mode workspace.', ...plan };
+			const r = await runSetup(site.id, {}, mode);
+			return { ok: r.ok, ...(r.error ? { error: r.error } : {}), published: r.published, steps: r.steps.map((x) => `${x.status}: ${x.text}`), ...(r.measurementId ? { measurementId: r.measurementId } : {}), ...(r.reviewUrl ? { reviewUrl: r.reviewUrl } : {}), ...(r.snippet ? { siteCodeNeeded: 'A new container must also be added to the site\'s pages; the snippet is on the Connect page.' } : {}), check: r.ok && r.published ? 'Open the site (accept any cookie banner), then look in GA4 Realtime.' : undefined };
+		}
+	}),
+	w({
 		name: 'track_key_event',
-		description: 'Send a dataLayer event the site already pushes (e.g. job_alert_signup) to GA4 through Tag Manager and mark it as a key event: Data Layer Variables for `params`, a Custom Event trigger, a GA4 Event tag (new workspace), then the GA4 key event. mode preview (default) changes nothing and lists the changes; workspace prepares them; publish also publishes, only when the newest container version is live.',
+		description: 'Send a dataLayer event the site already pushes (e.g. job_alert_signup) to GA4 via Tag Manager (a variable per `params` entry, a trigger, a GA4 Event tag) and mark it a key event. mode as in setup_google_tag.',
 		schema: { ...siteArg, event: { type: 'string' }, params: { type: 'array', items: { type: 'string' } }, measurementId: { type: 'string' }, mode: { type: 'string', enum: ['preview', 'workspace', 'publish'] } },
 		run: async (a, sites) => {
 			const site = resolveSite(sites, a.site);
