@@ -63,6 +63,8 @@ describe('the real clients', () => {
 			return json({});
 		});
 		const w = realEventWriter(id, { fetchImpl: f as never });
+		await w.deleteWorkspace('accounts/1/containers/2/workspaces/4');
+		expect(calls.at(-1)).toMatchObject({ method: 'DELETE', url: 'https://tagmanager.googleapis.com/tagmanager/v2/accounts/1/containers/2/workspaces/4' });
 		const ws = 'accounts/1/containers/2/workspaces/3';
 		expect(await w.list(ws)).toEqual({ variables: [{ id: '7', name: 'DLV - alert_form' }], triggers: [], tags: [{ id: '3', name: 'x', type: 'gaawe', eventName: 'other' }] });
 		expect(await w.createTrigger(ws, triggerBody('job_alert_signup'))).toEqual({ triggerId: '9' });
@@ -115,6 +117,23 @@ describe('plan and apply on demo data', () => {
 		expect(items.tags).toHaveLength(1);
 		const audit = (db().prepare("SELECT action FROM audit_log WHERE action LIKE 'gtm.key_event%' OR action LIKE 'ga4.key_event%' ORDER BY id").all() as { action: string }[]).map((x) => x.action);
 		expect(audit).toEqual(['gtm.key_event_published', 'ga4.key_event_created', 'gtm.key_event_prepared']);
+	});
+
+	it('deletes only its own unpublished workspace for the same event before trying again, and says so in the preview', async () => {
+		const container = linksFor(siteId).gtm!.external_id;
+		demoKeyEvents.workspaces.set(container, [
+			{ path: `${container}/workspaces/4`, name: 'SEOConsole key event lead_form 2026-11-19' },
+			{ path: `${container}/workspaces/5`, name: 'SEOConsole key event lead_form_v2 2026-11-19' },
+			{ path: `${container}/workspaces/6`, name: 'Marketing changes' }
+		]);
+		const p = await planKeyEvent(siteId, { event: 'lead_form' });
+		expect(p.staleWorkspaces?.map((w) => w.name)).toEqual(['SEOConsole key event lead_form 2026-11-19']);
+		expect(p.changes![0]).toMatch(/^Delete the workspace "SEOConsole key event lead_form 2026-11-19"/);
+		expect(demoKeyEvents.workspaces.get(container)).toHaveLength(3); // the preview deleted nothing
+		const r = await applyKeyEvent(siteId, { event: 'lead_form' }, 'publish');
+		expect(r).toMatchObject({ ok: true, published: true });
+		expect(demoKeyEvents.workspaces.get(container)!.map((w) => w.name)).toEqual(['SEOConsole key event lead_form_v2 2026-11-19', 'Marketing changes']);
+		expect(db().prepare("SELECT COUNT(*) n FROM audit_log WHERE action = 'gtm.key_event_workspace_deleted'").get()).toEqual({ n: 1 });
 	});
 
 	it('refuses without permission, on a read-only server, and for bad input; MCP preview changes nothing', async () => {
