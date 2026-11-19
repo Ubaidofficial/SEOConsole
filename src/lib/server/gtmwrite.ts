@@ -264,7 +264,7 @@ export async function installTagViaWorkspace(writer: GtmWriter, w: WorkspaceInst
 			return { ok: true, published: false, reviewUrl: ui(ws.workspaceId) };
 		}
 		const v = await writer.createVersion(ws.path, w.versionName, w.versionNotes);
-		if (v.compilerError || !v.path) return { ok: false, error: 'Tag Manager could not build a version from the workspace. The tag is there: open the workspace in Tag Manager to see why.', published: false, reviewUrl: ui(ws.workspaceId) };
+		if (v.compilerError || !v.path) return { ok: false, error: 'Tag Manager could not build a version from the workspace, and its API does not say why. Open the workspace in Tag Manager and click Submit: it lists the errors. Delete that workspace before trying again (a standard container allows three).', published: false, reviewUrl: ui(ws.workspaceId) };
 		const p = await writer.publish(v.path);
 		if (p.compilerError) return { ok: false, error: 'Tag Manager refused to publish the version. Open it in Tag Manager to see why.', published: false };
 		audit(`${w.audit}_published`, { siteId: w.siteId, accountId: w.accountId, detail: `${w.publicId}: version ${p.versionId || v.versionId} published with ${w.what}` });

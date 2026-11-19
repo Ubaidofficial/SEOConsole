@@ -57,6 +57,12 @@ export function triggerBody(event: string) {
 	};
 }
 
+/**
+ * The GA4 Event tag. Besides the event, measurement ID and parameters it carries the flags every current GA4 Event tag has in published
+ * containers (read from the live gtm.js of several public sites): sendEcommerceData, enableUserProperties, enableEuid, migratedToV2 and
+ * demoV2. Without migratedToV2 Tag Manager refused to build a version on a real container, reporting a "Conflicting Google tag": the
+ * container's Google tag and this tag "route to the same destination". Tag Manager's API reference does not document these keys.
+ */
 export function tagBody(event: string, measurementId: string, params: string[], triggerId: string) {
 	return {
 		name: tagName(event),
@@ -64,7 +70,12 @@ export function tagBody(event: string, measurementId: string, params: string[], 
 		parameter: [
 			{ type: 'template', key: 'eventName', value: event },
 			{ type: 'template', key: 'measurementIdOverride', value: measurementId },
-			...(params.length ? [{ type: 'list', key: 'eventSettingsTable', list: params.map((p) => ({ type: 'map', map: [{ type: 'template', key: 'parameter', value: p }, { type: 'template', key: 'parameterValue', value: `{{${variableName(p)}}}` }] })) }] : [])
+			...(params.length ? [{ type: 'list', key: 'eventSettingsTable', list: params.map((p) => ({ type: 'map', map: [{ type: 'template', key: 'parameter', value: p }, { type: 'template', key: 'parameterValue', value: `{{${variableName(p)}}}` }] })) }] : []),
+			{ type: 'boolean', key: 'sendEcommerceData', value: 'false' },
+			{ type: 'boolean', key: 'enableUserProperties', value: 'true' },
+			{ type: 'boolean', key: 'enableEuid', value: 'true' },
+			{ type: 'boolean', key: 'migratedToV2', value: 'true' },
+			{ type: 'boolean', key: 'demoV2', value: 'false' }
 		],
 		firingTriggerId: [triggerId],
 		tagFiringOption: 'oncePerEvent',
