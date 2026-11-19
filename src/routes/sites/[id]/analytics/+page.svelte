@@ -24,6 +24,37 @@
 	<p>GA4 organic sessions and Search Console clicks are different measurements (sessions vs. clicks, consent-mode gaps, other search engines count as organic in GA4), so expect them to move together but not match. A divergence is a prompt to look, not proof of a problem.</p>
 </Explainer>
 	<DataTable rows={data.channels} {cols} sortKey="sessions" filterable={false} />
+	{#if data.sources.linked}
+		<section class="mt-6">
+			<h2 class="mb-1 font-medium">Traffic sources</h2>
+			{#if data.sources.status === 'pending'}
+				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
+			{:else if data.sources.status === 'failed'}
+				<p class="text-xs text-warn">GA4 could not return traffic sources on the last sync; it will be retried. {data.sources.error}</p>
+			{:else if data.sources.status === 'no-window'}
+				<p class="text-xs text-muted-foreground">Traffic sources are kept for the 7d, 28d, 3m, 6m and 16m periods. Pick one of those to see them.</p>
+			{:else}
+				<Explainer lead="Which sites, apps and campaigns sent sessions, {data.sources.window.start} to {data.sources.window.end}.">
+					<p>Sessions by the source and medium GA4 recorded.{#if data.sources.rows.length > 15} Type a site's name in the filter to find it.{/if} Links opened from apps and email often arrive without a referrer and count as <b>(direct) / (none)</b>; tag your links with <code>utm_source</code> to see them by name.{#if data.sources.truncated} Very small sources past GA4's row limit are not shown.{/if}</p>
+				</Explainer>
+				{#if data.sources.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so this is from {data.sources.window.end}: {data.sources.staleError}</p>{/if}
+				<DataTable
+					rows={data.sources.rows}
+					cols={[
+						{ key: 'source', label: 'Source', type: 'text', pii: true },
+						{ key: 'medium', label: 'Medium', type: 'text' },
+						{ key: 'channel', label: 'Channel group', type: 'text' },
+						{ key: 'sessions', label: 'Sessions', type: 'int', bar: true },
+						{ key: 'sessionsDelta', label: 'Δ sessions', title: data.sources.previousWindow ? `Against ${data.sources.previousWindow.start} to ${data.sources.previousWindow.end}. Empty for a source with no sessions then.` : 'GA4 no longer keeps the whole previous period.', type: 'delta' },
+						{ key: 'engagementRate', label: 'Engaged', type: 'pct' },
+						{ key: 'keyEvents', label: 'Key events', type: 'int' }
+					]}
+					sortKey="sessions"
+					pageSize={15}
+				/>
+			{/if}
+		</section>
+	{/if}
 	{#if data.ai.linked}
 		<section class="mt-6">
 			<h2 class="mb-1 font-medium">AI assistants</h2>

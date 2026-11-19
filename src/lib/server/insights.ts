@@ -8,6 +8,8 @@ import { classifyUrl, indexState, type UrlClass } from '../indexing';
 import { classifyIntent, computeMovers, INTENTS, isQuestionQuery, newAndLost, positionBands, projectClicks, trajectoryOf, weeklyTotals, type Intent, type Keyed } from '../trends';
 import { AI_ASSISTANTS } from '../ai';
 import { linksFor } from './links';
+import { PERIODS } from '../periods';
+import { SOURCE_ROW_LIMIT } from './ga4';
 
 type Site = Pick<SiteRow, 'id' | 'synced_through' | 'site_url' | 'brand_terms' | 'backfilled_to' | 'backfill_done'>;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -274,5 +276,49 @@ export function aiTrafficReport(site: Site, days: number) {
 		shareOfAllSessions: total ? sessions / total : null,
 		assistants: by,
 		pages: rows.slice(0, 100).map((r) => ({ page: r.page, assistant: r.assistant, sessions: r.sessions, engaged: r.engaged, keyEvents: r2(r.keyEvents) }))
+	};
+}
+
+// ── Traffic sources (GA4 source / medium) ────────────────────────────────────
+export interface SourceRow { source: string; medium: string; channel: string; sessions: number; prevSessions: number | null; sessionsDelta: number | null; engaged: number; engagementRate: number; keyEvents: number }
+
+/**
+ * Sessions by GA4 source / medium for one of the stored period lengths (PERIODS), with the change against the window before it
+ * when that window was fetched. `search` keeps sources or mediums containing the text (case-insensitive); `channel` keeps one
+ * channel group (e.g. Referral). Totals are over the rows kept.
+ */
+export function trafficSourcesReport(site: Site, days: number, o: { search?: string; channel?: string } = {}) {
+	if (!linksFor(site.id).ga4) return { linked: false as const };
+	const d = db();
+	const s = d.prepare('SELECT ga4_sources_on pulled, ga4_sources_error error FROM sites WHERE id = ?').get(site.id) as { pulled: string | null; error: string | null };
+	if (!s.pulled) return s.error ? { linked: true as const, status: 'failed' as const, error: s.error } : { linked: true as const, status: 'pending' as const };
+	const win = (which: 'now' | 'prev') => d.prepare('SELECT start_date start, end_date end, rows FROM ga4_source_windows WHERE site_id = ? AND days = ? AND which = ?').get(site.id, days, which) as { start: string; end: string; rows: number } | undefined;
+	const now = win('now');
+	if (!now) return { linked: true as const, status: 'no-window' as const, periods: [...PERIODS] };
+	const prev = win('prev');
+	type R = { source: string; medium: string; channel: string; sessions: number; engaged: number; keyEvents: number };
+	const q = 'SELECT source, medium, channel, sessions, engaged_sessions engaged, key_events keyEvents FROM ga4_sources WHERE site_id = ? AND days = ? AND which = ?';
+	const key = (r: R) => `${r.source}\n${r.medium}\n${r.channel}`;
+	const prevRows = new Map((prev ? (d.prepare(q).all(site.id, days, 'prev') as R[]) : []).map((r) => [key(r), r.sessions]));
+	const needle = o.search?.trim().toLowerCase() ?? '';
+	const channel = o.channel?.trim().toLowerCase() ?? '';
+	const rows: SourceRow[] = (d.prepare(q + ' ORDER BY sessions DESC').all(site.id, days, 'now') as R[])
+		.filter((r) => (!needle || r.source.toLowerCase().includes(needle) || r.medium.toLowerCase().includes(needle)) && (!channel || r.channel.toLowerCase() === channel))
+		.map((r) => {
+			// A source absent from a fetched previous window had no sessions then (or was below the row limit): shown as new, not as a change.
+			const p = prev ? (prevRows.get(key(r)) ?? 0) : null;
+			return { source: r.source, medium: r.medium, channel: r.channel, sessions: r.sessions, prevSessions: p, sessionsDelta: p ? pctChange(r.sessions, p) : null, engaged: r.engaged, engagementRate: r.sessions ? r.engaged / r.sessions : 0, keyEvents: r2(r.keyEvents) };
+		});
+	return {
+		linked: true as const,
+		status: 'ok' as const,
+		window: { start: now.start, end: now.end },
+		previousWindow: prev ? { start: prev.start, end: prev.end } : null,
+		/** True when GA4 returned the row limit, so small sources past it are missing. */
+		truncated: now.rows >= SOURCE_ROW_LIMIT,
+		/** The last refresh failed: these rows are from the last success (window.end). */
+		staleError: s.error,
+		sessions: rows.reduce((a, r) => a + r.sessions, 0),
+		rows
 	};
 }

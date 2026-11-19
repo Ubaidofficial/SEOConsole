@@ -1,5 +1,5 @@
 import type { BingClient, BingDay, BingLinksClient, BingSite, BingTermRow } from './bing';
-import type { Ga4Day, Ga4Property } from './ga4';
+import type { Ga4Day, Ga4Property, Ga4SourceRow } from './ga4';
 import type { ClarityMetric } from './clarity';
 import type { GtmContainer, GtmLive } from './gtm';
 import { DEMO_ACCOUNTS, DEMO_HISTORY_DAYS, DemoClient, demoSearches, h01, plantedQuery } from './demo';
@@ -202,6 +202,36 @@ export function demoGa4Daily(property: string, startDate: string, endDate: strin
 		}
 	}
 	return out;
+}
+
+/** How each demo channel's sessions split into GA4 source / medium pairs. Shares in a channel add up to 1. */
+const DEMO_SOURCES: Record<string, [string, string, number][]> = {
+	'Organic Search': [['google', 'organic', 0.88], ['bing', 'organic', 0.09], ['duckduckgo', 'organic', 0.03]],
+	Direct: [['(direct)', '(none)', 1]],
+	Referral: [['partner-blog.example', 'referral', 0.45], ['forum.example', 'referral', 0.35], ['directory.example', 'referral', 0.2]],
+	'Organic Social': [['facebook.com', 'referral', 0.6], ['linkedin.com', 'referral', 0.4]],
+	Email: [['newsletter', 'email', 1]]
+};
+
+/** Sessions by source and medium over a window, consistent with the demo channel totals (the first source in a channel takes the rounding). */
+export function demoGa4Sources(property: string, startDate: string, endDate: string): Ga4SourceRow[] {
+	const byChannel = new Map<string, { sessions: number; engaged: number; keyEvents: number }>();
+	for (const r of demoGa4Daily(property, startDate, endDate)) {
+		const cur = byChannel.get(r.channel) ?? { sessions: 0, engaged: 0, keyEvents: 0 };
+		cur.sessions += r.sessions;
+		cur.engaged += r.engagedSessions;
+		cur.keyEvents += r.keyEvents;
+		byChannel.set(r.channel, cur);
+	}
+	const out: Ga4SourceRow[] = [];
+	for (const [channel, t] of byChannel) {
+		const split = DEMO_SOURCES[channel] ?? [['(other)', '(not set)', 1]];
+		const parts = split.map(([source, medium, share]) => ({ source, medium, channel, sessions: Math.floor(t.sessions * share), engagedSessions: Math.floor(t.engaged * share), keyEvents: Math.round(t.keyEvents * share * 10) / 10 }));
+		parts[0].sessions += t.sessions - parts.reduce((a, b) => a + b.sessions, 0);
+		parts[0].engagedSessions += t.engaged - parts.reduce((a, b) => a + b.engagedSessions, 0);
+		out.push(...parts.filter((x) => x.sessions > 0));
+	}
+	return out.sort((a, b) => b.sessions - a.sessions);
 }
 
 /** A fetch stand-in so the real budget/sync code path runs against synthetic Clarity data. */

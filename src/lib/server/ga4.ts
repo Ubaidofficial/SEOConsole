@@ -174,6 +174,38 @@ export async function aiAssistantTraffic(accountId: number, property: string, st
 	return [...merged.values()];
 }
 
+export interface Ga4SourceRow { source: string; medium: string; channel: string; sessions: number; engagedSessions: number; keyEvents: number }
+
+/** How many source / medium rows a window keeps: the long tail past this is a handful of sessions each. */
+export const SOURCE_ROW_LIMIT = 1000;
+
+/**
+ * Sessions by source and medium (with the channel group GA4 put them in) over a whole window: which sites, newsletters and
+ * campaigns send traffic, e.g. `example.com / referral`. Every channel, Direct included, so a link that arrives without a referrer
+ * is visible as `(direct) / (none)` rather than missing. The largest SOURCE_ROW_LIMIT rows by sessions.
+ */
+export async function trafficSources(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}): Promise<Ga4SourceRow[]> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				dateRanges: [{ startDate, endDate }],
+				dimensions: [{ name: 'sessionSource' }, { name: 'sessionMedium' }, { name: 'sessionDefaultChannelGroup' }],
+				metrics: ['sessions', 'engagedSessions', 'keyEvents'].map((name) => ({ name })),
+				orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+				limit: SOURCE_ROW_LIMIT
+			})
+		},
+		http
+	);
+	return (r.rows ?? []).map((row) => {
+		const m = row.metricValues.map((v) => Number(v.value));
+		return { source: row.dimensionValues[0].value, medium: row.dimensionValues[1].value, channel: row.dimensionValues[2].value, sessions: m[0], engagedSessions: m[1], keyEvents: m[2] };
+	});
+}
+
 export interface Ga4PageDay { date: string; page: string; sessions: number; keyEvents: number }
 
 /**

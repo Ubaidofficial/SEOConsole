@@ -247,6 +247,28 @@ CREATE TABLE IF NOT EXISTS ga4_ai_prev (
 	pulled_on TEXT NOT NULL,
 	PRIMARY KEY (site_id, days, assistant, page)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS ga4_sources (
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	days INTEGER NOT NULL,              -- window length
+	which TEXT NOT NULL,                -- now (the window ending on the pull date) | prev (the equally long window just before it)
+	source TEXT NOT NULL,               -- GA4 sessionSource, e.g. example.com, google, (direct)
+	medium TEXT NOT NULL,               -- GA4 sessionMedium, e.g. referral, organic, (none)
+	channel TEXT NOT NULL,              -- GA4 default channel group
+	sessions INTEGER NOT NULL,
+	engaged_sessions INTEGER NOT NULL,
+	key_events REAL NOT NULL,
+	PRIMARY KEY (site_id, days, which, source, medium, channel)
+) WITHOUT ROWID;
+-- Which source windows were fetched. A missing 'prev' row means no change figures, never a change against an assumed zero.
+CREATE TABLE IF NOT EXISTS ga4_source_windows (
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	days INTEGER NOT NULL,
+	which TEXT NOT NULL,                -- now | prev
+	start_date TEXT NOT NULL,
+	end_date TEXT NOT NULL,
+	rows INTEGER NOT NULL,              -- rows GA4 returned; at the row limit the long tail was cut
+	PRIMARY KEY (site_id, days, which)
+) WITHOUT ROWID;
 -- One row per URL per channel the app (or an agent) pushed it to. "Accepted" means the channel received it, never that the page is indexed:
 -- whether it got indexed is read later from the stored URL Inspection (the submitted URLs are also put on the indexing monitor's watch list).
 CREATE TABLE IF NOT EXISTS index_submissions (
@@ -720,6 +742,9 @@ function migrate(db: Database.Database) {
 	if (!cols('sites').includes('index_message')) db.exec('ALTER TABLE sites ADD COLUMN index_message TEXT');
 	if (!cols('sites').includes('index_next_at')) db.exec('ALTER TABLE sites ADD COLUMN index_next_at INTEGER');
 	if (!cols('sites').includes('ga4_ai_on')) db.exec('ALTER TABLE sites ADD COLUMN ga4_ai_on TEXT');
+	// Traffic sources: day of the last successful pull, and the last failure's message (cleared on success).
+	if (!cols('sites').includes('ga4_sources_on')) db.exec('ALTER TABLE sites ADD COLUMN ga4_sources_on TEXT');
+	if (!cols('sites').includes('ga4_sources_error')) db.exec('ALTER TABLE sites ADD COLUMN ga4_sources_error TEXT');
 	if (!cols('sitemap_urls').includes('lastmod_bad')) db.exec('ALTER TABLE sitemap_urls ADD COLUMN lastmod_bad INTEGER NOT NULL DEFAULT 0');
 	if (!cols('index_watch').includes('source')) db.exec('ALTER TABLE index_watch ADD COLUMN source TEXT');
 	// read | submit | delete. Databases from the on/off "can make changes" switch (can_write) carry it over once, as the submit level.

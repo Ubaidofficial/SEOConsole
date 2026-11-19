@@ -21,7 +21,7 @@ import { coverageMap } from '../property';
 import { gtmSnapshot, trackingHealth } from './tracking';
 import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
-import { aiTrafficReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
+import { aiTrafficReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
 import { evaluateTestCached, listTests } from './seotests';
 import { indexHistory, indexSummary, recentEvents, watchList } from './indexmon';
 import { storedChecks } from './onpage';
@@ -122,6 +122,24 @@ const reportJson = (rep: Awaited<ReturnType<typeof submitForIndexing>>) => ({
 	note: rep.note
 });
 const isoOrNull = (t: number | null | undefined) => (t ? new Date(t).toISOString() : null);
+
+/** get_ga4_summary view=sources: sessions by GA4 source / medium, optionally only those matching `search`. */
+function ga4Sources(site: Site, n: number, a: Record<string, unknown>) {
+	const t = trafficSourcesReport(site, n, { search: typeof a.search === 'string' ? a.search : undefined });
+	if (!t.linked) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
+	if (t.status === 'pending') return { connected: true, note: 'Traffic sources appear after the next GA4 sync.' };
+	if (t.status === 'failed') return { connected: true, error: `GA4 could not return traffic sources on the last sync; it will be retried. ${t.error}` };
+	if (t.status === 'no-window') return { connected: true, error: `Traffic sources are stored for windows of ${t.periods.join(', ')} days; pass one of those as days.` };
+	return {
+		window: t.window,
+		previousWindow: t.previousWindow,
+		...(t.staleError ? { warning: `The last refresh failed, so this is from ${t.window.end}: ${t.staleError}` } : {}),
+		...(t.truncated ? { note: 'GA4 returned its row limit; very small sources may be missing.' } : {}),
+		referrerCaveat: 'Links opened from apps and email often carry no referrer and count as (direct) / (none), not under the site that sent them.',
+		sessions: t.sessions,
+		sources: t.rows.slice(0, 50).map((r) => ({ source: r.source, medium: r.medium, channel: r.channel, sessions: r.sessions, previousSessions: r.prevSessions, change: r.sessionsDelta == null ? null : r2(r.sessionsDelta * 100) + '%', engagementRate: r2(r.engagementRate * 100) + '%', keyEvents: r.keyEvents }))
+	};
+}
 
 const TOOLS: Tool[] = [
 	{
@@ -354,11 +372,12 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_ga4_summary',
-		description: 'GA4 sessions, engaged sessions, unique users and key events by channel group for a window (compare Organic Search with Google clicks), plus the top landing pages for Google organic sessions.',
-		schema: { ...siteArg, ...daysArg },
+		description: 'GA4 sessions, engaged sessions, unique users and key events by channel group (compare Organic Search with Google clicks), plus the top Google-organic landing pages. view=sources: by source/medium, `search` filters.',
+		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources'] }, search: { type: 'string' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			if (!linksFor(site.id).ga4) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
+			if (a.view === 'sources') return ga4Sources(site, days(a), a);
 			const p = periodFor(site, days(a));
 			const d = db();
 			const n = days(a);
