@@ -358,8 +358,8 @@ describe('MCP: submit permission', () => {
 		const tools = (await res.json()).result.tools as { name: string; annotations: { readOnlyHint: boolean; destructiveHint?: boolean } }[];
 		const writers = tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name).sort();
 		// the submit family, plus the nine tools that change things inside the app (see mcp-write.test.ts)
-		expect(writers).toEqual(expect.arrayContaining(['build_request_indexing_queue', 'cancel_indexing_queue', 'delete_sitemap', 'get_site_verification_token', 'inspect_and_submit_urls', 'mark_indexing_requested', 'run_indexing_check', 'setup_indexnow', 'submit_sitemap', 'submit_urls_for_indexing', 'verify_site_ownership']));
-		expect(writers).toHaveLength(20);
+		expect(writers).toEqual(expect.arrayContaining(['build_request_indexing_queue', 'cancel_indexing_queue', 'delete_sitemap', 'get_site_verification_token', 'inspect_and_submit_urls', 'mark_indexing_requested', 'run_indexing_check', 'setup_indexnow', 'submit_sitemap', 'submit_urls_for_indexing', 'track_key_event', 'verify_site_ownership']));
+		expect(writers).toHaveLength(21);
 		expect(tools.filter((t) => t.annotations.destructiveHint).map((t) => t.name).sort()).toEqual(['cancel_indexing_queue', 'delete_sitemap']);
 		for (const n of ['suggest_indexing_candidates', 'get_submission_status', 'check_sitemap']) expect(tools.find((t) => t.name === n)!.annotations.readOnlyHint).toBe(true);
 	});

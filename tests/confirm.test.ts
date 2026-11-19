@@ -226,7 +226,8 @@ describe('the Agents page and the tool list', () => {
 		const tools = JSON.parse(text).result.tools as { name: string; description: string; annotations: { readOnlyHint: boolean; destructiveHint?: boolean } }[];
 		// Every client pays for these definitions at the start of every session. They were 38 KB before the trim and 60 tools now exceed that count of work, so this is a ceiling to keep them from creeping back, not a target.
 		// Raised from 45,000 to 48,000 when five read tools were added (drop diagnosis, publishing health, niche fit, link health, stored research): they are about 3 KB together, and the old ceiling had under 0.3 KB of room.
-		expect(text.length, `tools/list is ${text.length} bytes`).toBeLessThan(48_000);
+		// Raised from 48,000 to 49,000 for track_key_event (Tag Manager + GA4 key event, about 0.9 KB): the old ceiling had a few bytes of room left.
+		expect(text.length, `tools/list is ${text.length} bytes`).toBeLessThan(49_000);
 		for (const t of tools) {
 			// get_opportunities lists every kind of finding it can return, so it is the one long definition
 			const long = t.name === 'get_opportunities';
