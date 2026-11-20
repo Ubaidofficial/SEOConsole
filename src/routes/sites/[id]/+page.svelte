@@ -159,7 +159,7 @@
 				<article class="rounded-xl border bg-card p-4 text-sm shadow-xs">
 					<div class="flex items-center gap-2">
 						<span class="size-2 rounded-full" style="background:{dot(a.kind)}"></span>
-						<span class="text-xs font-medium capitalize" title={a.kind === 'detected' ? 'Logged by the app from a change it noticed (robots.txt, Tag Manager or sitemaps)' : undefined}>{a.kind === 'detected' ? 'detected automatically' : a.kind}</span>
+						<span class="text-xs font-medium capitalize" title={a.kind === 'detected' ? 'Logged by the app from a change it noticed (robots.txt, Tag Manager or sitemaps)' : undefined}>{a.kind}</span>
 						<span class="text-xs text-muted-foreground tnum">· {a.date}</span>
 						<form method="POST" action="?/deleteNote" use:enhance class="ml-auto">
 							<input type="hidden" name="id" value={a.id} />
