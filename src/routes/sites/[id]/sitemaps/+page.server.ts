@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { clientForSite, getSite } from '$lib/server/clients';
 import { config } from '$lib/server/config';
 import { audit, db } from '$lib/server/db';
-import { diagnoseSitemap } from '$lib/server/sitemapcov';
+import { diagnoseSitemap, foundSitemaps } from '$lib/server/sitemapcov';
 import { demoSitemapFetch } from '$lib/server/demo-channels';
 import { compareWithPages, lastLiveCompare, lastmodReport, LIVE_SAMPLE } from '$lib/server/lastmod';
 import { robotsReport, runRobotsCheck } from '$lib/server/robotswatch';
@@ -14,11 +14,13 @@ export const load: PageServerLoad = async ({ params }) => {
 	const lastmod = { report: lastmodReport(site), live: lastLiveCompare(site.id), sample: LIVE_SAMPLE };
 	// robots.txt is read from the site itself (daily, or with the button), so it needs no Google access either.
 	const robots = robotsReport(site);
-	if (['siteUnverifiedUser', 'none'].includes(site.permission)) return { sitemaps: [], error: 'This property is not verified for this account.', lastmod, robots };
+	// Sitemaps the daily read found on the site while Search Console listed none (not submitted unless the site opted in).
+	const found = foundSitemaps(site.id);
+	if (['siteUnverifiedUser', 'none'].includes(site.permission)) return { sitemaps: [], error: 'This property is not verified for this account.', lastmod, robots, found: null };
 	try {
-		return { sitemaps: await client.listSitemaps(site.site_url), error: null, lastmod, robots };
+		return { sitemaps: await client.listSitemaps(site.site_url), error: null, lastmod, robots, found };
 	} catch (e) {
-		return { sitemaps: [], error: e instanceof Error ? e.message : 'Could not load sitemaps', lastmod, robots };
+		return { sitemaps: [], error: e instanceof Error ? e.message : 'Could not load sitemaps', lastmod, robots, found };
 	}
 };
 

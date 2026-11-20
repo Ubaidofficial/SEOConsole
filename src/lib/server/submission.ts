@@ -64,7 +64,7 @@ export interface SubmitOptions {
 	dryRun?: boolean;
 	/** IndexNow only: resend even if sent in the last 24 hours */
 	force?: boolean;
-	source: 'app' | 'mcp' | 'queue';
+	source: 'app' | 'mcp' | 'queue' | 'auto';
 	keyId?: number;
 	/** Hold back what does not fit today (a channel's daily limit) and send it on the following days. Default true. */
 	queueOverflow?: boolean;
@@ -288,7 +288,7 @@ const guardWrite = () => {
 	if (config.readOnly) throw new SubmitRefused('READ_ONLY=1: sitemap changes are disabled on this server.');
 };
 
-export async function submitSitemapTo(site: SiteRow, feed: string, source: 'app' | 'mcp'): Promise<string> {
+export async function submitSitemapTo(site: SiteRow, feed: string, source: 'app' | 'mcp' | 'auto'): Promise<string> {
 	guardWrite();
 	const f = checkFeed(site, feed);
 	try {
@@ -339,6 +339,45 @@ export async function autoResubmitSitemaps(site: SiteRow, changes: { added: stri
 	d.prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run(key, today);
 	try {
 		return await resubmitSitemaps(site, 'auto');
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Sitemaps a read found on the site (robots.txt or a usual address) while Search Console listed none: submitted to Search Console
+ * only when the site has "Resubmit sitemaps when pages change" on, which is the person's consent to sitemap writes. Otherwise they
+ * are shown on the Sitemaps tab with a one-click Submit. Failures are swallowed; the next daily read tries again.
+ */
+export async function autoSubmitFoundSitemaps(site: SiteRow, found: string[] | undefined): Promise<string[]> {
+	if (!found?.length || config.readOnly) return [];
+	if (!(db().prepare('SELECT sitemap_auto a FROM sites WHERE id = ?').get(site.id) as { a: number } | undefined)?.a) return [];
+	const done: string[] = [];
+	for (const f of found) {
+		try {
+			done.push(await submitSitemapTo(site, f, 'auto'));
+		} catch {
+			/* tried again after the next read */
+		}
+	}
+	return done;
+}
+
+const CAP_PER_BING_RUN = 500;
+/**
+ * If the site has "Send new pages to Bing" on and a sitemap read found new or changed pages, send them through Bing's own URL
+ * submission (what is over today's allowance is queued). Skipped when IndexNow auto-submit is on, because IndexNow already
+ * reaches Bing and the same URL would be counted twice against Bing's limits. A no-op without a Bing link or in READ_ONLY mode.
+ */
+export async function autoSubmitBing(site: SiteRow, changes: { added: string[]; updated: string[] } | null, o: { bingClient?: BingClient; now?: number } = {}): Promise<SubmitReport | null> {
+	if (!changes || config.readOnly) return null;
+	const urls = [...changes.added, ...changes.updated].slice(0, CAP_PER_BING_RUN);
+	if (!urls.length) return null;
+	if (!(db().prepare('SELECT bing_submit_auto a FROM sites WHERE id = ?').get(site.id) as { a: number } | undefined)?.a) return null;
+	if (getKey(site.id)?.auto) return null;
+	if (!linksFor(site.id).bing) return null;
+	try {
+		return await submitForIndexing(site, urls, { channels: ['bing'], source: 'auto', bingClient: o.bingClient, now: o.now });
 	} catch {
 		return null;
 	}

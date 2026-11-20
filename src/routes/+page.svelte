@@ -5,8 +5,7 @@
 	import { Eye, EyeOff, ExternalLink, RefreshCw, Search, Trash2, Sparkles } from '@lucide/svelte';
 	import { ConfirmButton } from '$lib/components/ui/confirm';
 	import PeriodPicker from '$lib/components/PeriodPicker.svelte';
-	import AreaSpark from '$lib/components/AreaSpark.svelte';
-	import { trendOf } from '$lib/trend';
+	import SourceSpark, { type SparkSeries } from '$lib/components/SourceSpark.svelte';
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
 	import AuthorityBadges from '$lib/components/AuthorityBadges.svelte';
 	import AuthorityCredit from '$lib/components/AuthorityCredit.svelte';
@@ -26,12 +25,26 @@
 			.filter((c) => (account === 'all' || String(c.accountId) === account) && (!q || `${c.name} ${c.label ?? ''} ${c.tags.join(' ')}`.toLowerCase().includes(q.toLowerCase())))
 			.sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity)))
 	);
-	const kpis = $derived([
-		{ label: 'Clicks', v: fmtInt(data.totals.clicks), d: data.totals.clicksDelta, inv: false },
+	type Kpi = { label: string; v: string; d: number | null; inv: boolean; pos?: boolean; color?: string; title?: string; pending?: boolean };
+	const kpis = $derived<Kpi[]>([
+		{ label: data.totals.ga4 || data.totals.bing ? 'Google clicks' : 'Clicks', v: fmtInt(data.totals.clicks), d: data.totals.clicksDelta, inv: false, color: 'var(--src-gsc)', title: 'Clicks from Google Search, from Search Console' },
+		...(data.totals.ga4
+			? [{ label: 'Sessions · GA4', v: fmtInt(data.totals.ga4.sessions), d: data.totals.ga4.delta, inv: false, color: 'var(--src-ga4)', pending: !data.totals.ga4.comparable, title: `Every GA4 session, from every channel (search, direct, social, referral, AI assistants…), over ${data.totals.ga4.properties} GA4 propert${data.totals.ga4.properties === 1 ? 'y' : 'ies'}. Organic Search sessions already include most Google clicks, so do not add the two together.` }]
+			: []),
+		...(data.totals.bing
+			? [{ label: 'Bing clicks', v: fmtInt(data.totals.bing.clicks), d: data.totals.bing.delta, inv: false, color: 'var(--src-bing)', pending: !data.totals.bing.comparable, title: `Clicks from Bing (and the engines that use its results), from Bing Webmaster Tools, over ${data.totals.bing.properties} site${data.totals.bing.properties === 1 ? '' : 's'}` }]
+			: []),
 		{ label: 'Impressions', v: fmtInt(data.totals.impressions), d: data.totals.impressionsDelta, inv: false },
 		{ label: 'CTR', v: fmtPct(data.totals.ctr), d: data.totals.ctrDelta, inv: false },
 		{ label: 'Avg position', v: fmtPos(data.totals.position), d: data.totals.positionDelta, inv: true, pos: true }
 	]);
+
+	/** The lines for one card: Search Console always, GA4 and Bing when linked and synced. */
+	const seriesOf = (c: (typeof data.cards)[number]): SparkSeries[] => [
+		{ key: 'gsc', label: 'Google clicks', color: 'var(--src-gsc)', values: c.traffic.chart.gsc, dashed: 2 },
+		...(c.traffic.chart.ga4 ? [{ key: 'ga4', label: 'GA4 sessions', color: 'var(--src-ga4)', values: c.traffic.chart.ga4, dashed: 1 }] : []),
+		...(c.traffic.chart.bing ? [{ key: 'bing', label: 'Bing clicks', color: 'var(--src-bing)', values: c.traffic.chart.bing }] : [])
+	];
 	const why = $derived(data.totals.comparable ? 'Previous period had too little data for a reliable comparison' : `Comparison shown once the history finishes loading (${data.totals.loading} site${data.totals.loading === 1 ? '' : 's'} still downloading)`);
 
 	// A real sync takes minutes (one Google request per day of history), so follow it live instead of
@@ -118,14 +131,14 @@
 	</div>
 	{/if}
 {:else}
-	<div class="stagger mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+	<div class="stagger mb-5 grid grid-cols-2 gap-4 {kpis.length === 6 ? 'md:grid-cols-3 xl:grid-cols-6' : kpis.length === 5 ? 'md:grid-cols-3 xl:grid-cols-5' : 'md:grid-cols-4'}">
 		{#each kpis as k}
-			<div class="rounded-2xl border bg-card p-4 shadow-xs">
-				<div class="text-xs font-medium text-muted-foreground">{k.label}</div>
+			<div class="rounded-2xl border bg-card p-4 shadow-xs" title={k.title}>
+				<div class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">{#if k.color}<span class="size-2 shrink-0 rounded-full" style="background:{k.color}" aria-hidden="true"></span>{/if}{k.label}</div>
 				<div class="tnum mt-1.5 text-3xl font-semibold tracking-tight">{k.v}</div>
 				<div class="mt-1 h-4">
 					{#if k.d == null}
-						<span class="text-xs text-muted-foreground" title={why}>{data.totals.comparable ? 'no reliable comparison' : 'comparison pending'}</span>
+						<span class="text-xs text-muted-foreground" title={k.pending ? 'Stored history does not reach the previous period yet for every linked property' : why}>{k.pending ?? !data.totals.comparable ? 'comparison pending' : 'no reliable comparison'}</span>
 					{:else}
 						<Delta value={k.d} invert={k.inv} mode={k.pos ? 'pos' : 'pct'} {why} /> <span class="text-xs text-muted-foreground">{k.pos ? 'places ' : ''}vs previous {data.days}d</span>
 					{/if}
@@ -196,7 +209,15 @@
 					</div>
 				{:else}
 					{#if c.spark.length > 1}
-						<AreaSpark values={c.spark} trend={trendOf(c.clicksDelta, c.spark)} class="mt-5" />
+						<SourceSpark series={seriesOf(c)} class="mt-5" />
+						{#if c.traffic.ga4 || c.traffic.bing}
+							<!-- Legend: names, totals and changes in text ink beside a colour swatch, so a line is never told apart by colour alone. -->
+							<div class="tnum mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+								<span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-3 rounded-full" style="background:var(--src-gsc)" aria-hidden="true"></span>Google <b class="font-medium text-foreground">{fmtInt(c.clicks)}</b> clicks</span>
+								{#if c.traffic.ga4}<span class="inline-flex items-center gap-1.5" title="Every GA4 session, any channel, {c.traffic.ga4.window.start} to {c.traffic.ga4.window.end}"><span class="h-0.5 w-3 rounded-full" style="background:var(--src-ga4)" aria-hidden="true"></span>GA4 <b class="font-medium text-foreground">{fmtInt(c.traffic.ga4.sessions)}</b> sessions<Delta value={c.traffic.ga4.delta} why={c.traffic.ga4.comparable ? 'Fewer than 10 sessions in the previous period' : 'Stored GA4 history does not reach the previous period'} /></span>{/if}
+								{#if c.traffic.bing}<span class="inline-flex items-center gap-1.5" title="Bing clicks, {c.traffic.bing.window.start} to {c.traffic.bing.window.end}"><span class="h-0.5 w-3 rounded-full" style="background:var(--src-bing)" aria-hidden="true"></span>Bing <b class="font-medium text-foreground">{fmtInt(c.traffic.bing.clicks)}</b> clicks<Delta value={c.traffic.bing.delta} why={c.traffic.bing.comparable ? 'Fewer than 10 clicks in the previous period' : 'Stored Bing history does not reach the previous period'} /></span>{/if}
+							</div>
+						{/if}
 					{:else}
 						<p class="mt-5 text-xs text-muted-foreground">One day of data, so there is no trend line to draw.</p>
 					{/if}
@@ -222,7 +243,7 @@
 		{/each}
 	</div>
 	<p class="mt-6 text-xs text-muted-foreground">
-		Periods end at each site's newest synced day (Search Console data lags ~2 days; days are Pacific time). Green line = clicks growing, red = falling (vs the previous period); dashed end = the last 2 days, which Google may still revise.
+		<span title="Each source keeps its own newest days (Search Console lags about 2 days, Pacific time), so a line can stop a day early. GA4 sessions already include most Google clicks: the lines overlap, they do not add up.">Lines on one scale: <span class="font-medium" style="color:var(--src-gsc)">green</span> Google clicks, <span class="font-medium" style="color:var(--src-ga4)">orange</span> GA4 sessions (every channel), <span class="font-medium" style="color:var(--src-bing)">blue</span> Bing clicks. GA4 already includes most Google clicks, so they overlap, not add up. Dashed = days still being revised.</span>
 		<a class="underline underline-offset-2" href="?days={data.days}&hidden={data.showHidden ? 0 : 1}">{data.showHidden ? 'Hide' : 'Show'} hidden sites</a>
 	</p>
 	{#if data.cards.some((c) => c.authority.dr || c.authority.da)}<p class="mt-1 text-xs text-muted-foreground"><AuthorityCredit dr={data.cards.some((c) => c.authority.dr)} da={data.cards.some((c) => c.authority.da)} /> Circles show DR and DA out of 100: {BANDS_TEXT} (this app's own bands, not Ahrefs' or Moz's).</p>{/if}

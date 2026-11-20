@@ -64,7 +64,7 @@ describe('the dim dark theme', () => {
 	});
 	it('defines every colour the light theme does, so nothing is left behind in the light palette', () => {
 		const lightOnly = Object.keys(light).filter((k) => !(k in dim) && k !== 'radius');
-		expect(lightOnly).toEqual([...lightOnly].filter((k) => ['bad', 'c-clicks', 'c-impr', 'c-pos'].includes(k))); // these are aliases (var(--…)) that follow their sources
+		expect(lightOnly).toEqual([...lightOnly].filter((k) => ['bad', 'c-clicks', 'c-impr', 'c-pos', 'src-gsc', 'src-ga4', 'src-bing'].includes(k))); // these are aliases (var(--…)) that follow their sources
 		for (const k of lightOnly) expect(light[k], k).toMatch(/^var\(/);
 	});
 	it('tells the browser it is dark (form controls and scrollbars follow)', () => {

@@ -263,17 +263,17 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_page_insights',
-		description: `Every page across Google, Bing, GA4, AI assistants (via GA4) and Clarity, joined on URL path, each with its change vs the previous equal period (null when not stored; a source with nothing for a page is null, not zero). google: clicks, impressions, CTR, position; bing: clicks, impressions, position; ga4: organic sessions, engaged share, key events; ai: sessions per assistant; clarity: latest 24 h only. \`notes\` says what each does not measure.`,
-		schema: { ...siteArg, ...daysArg, path_contains: { type: 'string', description: 'Only paths containing this text (case-insensitive)' }, sort: { type: 'string', enum: ['google_clicks', 'bing_clicks', 'ga4_sessions', 'ga4_key_events', 'ai_sessions', 'google_clicks_change'], description: 'default google_clicks' }, limit: { type: 'integer' } },
+		description: `Every page across Google, Bing, GA4, AI assistants (via GA4) and Clarity, joined on URL path, each with its change vs the previous equal period (null when not stored; a source with nothing for a page is null, not zero). google: clicks, impressions, CTR, position; bing: clicks, impressions, position; ga4: organic sessions, engaged share, key events; allTraffic: GA4 sessions from every channel with the top channel (closest to total visits; its own window, see sources.allTraffic); ai: sessions per assistant; clarity: latest 24 h only. \`notes\` says what each does not measure.`,
+		schema: { ...siteArg, ...daysArg, path_contains: { type: 'string', description: 'Only paths containing this text (case-insensitive)' }, sort: { type: 'string', enum: ['google_clicks', 'bing_clicks', 'ga4_sessions', 'ga4_key_events', 'ai_sessions', 'all_sessions', 'google_clicks_change'], description: 'default google_clicks' }, limit: { type: 'integer' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			const r = pageInsights(site, days(a), 5000);
 			const needle = typeof a.path_contains === 'string' ? a.path_contains.trim().toLowerCase().slice(0, 200) : '';
 			const sort = String(a.sort ?? 'google_clicks');
 			const keys: Record<string, (x: (typeof r.rows)[number]) => number | null> = {
-				google_clicks: (x) => x.gClicks, bing_clicks: (x) => x.bClicks, ga4_sessions: (x) => x.aSessions, ga4_key_events: (x) => x.aKeyEvents, ai_sessions: (x) => x.aiSessions, google_clicks_change: (x) => x.gClicksD
+				google_clicks: (x) => x.gClicks, bing_clicks: (x) => x.bClicks, ga4_sessions: (x) => x.aSessions, ga4_key_events: (x) => x.aKeyEvents, ai_sessions: (x) => x.aiSessions, all_sessions: (x) => x.tSessions, google_clicks_change: (x) => x.gClicksD
 			};
-			if (!keys[sort]) throw new Error('`sort` must be google_clicks, bing_clicks, ga4_sessions, ga4_key_events, ai_sessions or google_clicks_change.');
+			if (!keys[sort]) throw new Error('`sort` must be google_clicks, bing_clicks, ga4_sessions, ga4_key_events, ai_sessions, all_sessions or google_clicks_change.');
 			const pct = (x: number | null) => (x == null ? null : r2(x * 100) + '%');
 			const rows = r.rows
 				.filter((x) => !needle || x.path.toLowerCase().includes(needle))
@@ -288,7 +288,8 @@ const TOOLS: Tool[] = [
 					bing: { linked: r.bing.linked, hasData: r.bing.hasData, comparable: r.bing.comparable },
 					ga4: { linked: r.ga4.linked, hasData: r.ga4.hasData, comparable: r.ga4.comparable },
 					ai: { linked: r.ai.linked, status: r.ai.status, hasData: r.ai.hasData, comparable: r.ai.comparable },
-					clarity: { linked: r.clarity.linked, hasData: r.clarity.hasData, snapshotDay: r.clarity.day, covers: 'last 24 hours only' }
+					clarity: { linked: r.clarity.linked, hasData: r.clarity.hasData, snapshotDay: r.clarity.day, covers: 'last 24 hours only' },
+					allTraffic: { linked: r.all.linked, hasData: r.all.hasData, comparable: r.all.comparable, window: r.all.window, covers: 'GA4 sessions from every channel; pulled for 7, 28, 90, 180 and 480-day periods only' }
 				},
 				rows: rows.map((x) => ({
 					path: x.path,
@@ -296,6 +297,7 @@ const TOOLS: Tool[] = [
 					bing: x.bClicks == null ? null : { clicks: x.bClicks, clicksChange: pct(x.bClicksD), impressions: x.bImpr, impressionsChange: pct(x.bImprD), position: x.bPos == null ? null : r2(x.bPos) },
 					ga4: x.aSessions == null ? null : { sessions: x.aSessions, sessionsChange: pct(x.aSessionsD), engagedShare: x.aEngaged == null ? null : r2(x.aEngaged * 100) + '%', keyEvents: x.aKeyEvents, keyEventsChange: pct(x.aKeyEventsD) },
 					ai: x.aiSessions == null ? null : { sessions: x.aiSessions, sessionsChange: pct(x.aiSessionsD), engagedShare: x.aiEngaged == null ? null : r2(x.aiEngaged * 100) + '%', keyEvents: x.aiKeyEvents, topAssistant: x.aiTop, byAssistant: x.aiBy },
+					allTraffic: x.tSessions == null ? null : { sessions: x.tSessions, sessionsChange: pct(x.tSessionsD), topChannel: x.tTop },
 					clarity: x.cSessions == null && x.cRage == null && x.cDead == null ? null : { sessions: x.cSessions, sessionsWithRageClicks: x.cRage, sessionsWithDeadClicks: x.cDead }
 				}))
 			};

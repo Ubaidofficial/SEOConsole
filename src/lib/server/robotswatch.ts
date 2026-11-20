@@ -9,6 +9,7 @@ import { fetchBytes } from './onpage';
 import { homeUrl } from './clarityscan';
 import { pageTotals, periodFor } from './queries';
 import { demoRobotsFetch } from './demo-channels';
+import { logRobotsChange } from './autolog';
 import { diffRobots, isAllowed, parseRobots, robotsFingerprint, robotsState, rulesFor, ROBOTS_MAX_BYTES, type RobotsState } from '../robots';
 
 /** Hosts checked per site: the property's own, plus those of its biggest pages (a domain property can span www and others). */
@@ -86,7 +87,8 @@ export async function runRobotsCheck(siteId: number, o: { fetchImpl?: typeof fet
 		if (changed) {
 			const before = prevKind === 'ok' ? parseRobots(prev.body ?? '') : { groups: [], sitemaps: [], unknown: 0 };
 			const diff = diffRobots(before, parsed ?? { groups: [], sitemaps: [], unknown: 0 });
-			d.prepare('INSERT INTO robots_changes (site_id, origin, at, before_state, after_state, added, removed, before_body) VALUES (?,?,?,?,?,?,?,?)').run(siteId, origin, now, prevKind, state, JSON.stringify(diff.added), JSON.stringify(diff.removed), prevKind === 'ok' ? prev.body : null);
+			const changeId = Number(d.prepare('INSERT INTO robots_changes (site_id, origin, at, before_state, after_state, added, removed, before_body) VALUES (?,?,?,?,?,?,?,?)').run(siteId, origin, now, prevKind, state, JSON.stringify(diff.added), JSON.stringify(diff.removed), prevKind === 'ok' ? prev.body : null).lastInsertRowid);
+			logRobotsChange(siteId, { id: changeId, origin, at: now, afterState: state, added: diff.added, removed: diff.removed });
 			// Keep the last 50 changes per site.
 			d.prepare('DELETE FROM robots_changes WHERE site_id = ? AND id NOT IN (SELECT id FROM robots_changes WHERE site_id = ? ORDER BY at DESC, id DESC LIMIT 50)').run(siteId, siteId);
 			audit('robots.changed', { siteId, detail: `${origin}: +${diff.added.length} −${diff.removed.length}` });

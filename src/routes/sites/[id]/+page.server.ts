@@ -65,6 +65,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		})
 	);
 	return {
+		changelogAuto: !!site.changelog_auto,
 		plan: planFrom(queueFor(site, days)),
 		brand: brandSplit(site, period),
 		// where the site's searches rank now, and in the period before (only when that period is really stored)
@@ -117,6 +118,12 @@ export const actions: Actions = {
 		audit('seo_test.from_annotation', { siteId: site.id, detail: a.title });
 		enqueueGa4Pages(site.id);
 		return { ok: 'Test created. Results firm up as days pass; see the Tests tab.' };
+	},
+	/** Let the app log robots.txt, Tag Manager and sitemap changes here by itself (on by default), or stop it. */
+	changelogAuto: async ({ request, params }) => {
+		const on = (await request.formData()).get('on') === '1';
+		db().prepare('UPDATE sites SET changelog_auto = ? WHERE id = ?').run(on ? 1 : 0, Number(params.id));
+		return { ok: on ? 'Detected changes will be logged here.' : 'Detected changes will no longer be logged; existing entries stay.' };
 	},
 	deleteNote: async ({ request, params }) => {
 		const id = Number((await request.formData()).get('id'));

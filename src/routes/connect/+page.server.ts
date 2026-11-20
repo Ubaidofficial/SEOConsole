@@ -5,7 +5,7 @@ import { db } from '$lib/server/db';
 import { allSites } from '$lib/server/queries';
 import { displayName } from '$lib/server/clients';
 import { listAccounts } from '$lib/server/accounts';
-import { allLinks, integrationMeta, linksFor, listIntegrations, removeIntegration, removeLink, setLink, type LinkKind } from '$lib/server/links';
+import { allCandidates, allLinks, integrationMeta, linksFor, listIntegrations, removeIntegration, removeLink, setLink, skipAutoLink, type LinkKind } from '$lib/server/links';
 import { autoMatchGa4, autoMatchGtm, connectBingKey, connectClarity, connectCrux, connectOpenSeo, hasGa4Scope, hasGtmScope, linkGtmManually } from '$lib/server/connect';
 import { callsLeft } from '$lib/server/clarity';
 import { enqueueDaAll, enqueueDrAll, enqueueLinkSync } from '$lib/server/jobs';
@@ -32,6 +32,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const sites = allSites().filter((s) => !['siteUnverifiedUser', 'none'].includes(s.permission));
 	const links = allLinks();
 	const accounts = listAccounts();
+	const candidates = allCandidates();
 	const bing = listIntegrations('bing').map((i) => ({ id: i.id, label: i.label, auth: integrationMeta(i).auth ?? 'apikey', status: i.status, demo: !!i.is_demo, sites: links.filter((l) => l.kind === 'bing' && l.integration_id === i.id).length }));
 	const openseo = listIntegrations('openseo')[0];
 	const crux = listIntegrations('crux')[0];
@@ -76,6 +77,12 @@ export const load: PageServerLoad = async ({ url }) => {
 				google: s.synced_through ? 'synced' : s.sync_status,
 				links: Object.fromEntries(KINDS.map((k) => [k, l[k] ? { id: l[k]!.external_id, label: l[k]!.label, status: l[k]!.sync_status, message: l[k]!.sync_message, lastSync: l[k]!.last_sync_at } : null])) as Record<LinkKind, { id: string; label: string | null; status: string; message: string | null; lastSync: number | null } | null>,
 				clarityCallsLeft: clarityInteg ? callsLeft(clarityInteg) : null,
+				// several properties or containers matched equally well: offered as a choice instead of a text box
+				candidates: {
+					ga4: candidates.filter((c) => c.site_id === s.id && c.kind === 'ga4').map((c) => ({ id: c.external_id, label: c.label ?? c.external_id })),
+					gtm: candidates.filter((c) => c.site_id === s.id && c.kind === 'gtm').map((c) => ({ id: c.external_id, label: c.label ?? c.external_id }))
+				},
+				skipped: (db().prepare('SELECT kind FROM link_skips WHERE site_id = ?').all(s.id) as { kind: string }[]).map((r) => r.kind),
 				// the "Set up GA4 & Tag Manager" button: nothing linked yet, or a container whose live version has no Google tag
 				needsSetup: !l.ga4 || !l.gtm || (() => { const g = gtmSnapshot(s.id); return !g?.published || !g.tags.some((t) => GA4_TAG_TYPES.has(t.type)); })()
 			};
@@ -159,9 +166,10 @@ export const actions: Actions = {
 		try {
 			const r = await autoMatchGa4();
 			const parts = [`Linked ${r.matched} site(s) to GA4 properties.`];
-			if (r.ambiguous.length) parts.push(`Several properties matched: ${r.ambiguous.join(', ')} — link those by hand.`);
-			if (r.unmatchedSites.length) parts.push(`No property found for: ${r.unmatchedSites.join(', ')}.`);
+			if (r.ambiguous.length) parts.push(`Several properties matched: ${r.ambiguous.join(', ')} — pick one in the table below.`);
+			if (r.unmatchedSites.length) parts.push(`No property found in any connected account for: ${r.unmatchedSites.join(', ')}.`);
 			if (r.noScope.length) parts.push(`Reconnect ${r.noScope.join(', ')} to grant GA4 access.`);
+			if (r.errors.length) parts.push(`Could not read: ${r.errors.join('; ')}.`);
 			return { ok: parts.join(' '), section: 'ga4' };
 		} catch (e) {
 			return fail(502, { error: msg(e), section: 'ga4' });
@@ -171,7 +179,7 @@ export const actions: Actions = {
 		try {
 			const r = await autoMatchGtm();
 			const parts = [`Linked ${r.matched} site(s) to Tag Manager containers.`];
-			if (r.ambiguous.length) parts.push(`Several containers matched: ${r.ambiguous.join(', ')} — link those by hand.`);
+			if (r.ambiguous.length) parts.push(`Several containers matched: ${r.ambiguous.join(', ')} — pick one in the table below.`);
 			if (r.unmatchedSites.length) parts.push(`No container found for: ${r.unmatchedSites.join(', ')}. (Containers are matched by their domain or by a name that is the site's address.)`);
 			if (r.noScope.length) parts.push(`Reconnect ${r.noScope.join(', ')} to grant Tag Manager access.`);
 			return { ok: parts.join(' '), section: 'gtm' };
@@ -220,8 +228,25 @@ export const actions: Actions = {
 	},
 	unlink: async ({ request }) => {
 		const f = await request.formData();
-		removeLink(intParam(f.get('siteId')), String(f.get('kind')) as LinkKind);
-		return { ok: 'Unlinked.' };
+		const siteId = intParam(f.get('siteId'));
+		const kind = String(f.get('kind')) as LinkKind;
+		removeLink(siteId, kind);
+		// Unlinking is a decision: the nightly matching must not quietly link it back. Clarity is never matched automatically.
+		if (kind !== 'clarity') skipAutoLink(siteId, kind);
+		return { ok: kind === 'clarity' ? 'Unlinked.' : 'Unlinked. Automatic matching will leave this one alone; link it by hand to undo.' };
+	},
+	/** Link a site to one of the properties or containers that matched it equally well. Only an offered choice is accepted. */
+	pick: async ({ request }) => {
+		const f = await request.formData();
+		const siteId = intParam(f.get('siteId'));
+		const kind = String(f.get('kind'));
+		const ext = String(f.get('externalId') ?? '');
+		if (kind !== 'ga4' && kind !== 'gtm') return fail(400, { error: 'Unsupported link type', section: kind });
+		const c = allCandidates().find((x) => x.site_id === siteId && x.kind === kind && x.external_id === ext);
+		if (!c) return fail(400, { error: 'That choice is no longer offered. Run the matching again.', section: kind });
+		setLink(siteId, kind, { accountId: c.account_id, externalId: c.external_id, label: kind === 'ga4' ? (c.label ?? ext).replace(/ \(properties\/\d+\)$/, '') : c.label });
+		enqueueLinkSync(siteId, kind);
+		return { ok: `Linked to ${c.label ?? ext}. Syncing in the background.`, section: kind };
 	},
 	resync: async ({ request }) => {
 		const f = await request.formData();

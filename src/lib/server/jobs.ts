@@ -9,7 +9,7 @@ import { syncBing, syncClarity, syncGa4, syncGtm } from './channels';
 import type { LinkKind } from './links';
 import { cruxIntegration, syncCrux } from './crux';
 import { monitorSite } from './indexmon';
-import { autoResubmitSitemaps, runSubmissionWork, submissionWorkDue } from './submission';
+import { autoResubmitSitemaps, autoSubmitBing, autoSubmitFoundSitemaps, runSubmissionWork, submissionWorkDue } from './submission';
 import { autoBuildDue, runAutoBuild } from './requestindex';
 import { listTests, warmTests } from './seotests';
 import { ensureGa4TestData } from './ga4tests';
@@ -18,6 +18,7 @@ import { actionsFor } from './actions';
 import { getSite } from './clients';
 import { importGoogleUpdates, lastUpdatesCheck } from './gupdates';
 import { syncSitemapUrls } from './sitemapcov';
+import { logSitemapChanges } from './autolog';
 import { autoSubmit } from './indexnow';
 import { crawlLinks, RECRAWL_MS } from './internallinks';
 import { robotsCheckDue, runRobotsCheck } from './robotswatch';
@@ -154,11 +155,17 @@ export function enqueueSubmissionWork(siteId: number): boolean {
 export function enqueueSitemapSync(siteId: number): boolean {
 	return enqueue(`sitemap:${siteId}`, async () => {
 		const r = await syncSitemapUrls(siteId);
+		// Pages appearing in or leaving the sitemaps go into the change log (a no-op if the site switched that off).
+		logSitemapChanges(siteId, r.changes);
 		// New and changed URLs go to IndexNow if the site has switched that on (a no-op otherwise).
 		const site = getSite(siteId);
 		if (site) await autoSubmit(site, r.changes).catch(() => {});
 		// And the sitemaps go to Search Console again if the site asked for that and something new or changed turned up.
 		if (site) await autoResubmitSitemaps(site, r.changes).catch(() => {});
+		// And the pages themselves go to Bing's URL submission if the site switched that on (skipped when IndexNow already covers Bing).
+		if (site) await autoSubmitBing(site, r.changes).catch(() => {});
+		// A sitemap found on the site while Search Console lists none is submitted only with the same opt-in as resubmitting.
+		if (site) await autoSubmitFoundSitemaps(site, r.found).catch(() => {});
 		return r;
 	});
 }
@@ -245,6 +252,10 @@ export function schedulerTick() {
 export async function refreshAllAccountSites() {
 	const accs = db().prepare("SELECT id FROM accounts WHERE status = 'active'").all() as { id: number }[];
 	for (const a of accs) await syncAccountSites(a.id).catch(() => {});
+	// Properties added since yesterday get their GA4, Tag Manager, Bing and OpenSEO links without anyone pressing a button.
+	// (Imported here, not at the top: connect.ts imports this module.)
+	const { autoLinkNewSites } = await import('./connect');
+	await autoLinkNewSites().catch(() => {});
 }
 
 declare global {

@@ -1,5 +1,5 @@
 import { db } from './db';
-import { clarityPages, mergePages, type AiPage, type ClarityPage, type Ga4Page, type InsightRow, type Vol } from '../pageinsights';
+import { clarityPages, mergePages, type AllPage, type AiPage, type ClarityPage, type Ga4Page, type InsightRow, type Vol } from '../pageinsights';
 import { periodFor, historyCoversPrevious, topPages } from './queries';
 import { linksFor } from './links';
 import type { SiteRow } from './clients';
@@ -27,6 +27,8 @@ export interface PageInsights {
 	/** AI assistants as GA4 sees them. `status`: ok = the report was pulled (it may be empty), pending = GA4 has not synced yet, failed = the last pull of this report failed */
 	ai: { linked: boolean; status: 'ok' | 'pending' | 'failed' | null; hasData: boolean; comparable: boolean };
 	clarity: { linked: boolean; hasData: boolean; day: string | null };
+	/** GA4 sessions from every channel. Pulled for whole windows of the standard lengths, ending on GA4's pull date, so `window` can differ from the period. */
+	all: { linked: boolean; hasData: boolean; comparable: boolean; window: { start: string; end: string } | null };
 }
 
 /** Google, Bing, GA4 and Clarity for every page, joined on the URL path, with each source's change against the previous period. */
@@ -68,6 +70,15 @@ export function pageInsights(site: S, days: number, limit = 5000): PageInsights 
 	// An empty previous window cannot be told apart from one that was never stored, so no change is claimed in either case.
 	const aiPrev = ai && ai.length && aiPrevRows.length ? aiPrevRows : null;
 
+	// GA4, every channel: the landing-page report pulled with the traffic sources (only for the standard period lengths).
+	const allWin = (which: 'now' | 'prev') =>
+		ga4Linked ? (d.prepare('SELECT start_date start, end_date end FROM ga4_source_windows WHERE site_id = ? AND days = ? AND which = ?').get(site.id, days, which) as { start: string; end: string } | undefined) : undefined;
+	const allRows = (which: 'now' | 'prev') => d.prepare('SELECT page, channel, sessions FROM ga4_pages WHERE site_id = ? AND days = ? AND which = ?').all(site.id, days, which) as AllPage[];
+	const allNowWin = allWin('now');
+	const all = allNowWin ? allRows('now') : null;
+	// A stored previous window may legitimately be empty (no sessions), so the window record, not the rows, says it was pulled.
+	const allPrev = all && all.length && allWin('prev') ? allRows('prev') : null;
+
 	// Clarity: the newest "by URL" snapshot, which covers the last 24 hours only, not the selected period.
 	const clarityLinked = !!links.clarity;
 	const snap = clarityLinked ? (d.prepare("SELECT day, payload FROM clarity_snapshots WHERE site_id = ? AND dimension = 'URL' ORDER BY day DESC LIMIT 1").get(site.id) as { day: string; payload: string } | undefined) : undefined;
@@ -80,7 +91,7 @@ export function pageInsights(site: S, days: number, limit = 5000): PageInsights 
 		}
 	}
 
-	const rows = mergePages({ google, googlePrev, bing, bingPrev, ga4: ga4 && ga4.length ? ga4 : null, ga4Prev, ai: ai && ai.length ? ai : null, aiPrev, clarity: clarity && clarity.length ? clarity : null }, (path) => originOf(site.site_url) + path).slice(0, limit);
+	const rows = mergePages({ google, googlePrev, bing, bingPrev, ga4: ga4 && ga4.length ? ga4 : null, ga4Prev, ai: ai && ai.length ? ai : null, aiPrev, clarity: clarity && clarity.length ? clarity : null, all: all && all.length ? all : null, allPrev }, (path) => originOf(site.site_url) + path).slice(0, limit);
 	return {
 		rows,
 		period: { start: p.start, end: p.end, prevStart: p.prevStart, prevEnd: p.prevEnd },
@@ -88,6 +99,7 @@ export function pageInsights(site: S, days: number, limit = 5000): PageInsights 
 		bing: { linked: bingLinked, hasData: !!bing && bing.length > 0, comparable: !!bingPrev },
 		ga4: { linked: ga4Linked, hasData: !!ga4 && ga4.length > 0, comparable: !!ga4Prev },
 		ai: { linked: ga4Linked, status: aiStatus, hasData: !!ai && ai.length > 0, comparable: !!aiPrev },
-		clarity: { linked: clarityLinked, hasData: !!clarity && clarity.length > 0, day: snap?.day ?? null }
+		clarity: { linked: clarityLinked, hasData: !!clarity && clarity.length > 0, day: snap?.day ?? null },
+		all: { linked: ga4Linked, hasData: !!all && all.length > 0, comparable: !!allPrev, window: allNowWin ?? null }
 	};
 }

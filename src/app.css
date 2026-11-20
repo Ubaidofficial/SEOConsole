@@ -66,6 +66,10 @@
 	--c-clicks: var(--chart-1);
 	--c-impr: var(--chart-2);
 	--c-pos: var(--chart-3);
+	/* One colour per traffic source on the dashboard cards (validated as a set for colour-blind separation, both themes). */
+	--src-gsc: var(--chart-3);
+	--src-ga4: var(--chart-2);
+	--src-bing: var(--chart-1);
 }
 
 /* Dim dark: a cool slate, never pure black, with off-white text. Every text pair below is at least 4.8:1 (WCAG AA wants 4.5:1);

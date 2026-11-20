@@ -56,7 +56,13 @@ export interface PageSources {
 	/** null when the previous window is not stored (or had no AI sessions to compare with): no change is claimed */
 	aiPrev: AiPage[] | null;
 	clarity: ClarityPage[] | null;
+	/** GA4 sessions from every channel by landing page (one row per page and channel group); optional so older callers need not pass it */
+	all?: AllPage[] | null;
+	/** null when the previous window is not stored: no change is claimed */
+	allPrev?: AllPage[] | null;
 }
+
+export interface AllPage { page: string; channel: string; sessions: number }
 
 /** One row for the table. A value is null when that source has nothing for the page (shown as a dash), never 0 by assumption. */
 export interface InsightRow {
@@ -69,6 +75,8 @@ export interface InsightRow {
 	/** GA4 sessions that arrived from AI assistants, across all of them; aiBy is the split, busiest first */
 	aiSessions: number | null; aiSessionsD: number | null; aiEngaged: number | null; aiKeyEvents: number | null; aiTop: string | null; aiBy: { assistant: string; sessions: number }[] | null;
 	cSessions: number | null; cRage: number | null; cDead: number | null;
+	/** GA4 sessions from every channel (search, direct, social, referral, AI…), the change, and the channel that sent the most */
+	tSessions: number | null; tSessionsD: number | null; tTop: string | null;
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -122,9 +130,23 @@ export function mergePages(s: PageSources, originFor: (path: string) => string):
 		c.deadClicks = add(c.deadClicks, r.deadClicks);
 		cl.set(k, c);
 	}
-	const paths = new Set<string>([...g.keys(), ...(b?.keys() ?? []), ...ga.keys(), ...ai.keys(), ...cl.keys()]);
+	const rollAll = (rows: AllPage[] | null | undefined) => {
+		const m = new Map<string, { sessions: number; by: Map<string, number> }>();
+		for (const r of rows ?? []) {
+			const k = pathKey(r.page);
+			const c = m.get(k) ?? { sessions: 0, by: new Map<string, number>() };
+			c.sessions += r.sessions;
+			c.by.set(r.channel, (c.by.get(r.channel) ?? 0) + r.sessions);
+			m.set(k, c);
+		}
+		return m;
+	};
+	const all = rollAll(s.all);
+	const allp = s.allPrev ? rollAll(s.allPrev) : null;
+	const paths = new Set<string>([...g.keys(), ...(b?.keys() ?? []), ...ga.keys(), ...ai.keys(), ...cl.keys(), ...all.keys()]);
 	const out: InsightRow[] = [];
 	for (const path of paths) {
+		const T = all.get(path), TP = allp?.get(path);
 		const G = g.get(path), GP = gp?.get(path), B = b?.get(path), BP = bp?.get(path), A = ga.get(path), AP = gap.get(path), AI = ai.get(path), AIP = aip?.get(path), C = cl.get(path);
 		// A change needs a real previous period on that source; "not stored" is different from "zero".
 		const dG = (now: number, key: 'clicks' | 'impressions') => (G && gp ? pctChange(now, GP?.[key] ?? 0) : null);
@@ -141,10 +163,12 @@ export function mergePages(s: PageSources, originFor: (path: string) => string):
 			aKeyEvents: A ? r1(A.keyEvents) : null, aKeyEventsD: A ? dA(A.keyEvents, AP?.keyEvents) : null,
 			aiSessions: AI?.sessions ?? null, aiSessionsD: AI ? dAi(AI.sessions, AIP?.sessions) : null, aiEngaged: AI && AI.sessions ? AI.engaged / AI.sessions : null,
 			aiKeyEvents: AI ? r1(AI.keyEvents) : null, aiTop: aiBy?.[0]?.assistant ?? null, aiBy,
-			cSessions: C?.sessions ?? null, cRage: C?.rageClicks ?? null, cDead: C?.deadClicks ?? null
+			cSessions: C?.sessions ?? null, cRage: C?.rageClicks ?? null, cDead: C?.deadClicks ?? null,
+			tSessions: T?.sessions ?? null, tSessionsD: T && allp ? pctChange(T.sessions, TP?.sessions ?? 0) : null,
+			tTop: T ? [...T.by].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1))[0][0] : null
 		});
 	}
-	return out.sort((x, y) => (y.gClicks ?? -1) - (x.gClicks ?? -1) || (y.bClicks ?? -1) - (x.bClicks ?? -1) || (y.aSessions ?? -1) - (x.aSessions ?? -1) || (y.aiSessions ?? -1) - (x.aiSessions ?? -1) || (x.path < y.path ? -1 : 1));
+	return out.sort((x, y) => (y.gClicks ?? -1) - (x.gClicks ?? -1) || (y.bClicks ?? -1) - (x.bClicks ?? -1) || (y.aSessions ?? -1) - (x.aSessions ?? -1) || (y.aiSessions ?? -1) - (x.aiSessions ?? -1) || (y.tSessions ?? -1) - (x.tSessions ?? -1) || (x.path < y.path ? -1 : 1));
 }
 
 /**

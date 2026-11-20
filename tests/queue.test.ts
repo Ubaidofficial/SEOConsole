@@ -10,7 +10,7 @@ import { queueDepth } from '../src/lib/server/jobs';
 import { BingApiError, type BingClient } from '../src/lib/server/bing';
 import { addWatch, watchList } from '../src/lib/server/indexmon';
 import {
-	MAX_QUEUE, RECHECK_DAYS, clearQueue, drainQueue, queueStatus, quotaOverview, refreshBingQuota, runDueRechecks, runSubmissionWork, submissionStatus, submissionWorkDue, submissionsCsv, submitForIndexing, SubmitRefused
+	MAX_QUEUE, RECHECK_DAYS, autoSubmitBing, clearQueue, drainQueue, queueStatus, quotaOverview, refreshBingQuota, runDueRechecks, runSubmissionWork, submissionStatus, submissionWorkDue, submissionsCsv, submitForIndexing, SubmitRefused
 } from '../src/lib/server/submission';
 import { enqueueSubmissionWork } from '../src/lib/server/jobs';
 
@@ -410,5 +410,39 @@ describe('MCP', () => {
 		expect(queueStatus(1).total).toBe(before); // the first call discarded nothing
 		const c = await call(deleteKey, 'cancel_indexing_queue', { site: '1', confirmation_token: first.data.confirmationToken });
 		expect(c.data).toMatchObject({ removed: before, remaining: 0 });
+	});
+});
+
+describe('Send new pages to Bing (automatic)', () => {
+	const changes = { added: [U('/new-a'), U('/new-b')], updated: [U('/changed')] };
+	const on = (v: 0 | 1) => db().prepare('UPDATE sites SET bing_submit_auto = ? WHERE id = 1').run(v);
+	afterEach(() => on(0));
+
+	it('does nothing until the site switches it on', async () => {
+		const b = bing();
+		expect(await autoSubmitBing(site(), changes, { bingClient: b.c })).toBeNull();
+		expect(b.calls).toEqual([]);
+	});
+
+	it("sends the sitemap's new and changed pages to Bing, logged as automatic, and queues what is over the allowance", async () => {
+		on(1);
+		const b = bing({ daily: 2 });
+		const r = await autoSubmitBing(site(), changes, { bingClient: b.c });
+		expect(b.calls.flat()).toEqual([U('/new-a'), U('/new-b')]);
+		expect(r?.channels[0]).toMatchObject({ channel: 'bing', accepted: 2, queued: 1 });
+		expect(queued().map((x) => x.url)).toEqual([U('/changed')]);
+		expect((db().prepare("SELECT COUNT(*) n FROM index_submissions WHERE site_id = 1 AND source = 'auto' AND channel = 'bing'").get() as { n: number }).n).toBe(2);
+	});
+
+	it('stays out of the way when IndexNow auto-submit already reaches Bing, when nothing changed, and in READ_ONLY mode', async () => {
+		on(1);
+		const b = bing();
+		expect(await autoSubmitBing(site(), { added: [], updated: [] }, { bingClient: b.c })).toBeNull();
+		process.env.READ_ONLY = '1';
+		expect(await autoSubmitBing(site(), changes, { bingClient: b.c })).toBeNull();
+		delete process.env.READ_ONLY;
+		db().prepare("INSERT INTO indexnow_keys (site_id, key, created_at, auto) VALUES (1, 'abcdefgh12345678', 1, 1)").run();
+		expect(await autoSubmitBing(site(), changes, { bingClient: b.c })).toBeNull();
+		expect(b.calls).toEqual([]);
 	});
 });
