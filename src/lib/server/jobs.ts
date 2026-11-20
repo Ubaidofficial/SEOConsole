@@ -152,20 +152,28 @@ export function enqueueSubmissionWork(siteId: number): boolean {
 }
 
 /** Read a site's submitted sitemaps (a few HTTP requests): daily, or after 6 h if the last attempt had a problem. */
+/**
+ * Everything that follows a sitemap read, the same whether the daily job, the Indexing tab's button or the MCP tool did the
+ * reading. Each step is a no-op unless the site switched it on, and a failing step never stops the others.
+ */
+export async function afterSitemapRead(siteId: number, r: Awaited<ReturnType<typeof syncSitemapUrls>>) {
+	// Pages appearing in or leaving the sitemaps go into the change log.
+	logSitemapChanges(siteId, r.changes);
+	const site = getSite(siteId);
+	if (!site) return { indexNow: null, resubmitted: null, bing: null, foundSubmitted: [] as string[] };
+	// New and changed URLs to IndexNow; the sitemaps to Search Console again; the pages to Bing's own submission (skipped when
+	// IndexNow already reaches Bing); and a sitemap found on the site while Search Console lists none, with the resubmit opt-in.
+	const indexNow = await autoSubmit(site, r.changes).catch(() => null);
+	const resubmitted = await autoResubmitSitemaps(site, r.changes).catch(() => null);
+	const bing = await autoSubmitBing(site, r.changes).catch(() => null);
+	const foundSubmitted = await autoSubmitFoundSitemaps(site, r.found).catch(() => [] as string[]);
+	return { indexNow, resubmitted, bing, foundSubmitted };
+}
+
 export function enqueueSitemapSync(siteId: number): boolean {
 	return enqueue(`sitemap:${siteId}`, async () => {
 		const r = await syncSitemapUrls(siteId);
-		// Pages appearing in or leaving the sitemaps go into the change log (a no-op if the site switched that off).
-		logSitemapChanges(siteId, r.changes);
-		// New and changed URLs go to IndexNow if the site has switched that on (a no-op otherwise).
-		const site = getSite(siteId);
-		if (site) await autoSubmit(site, r.changes).catch(() => {});
-		// And the sitemaps go to Search Console again if the site asked for that and something new or changed turned up.
-		if (site) await autoResubmitSitemaps(site, r.changes).catch(() => {});
-		// And the pages themselves go to Bing's URL submission if the site switched that on (skipped when IndexNow already covers Bing).
-		if (site) await autoSubmitBing(site, r.changes).catch(() => {});
-		// A sitemap found on the site while Search Console lists none is submitted only with the same opt-in as resubmitting.
-		if (site) await autoSubmitFoundSitemaps(site, r.found).catch(() => {});
+		await afterSitemapRead(siteId, r);
 		return r;
 	});
 }

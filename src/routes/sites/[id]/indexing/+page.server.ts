@@ -6,12 +6,9 @@ import { config } from '$lib/server/config';
 import { addWatch, indexHistory, indexSummary, recentEvents, removeWatch, watchList } from '$lib/server/indexmon';
 import { hostAllowed } from '$lib/server/onpage';
 import { sitemapCoverage, syncSitemapUrls } from '$lib/server/sitemapcov';
-import { autoSubmit } from '$lib/server/indexnow';
-import { autoResubmitSitemaps, autoSubmitBing, autoSubmitFoundSitemaps } from '$lib/server/submission';
 import { linksFor } from '$lib/server/links';
-import { logSitemapChanges } from '$lib/server/autolog';
 import { urlClassesReport } from '$lib/server/insights';
-import { enqueueIndexMonitor } from '$lib/server/jobs';
+import { afterSitemapRead, enqueueIndexMonitor } from '$lib/server/jobs';
 import { EVENT_SEVERITY } from '$lib/indexing';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
@@ -40,12 +37,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 export const actions: Actions = {
 	sitemapRefresh: async ({ params }) => {
 		const r = await syncSitemapUrls(Number(params.id));
-		const s = getSite(Number(params.id));
-		logSitemapChanges(Number(params.id), r.changes);
-		if (s) await autoSubmit(s, r.changes).catch(() => {});
-		if (s) await autoResubmitSitemaps(s, r.changes).catch(() => {});
-		if (s) await autoSubmitBing(s, r.changes).catch(() => {});
-		if (s) await autoSubmitFoundSitemaps(s, r.found).catch(() => {});
+		await afterSitemapRead(Number(params.id), r);
 		if (r.urls === 0) return fail(502, { error: r.error ?? 'No sitemap URLs were found. Submit a sitemap in Search Console first (Sitemaps tab).' });
 		return { ok: `Read ${r.sitemaps} sitemap file${r.sitemaps === 1 ? '' : 's'}: ${r.urls.toLocaleString('en-US')} URLs${r.truncated ? ' (cut off at the limit)' : ''}${r.error ? `. A problem: ${r.error}` : ''}.` };
 	},
