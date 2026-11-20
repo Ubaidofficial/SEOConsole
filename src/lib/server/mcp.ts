@@ -22,6 +22,7 @@ import { gtmSnapshot, trackingHealth } from './tracking';
 import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
 import { realtimeFor } from './realtime';
+import { noKeyEventsText } from '../keyeventtext';
 import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
 import { evaluateTestCached, listTests } from './seotests';
 import { indexHistory, indexSummary, recentEvents, watchList } from './indexmon';
@@ -131,7 +132,7 @@ function ga4PagesOrEvents(site: Site, n: number, a: Record<string, unknown>) {
 		if (!k.linked) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
 		if (k.status === 'pending') return { connected: true, note: 'Key events appear after the next GA4 sync.' };
 		if (k.status === 'failed') return { connected: true, error: `GA4 could not return key events on the last sync; it will be retried. ${k.error}` };
-		if (k.status === 'none') return { connected: true, note: 'GA4 has recorded no key events for this site: none are marked as key events in GA4 (Admin → Events).' };
+		if (k.status === 'none') return { connected: true, note: noKeyEventsText(k.marked) };
 		return { window: k.window, ...(k.staleError ? { warning: `The last refresh failed, so recent days may be missing: ${k.staleError}` } : {}), total: k.total, events: k.events.map((e) => ({ event: e.event, keyEvents: e.keyEvents, previous: e.prevKeyEvents, change: e.keyEventsDelta == null ? null : r2(e.keyEventsDelta * 100) + '%' })) };
 	}
 	const l = landingPagesReport(site, n, { search: typeof a.search === 'string' ? a.search : undefined });

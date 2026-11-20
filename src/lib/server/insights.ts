@@ -378,7 +378,14 @@ export function keyEventsReport(site: Site, days: number) {
 	const anyEvents = !!d.prepare('SELECT 1 FROM ga4_event_daily WHERE site_id = ? LIMIT 1').get(site.id);
 	const pulled = !!d.prepare('SELECT 1 FROM ga4_dim_daily WHERE site_id = ? LIMIT 1').get(site.id);
 	if (!end || (!anyEvents && !pulled)) return error ? { linked: true as const, status: 'failed' as const, error } : { linked: true as const, status: 'pending' as const };
-	if (!anyEvents) return error ? { linked: true as const, status: 'failed' as const, error } : { linked: true as const, status: 'none' as const };
+	if (!anyEvents) {
+		if (error) return { linked: true as const, status: 'failed' as const, error };
+		// Key events SEOConsole marked itself (track_key_event), so "none recorded" is not mistaken for "none marked".
+		const marked = (d.prepare("SELECT detail, at FROM audit_log WHERE action = 'ga4.key_event_created' AND site_id = ? ORDER BY at").all(site.id) as { detail: string; at: number }[])
+			.map((r) => ({ event: r.detail.split(': ').pop() ?? r.detail, at: r.at }))
+			.filter((m, i, all) => all.findIndex((x) => x.event === m.event) === i);
+		return { linked: true as const, status: 'none' as const, marked };
+	}
 	const start = addDays(end, -(days - 1));
 	const prevStart = addDays(start, -days);
 	const prevEnd = addDays(start, -1);

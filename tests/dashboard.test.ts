@@ -194,7 +194,20 @@ describe('GA4 key events by name and landing pages from every channel', () => {
 		const real = ga4SourceFor(link.account_id!);
 		const none: Ga4Source = { ...real, keyEventsDaily: async () => [] };
 		await pullGa4Dims(1, link.external_id, none, pacificToday());
-		expect(keyEventsReport(getSite(1)!, 28)).toMatchObject({ status: 'none' });
+		const { noKeyEventsText } = await import('../src/lib/keyeventtext');
+		const none1 = keyEventsReport(getSite(1)!, 28);
+		expect(none1).toMatchObject({ status: 'none', marked: [] });
+		// "none recorded" is never worded as "none marked": the stored data cannot tell the two apart
+		const neutral = noKeyEventsText([]);
+		expect(neutral).toMatch(/has not recorded any key events/);
+		expect(neutral).not.toMatch(/none are marked as key events/);
+		// an event SEOConsole marked itself (its audit log) is named, once, even if marked twice
+		const at = Date.UTC(2026, 10, 19, 23, 0);
+		for (const t of [at, at + 1000]) db().prepare("INSERT INTO audit_log (at, action, site_id, detail) VALUES (?, 'ga4.key_event_created', 1, 'properties/123: job_alert_signup')").run(t);
+		const none2 = keyEventsReport(getSite(1)!, 28);
+		if (!none2.linked || none2.status !== 'none') throw new Error('expected none');
+		expect(none2.marked).toEqual([{ event: 'job_alert_signup', at }]);
+		expect(noKeyEventsText(none2.marked)).toBe('GA4 has not recorded any key events yet. Marked by SEOConsole: job_alert_signup (marked 19 Nov 2026). They appear here once someone triggers them; GA4 Realtime shows them within minutes.');
 		const broken: Ga4Source = { ...real, keyEventsDaily: async () => { throw new Error('quota'); } };
 		await pullGa4Dims(1, link.external_id, broken, pacificToday());
 		expect(keyEventsReport(getSite(1)!, 28)).toMatchObject({ status: 'failed', error: 'quota' });
