@@ -5,6 +5,7 @@ import { config } from './config';
  * The per-site automations that are off until someone switches them on, one site at a time. This is the one place to set them for
  * every site at once, and to choose what a site found later starts with. Nothing here is on by default: choosing is the point.
  * IndexNow auto-submit is not here on purpose: it needs a key file uploaded to each site and checked first, so it cannot be bulk-set.
+ * Sending new pages to Bing is: Bing's own submission call needs only the Bing link the site already has.
  */
 export const SWITCHES = [
 	{
@@ -29,6 +30,14 @@ export const SWITCHES = [
 		label: 'Resubmit sitemaps when pages change',
 		what: 'When the daily sitemap read finds new or changed pages, sends the sitemaps to Search Console again (at most once a day per site). A nudge: Google decides when it reads them.',
 		cost: 'Needs write access to Search Console, so it does nothing in READ_ONLY mode.',
+		needsWrite: true
+	},
+	{
+		key: 'bingAuto',
+		column: 'bing_submit_auto',
+		label: 'Send new pages to Bing',
+		what: "When the daily sitemap read finds new or changed pages, sends them to Bing's URL submission (no key file needed, unlike IndexNow). What is over Bing's daily allowance is queued for the next days. Skipped for a site whose IndexNow auto-submit is on, since IndexNow already reaches Bing.",
+		cost: "Uses Bing's daily URL submission allowance for the site; only sites linked to Bing. Does nothing in READ_ONLY mode.",
 		needsWrite: true
 	}
 ] as const;

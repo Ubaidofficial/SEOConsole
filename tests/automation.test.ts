@@ -34,8 +34,8 @@ beforeEach(() => {
 
 describe('automation switches', () => {
 	it('start with everything off, and counting only the sites the dashboard shows', () => {
-		expect(getDefaults()).toEqual({ indexMonitor: false, requestAuto: false, sitemapAuto: false });
-		expect(counts()).toEqual({ total: 2, on: { indexMonitor: 0, requestAuto: 0, sitemapAuto: 0 } });
+		expect(getDefaults()).toEqual({ indexMonitor: false, requestAuto: false, sitemapAuto: false, bingAuto: false });
+		expect(counts()).toEqual({ total: 2, on: { indexMonitor: 0, requestAuto: 0, sitemapAuto: 0, bingAuto: 0 } });
 	});
 
 	it('turn on for all changes only eligible sites, says how many, and a repeat changes none', () => {

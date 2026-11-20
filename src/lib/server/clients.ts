@@ -46,6 +46,7 @@ export interface SiteRow {
 	index_next_at: number | null;
 	request_auto: number;
 	sitemap_auto: number;
+	bing_submit_auto: number;
 	created_at: number;
 }
 

@@ -815,6 +815,7 @@ function migrate(db: Database.Database) {
 	// Build the Request tab's list by itself once a day (and tell the webhook). Off unless the owner switched it on for the site.
 	// Resubmit the site's sitemaps by itself when a sitemap read finds new or changed pages. Off unless the owner switched it on.
 	if (!cols('sites').includes('sitemap_auto')) db.exec('ALTER TABLE sites ADD COLUMN sitemap_auto INTEGER NOT NULL DEFAULT 0');
+	if (!cols('sites').includes('bing_submit_auto')) db.exec('ALTER TABLE sites ADD COLUMN bing_submit_auto INTEGER NOT NULL DEFAULT 0');
 	if (!cols('sites').includes('request_auto')) db.exec('ALTER TABLE sites ADD COLUMN request_auto INTEGER NOT NULL DEFAULT 0');
 	if (!cols('ai_runs').includes('via')) db.exec('ALTER TABLE ai_runs ADD COLUMN via TEXT');
 	if (!cols('ai_runs').includes('cost')) db.exec('ALTER TABLE ai_runs ADD COLUMN cost REAL');

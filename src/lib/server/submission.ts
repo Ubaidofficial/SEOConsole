@@ -64,7 +64,7 @@ export interface SubmitOptions {
 	dryRun?: boolean;
 	/** IndexNow only: resend even if sent in the last 24 hours */
 	force?: boolean;
-	source: 'app' | 'mcp' | 'queue';
+	source: 'app' | 'mcp' | 'queue' | 'auto';
 	keyId?: number;
 	/** Hold back what does not fit today (a channel's daily limit) and send it on the following days. Default true. */
 	queueOverflow?: boolean;
@@ -339,6 +339,26 @@ export async function autoResubmitSitemaps(site: SiteRow, changes: { added: stri
 	d.prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run(key, today);
 	try {
 		return await resubmitSitemaps(site, 'auto');
+	} catch {
+		return null;
+	}
+}
+
+const CAP_PER_BING_RUN = 500;
+/**
+ * If the site has "Send new pages to Bing" on and a sitemap read found new or changed pages, send them through Bing's own URL
+ * submission (what is over today's allowance is queued). Skipped when IndexNow auto-submit is on, because IndexNow already
+ * reaches Bing and the same URL would be counted twice against Bing's limits. A no-op without a Bing link or in READ_ONLY mode.
+ */
+export async function autoSubmitBing(site: SiteRow, changes: { added: string[]; updated: string[] } | null, o: { bingClient?: BingClient; now?: number } = {}): Promise<SubmitReport | null> {
+	if (!changes || config.readOnly) return null;
+	const urls = [...changes.added, ...changes.updated].slice(0, CAP_PER_BING_RUN);
+	if (!urls.length) return null;
+	if (!(db().prepare('SELECT bing_submit_auto a FROM sites WHERE id = ?').get(site.id) as { a: number } | undefined)?.a) return null;
+	if (getKey(site.id)?.auto) return null;
+	if (!linksFor(site.id).bing) return null;
+	try {
+		return await submitForIndexing(site, urls, { channels: ['bing'], source: 'auto', bingClient: o.bingClient, now: o.now });
 	} catch {
 		return null;
 	}

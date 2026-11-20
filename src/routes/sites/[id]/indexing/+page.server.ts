@@ -7,7 +7,8 @@ import { addWatch, indexHistory, indexSummary, recentEvents, removeWatch, watchL
 import { hostAllowed } from '$lib/server/onpage';
 import { sitemapCoverage, syncSitemapUrls } from '$lib/server/sitemapcov';
 import { autoSubmit } from '$lib/server/indexnow';
-import { autoResubmitSitemaps } from '$lib/server/submission';
+import { autoResubmitSitemaps, autoSubmitBing } from '$lib/server/submission';
+import { linksFor } from '$lib/server/links';
 import { urlClassesReport } from '$lib/server/insights';
 import { enqueueIndexMonitor } from '$lib/server/jobs';
 import { EVENT_SEVERITY } from '$lib/indexing';
@@ -26,6 +27,8 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		history: indexHistory(site.id),
 		coverage: sitemapCoverage(site),
 		sitemapAuto: !!site.sitemap_auto,
+		bingAuto: !!site.bing_submit_auto,
+		bingLinked: !!linksFor(site.id).bing,
 		perRun: config.indexMonitorUrls,
 		summary: indexSummary(site.id),
 		events: recentEvents(site.id, 60).map((e) => ({ ...e, severity: EVENT_SEVERITY[e.kind as keyof typeof EVENT_SEVERITY] ?? 'warn' })),
@@ -39,6 +42,7 @@ export const actions: Actions = {
 		const s = getSite(Number(params.id));
 		if (s) await autoSubmit(s, r.changes).catch(() => {});
 		if (s) await autoResubmitSitemaps(s, r.changes).catch(() => {});
+		if (s) await autoSubmitBing(s, r.changes).catch(() => {});
 		if (r.urls === 0) return fail(502, { error: r.error ?? 'No sitemap URLs were found. Submit a sitemap in Search Console first (Sitemaps tab).' });
 		return { ok: `Read ${r.sitemaps} sitemap file${r.sitemaps === 1 ? '' : 's'}: ${r.urls.toLocaleString('en-US')} URLs${r.truncated ? ' (cut off at the limit)' : ''}${r.error ? `. A problem: ${r.error}` : ''}.` };
 	},
@@ -59,6 +63,12 @@ export const actions: Actions = {
 		const on = (await request.formData()).get('on') === '1';
 		db().prepare('UPDATE sites SET sitemap_auto = ? WHERE id = ?').run(on ? 1 : 0, Number(params.id));
 		return { ok: on ? 'Sitemaps will be submitted again after a read that finds new or changed pages (at most once a day).' : 'Automatic sitemap resubmission switched off.' };
+	},
+	/** Switch sending new and changed sitemap pages to Bing's URL submission on or off for this site. */
+	bingAuto: async ({ params, request }) => {
+		const on = (await request.formData()).get('on') === '1';
+		db().prepare('UPDATE sites SET bing_submit_auto = ? WHERE id = ?').run(on ? 1 : 0, Number(params.id));
+		return { ok: on ? "New and changed sitemap pages will be sent to Bing after each daily read (within Bing's daily allowance)." : 'Sending new pages to Bing switched off.' };
 	},
 	toggle: async ({ params, request }) => {
 		const on = (await request.formData()).get('on') === '1';
