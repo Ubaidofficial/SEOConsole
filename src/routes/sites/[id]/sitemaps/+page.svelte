@@ -15,6 +15,18 @@
 {#if form?.error}<p class="mb-3 text-sm text-bad">{form.error}</p>{/if}
 {#if form?.ok}<p class="mb-3 text-sm text-good">{form.ok}</p>{/if}
 
+{#if !data.sitemaps.length && data.found?.feeds.length}
+	<!-- Found on the site by the daily read while Search Console lists none: one click to submit it. -->
+	<div class="mb-4 rounded-xl border border-[color:var(--warn)]/40 bg-card p-4 text-sm shadow-xs">
+		<p class="mb-2"><b>Search Console has no sitemap for this site, but {data.found.feeds.length === 1 ? 'one was' : `${data.found.feeds.length} were`} found {data.found.from === 'robots' ? 'in robots.txt' : 'at a usual address'}.</b> The daily read already uses {data.found.feeds.length === 1 ? 'it' : 'them'} for sitemap coverage; submitting tells Google about {data.found.feeds.length === 1 ? 'it' : 'them'} too. (With <i>Resubmit sitemaps when pages change</i> on, this happens on its own.)</p>
+		{#each data.found.feeds as f}
+			<form method="POST" action="?/submit" use:enhance class="flex flex-wrap items-center gap-2 py-1"><input type="hidden" name="feed" value={f} /><a class="pii truncate hover:underline" href={f} target="_blank" rel="noreferrer noopener">{f}</a><button class="btn btn-primary !h-8 text-xs"><Send class="size-3.5" />Submit</button></form>
+		{/each}
+	</div>
+{:else if !data.sitemaps.length && data.found && !data.found.feeds.length}
+	<p class="mb-4 text-sm text-muted-foreground">Search Console has no sitemap for this site, and the daily read found none in robots.txt or at /sitemap.xml, /sitemap_index.xml or /wp-sitemap.xml.</p>
+{/if}
+
 <form method="POST" action="?/submit" use:enhance={() => { busy = true; return async ({ update }) => { await update(); busy = false; }; }} class="mb-5 rounded-xl border bg-card p-4 shadow-xs">
 	<label class="grid min-w-0 gap-1.5 text-xs font-medium text-muted-foreground">Submit a sitemap to Search Console
 		<span class="flex min-w-0 flex-wrap gap-2">

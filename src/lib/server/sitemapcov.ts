@@ -17,7 +17,74 @@ const RAW_CAP = 12_000_000;
 const UNZIPPED_CAP = 40_000_000;
 const NEW_PAGE_DAYS = 14;
 
-export interface SitemapSyncResult { /** URLs listed in the sitemaps that are outside the property (other host, scheme or path), left out */ offProperty?: number; sitemaps: number; urls: number; truncated: boolean; error: string | null; /** what changed since the previous read; null on the first read (nothing to compare with) */ changes: SitemapChanges | null }
+export interface SitemapSyncResult { /** sitemaps found on the site (robots.txt or a usual address) because Search Console lists none; read, but not submitted */ found?: string[]; /** URLs listed in the sitemaps that are outside the property (other host, scheme or path), left out */ offProperty?: number; sitemaps: number; urls: number; truncated: boolean; error: string | null; /** what changed since the previous read; null on the first read (nothing to compare with) */ changes: SitemapChanges | null }
+
+// ── finding a sitemap Search Console does not know about ────────────────────
+const USUAL_PATHS = ['sitemap.xml', 'sitemap_index.xml', 'wp-sitemap.xml', 'sitemap.xml.gz'];
+const MAX_FOUND = 5;
+
+/** Where to look on the site: a Domain property's https host (and its www. twin); a URL-prefix property's own folder. */
+function lookIn(siteUrl: string): string[] {
+	if (siteUrl.startsWith('sc-domain:')) {
+		const host = siteUrl.slice('sc-domain:'.length);
+		return [`https://${host}/`, ...(host.startsWith('www.') ? [] : [`https://www.${host}/`])];
+	}
+	return [siteUrl.endsWith('/') ? siteUrl : siteUrl + '/'];
+}
+
+/** Is the address a real sitemap (or sitemap index) inside the property? Returns the address after redirects, or null. */
+async function realSitemap(url: string, siteUrl: string, fetchImpl?: typeof fetch): Promise<string | null> {
+	if (!inProperty(url, siteUrl)) return null;
+	const r = await fetchBytes(url, siteUrl, { fetchImpl, max: RAW_CAP, accept: 'application/xml,text/xml,application/gzip,*/*' }).catch(() => null);
+	if (!r?.body || r.status < 200 || r.status >= 300 || !inProperty(r.finalUrl, siteUrl)) return null;
+	try {
+		return parseSitemapXml(sitemapText(r.body)).kind === 'unknown' ? null : r.finalUrl;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Find the site's sitemaps when Search Console lists none: the `Sitemap:` lines of robots.txt first, then the usual addresses
+ * (/sitemap.xml, /sitemap_index.xml, /wp-sitemap.xml, /sitemap.xml.gz). Only files that really parse as a sitemap and sit inside
+ * the property count. Reads only, through the same host-confined fetcher as everything else.
+ */
+export async function discoverSitemaps(siteUrl: string, fetchImpl?: typeof fetch): Promise<{ feeds: string[]; from: 'robots' | 'usual' | null }> {
+	const bases = lookIn(siteUrl);
+	const listed: string[] = [];
+	for (const base of bases) {
+		const r = await fetchBytes(new URL('robots.txt', new URL(base).origin + '/').href, siteUrl, { fetchImpl, max: 500_000, accept: 'text/plain,*/*' }).catch(() => null);
+		if (!r?.body || r.status < 200 || r.status >= 300) continue;
+		for (const line of r.body.toString('utf8').split(/\r?\n/)) {
+			const m = /^\s*sitemap\s*:\s*(\S+)/i.exec(line);
+			if (m && !listed.includes(m[1])) listed.push(m[1]);
+		}
+	}
+	const found: string[] = [];
+	for (const u of listed) {
+		if (found.length >= MAX_FOUND) break;
+		const ok = await realSitemap(u, siteUrl, fetchImpl);
+		if (ok && !found.includes(ok)) found.push(ok);
+	}
+	if (found.length) return { feeds: found, from: 'robots' };
+	for (const base of bases)
+		for (const p of USUAL_PATHS) {
+			const ok = await realSitemap(new URL(p, base).href, siteUrl, fetchImpl);
+			if (ok) return { feeds: [ok], from: 'usual' };
+		}
+	return { feeds: [], from: null };
+}
+
+const foundKey = (siteId: number) => `sitemap_found:${siteId}`;
+/** What the last read found on the site while Search Console listed no sitemap (null: Search Console has some, or never looked). */
+export function foundSitemaps(siteId: number): { feeds: string[]; from: 'robots' | 'usual' | null; at: number } | null {
+	const v = (db().prepare('SELECT value FROM kv WHERE key = ?').get(foundKey(siteId)) as { value: string } | undefined)?.value;
+	try {
+		return v ? JSON.parse(v) : null;
+	} catch {
+		return null;
+	}
+}
 
 /** Sitemap files are often served gzipped (.xml.gz): detect the magic bytes rather than trusting a header or a name. */
 export function sitemapText(buf: Buffer): string {
@@ -39,8 +106,18 @@ export async function syncSitemapUrls(siteId: number, o: { client?: GscClient; f
 	let files = 0;
 	let truncated = false;
 	let offProperty = 0;
+	let found: string[] | undefined;
 	try {
-		const listed = (await client.listSitemaps(site.site_url)).map((s) => s.path).filter((p) => /^https?:\/\//i.test(p)).slice(0, 10);
+		let listed = (await client.listSitemaps(site.site_url)).map((s) => s.path).filter((p) => /^https?:\/\//i.test(p)).slice(0, 10);
+		if (listed.length) db().prepare('DELETE FROM kv WHERE key = ?').run(foundKey(siteId));
+		else {
+			// Search Console has none: look on the site itself, and read what is there so coverage works before it is submitted.
+			const d0 = await discoverSitemaps(site.site_url, fetchImpl);
+			db().prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run(foundKey(siteId), JSON.stringify({ ...d0, at: Date.now() }));
+			found = d0.feeds;
+			listed = d0.feeds;
+			if (!listed.length) note('No sitemap is submitted in Search Console, and none was found in robots.txt or at the usual addresses (/sitemap.xml, /sitemap_index.xml, /wp-sitemap.xml).');
+		}
 		const queue: { url: string; depth: number }[] = listed.map((url) => ({ url, depth: 0 }));
 		const seen = new Set<string>();
 		for (let item = queue.shift(); item; item = queue.shift()) {
@@ -76,7 +153,7 @@ export async function syncSitemapUrls(siteId: number, o: { client?: GscClient; f
 	// If nothing at all could be read, keep the previous snapshot rather than wiping it.
 	if (urls.size === 0 && error) {
 		d.prepare('INSERT INTO sitemap_sync (site_id, fetched_at, sitemaps, urls, truncated, error) VALUES (?,?,?,?,?,?) ON CONFLICT(site_id) DO UPDATE SET fetched_at = excluded.fetched_at, error = excluded.error').run(siteId, Date.now(), files, 0, 0, error);
-		return { sitemaps: files, urls: 0, truncated: false, error, changes: null, offProperty };
+		return { sitemaps: files, urls: 0, truncated: false, error, changes: null, offProperty, found };
 	}
 	// What changed since the last read, for IndexNow. The first read has nothing to compare with, so it reports no changes.
 	const hadSnapshot = !!d.prepare('SELECT 1 FROM sitemap_sync WHERE site_id = ? AND urls > 0').get(siteId);
@@ -93,7 +170,7 @@ export async function syncSitemapUrls(siteId: number, o: { client?: GscClient; f
 		const total = (d.prepare('SELECT COUNT(*) n FROM sitemap_urls WHERE site_id = ?').get(siteId) as { n: number }).n;
 		d.prepare('INSERT OR REPLACE INTO sitemap_sync (site_id, fetched_at, sitemaps, urls, truncated, error) VALUES (?,?,?,?,?,?)').run(siteId, Date.now(), files, total, truncated ? 1 : 0, error);
 	})();
-	return { sitemaps: files, urls: urls.size, truncated, error, changes, offProperty };
+	return { sitemaps: files, urls: urls.size, truncated, error, changes, offProperty, found };
 }
 
 type CovSite = Pick<SiteRow, 'id' | 'synced_through' | 'backfill_done' | 'backfilled_to'>;

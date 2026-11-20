@@ -9,7 +9,7 @@ import { syncBing, syncClarity, syncGa4, syncGtm } from './channels';
 import type { LinkKind } from './links';
 import { cruxIntegration, syncCrux } from './crux';
 import { monitorSite } from './indexmon';
-import { autoResubmitSitemaps, autoSubmitBing, runSubmissionWork, submissionWorkDue } from './submission';
+import { autoResubmitSitemaps, autoSubmitBing, autoSubmitFoundSitemaps, runSubmissionWork, submissionWorkDue } from './submission';
 import { autoBuildDue, runAutoBuild } from './requestindex';
 import { listTests, warmTests } from './seotests';
 import { ensureGa4TestData } from './ga4tests';
@@ -161,6 +161,8 @@ export function enqueueSitemapSync(siteId: number): boolean {
 		if (site) await autoResubmitSitemaps(site, r.changes).catch(() => {});
 		// And the pages themselves go to Bing's URL submission if the site switched that on (skipped when IndexNow already covers Bing).
 		if (site) await autoSubmitBing(site, r.changes).catch(() => {});
+		// A sitemap found on the site while Search Console lists none is submitted only with the same opt-in as resubmitting.
+		if (site) await autoSubmitFoundSitemaps(site, r.found).catch(() => {});
 		return r;
 	});
 }

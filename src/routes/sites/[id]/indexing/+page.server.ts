@@ -7,7 +7,7 @@ import { addWatch, indexHistory, indexSummary, recentEvents, removeWatch, watchL
 import { hostAllowed } from '$lib/server/onpage';
 import { sitemapCoverage, syncSitemapUrls } from '$lib/server/sitemapcov';
 import { autoSubmit } from '$lib/server/indexnow';
-import { autoResubmitSitemaps, autoSubmitBing } from '$lib/server/submission';
+import { autoResubmitSitemaps, autoSubmitBing, autoSubmitFoundSitemaps } from '$lib/server/submission';
 import { linksFor } from '$lib/server/links';
 import { urlClassesReport } from '$lib/server/insights';
 import { enqueueIndexMonitor } from '$lib/server/jobs';
@@ -43,6 +43,7 @@ export const actions: Actions = {
 		if (s) await autoSubmit(s, r.changes).catch(() => {});
 		if (s) await autoResubmitSitemaps(s, r.changes).catch(() => {});
 		if (s) await autoSubmitBing(s, r.changes).catch(() => {});
+		if (s) await autoSubmitFoundSitemaps(s, r.found).catch(() => {});
 		if (r.urls === 0) return fail(502, { error: r.error ?? 'No sitemap URLs were found. Submit a sitemap in Search Console first (Sitemaps tab).' });
 		return { ok: `Read ${r.sitemaps} sitemap file${r.sitemaps === 1 ? '' : 's'}: ${r.urls.toLocaleString('en-US')} URLs${r.truncated ? ' (cut off at the limit)' : ''}${r.error ? `. A problem: ${r.error}` : ''}.` };
 	},

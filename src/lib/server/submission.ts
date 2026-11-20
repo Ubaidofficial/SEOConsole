@@ -288,7 +288,7 @@ const guardWrite = () => {
 	if (config.readOnly) throw new SubmitRefused('READ_ONLY=1: sitemap changes are disabled on this server.');
 };
 
-export async function submitSitemapTo(site: SiteRow, feed: string, source: 'app' | 'mcp'): Promise<string> {
+export async function submitSitemapTo(site: SiteRow, feed: string, source: 'app' | 'mcp' | 'auto'): Promise<string> {
 	guardWrite();
 	const f = checkFeed(site, feed);
 	try {
@@ -342,6 +342,25 @@ export async function autoResubmitSitemaps(site: SiteRow, changes: { added: stri
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Sitemaps a read found on the site (robots.txt or a usual address) while Search Console listed none: submitted to Search Console
+ * only when the site has "Resubmit sitemaps when pages change" on, which is the person's consent to sitemap writes. Otherwise they
+ * are shown on the Sitemaps tab with a one-click Submit. Failures are swallowed; the next daily read tries again.
+ */
+export async function autoSubmitFoundSitemaps(site: SiteRow, found: string[] | undefined): Promise<string[]> {
+	if (!found?.length || config.readOnly) return [];
+	if (!(db().prepare('SELECT sitemap_auto a FROM sites WHERE id = ?').get(site.id) as { a: number } | undefined)?.a) return [];
+	const done: string[] = [];
+	for (const f of found) {
+		try {
+			done.push(await submitSitemapTo(site, f, 'auto'));
+		} catch {
+			/* tried again after the next read */
+		}
+	}
+	return done;
 }
 
 const CAP_PER_BING_RUN = 500;
