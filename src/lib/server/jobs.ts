@@ -245,6 +245,10 @@ export function schedulerTick() {
 export async function refreshAllAccountSites() {
 	const accs = db().prepare("SELECT id FROM accounts WHERE status = 'active'").all() as { id: number }[];
 	for (const a of accs) await syncAccountSites(a.id).catch(() => {});
+	// Properties added since yesterday get their GA4, Tag Manager, Bing and OpenSEO links without anyone pressing a button.
+	// (Imported here, not at the top: connect.ts imports this module.)
+	const { autoLinkNewSites } = await import('./connect');
+	await autoLinkNewSites().catch(() => {});
 }
 
 declare global {

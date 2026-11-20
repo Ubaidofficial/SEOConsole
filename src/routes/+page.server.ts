@@ -126,6 +126,8 @@ export const actions: Actions = {
 				listError = e instanceof Error ? e.message : 'Could not refresh the property list';
 			}
 		}
+		// Newly found properties: link them to GA4, Tag Manager, Bing and OpenSEO in the background (it reads those APIs, so it is not awaited).
+		void import('$lib/server/connect').then((m) => m.autoLinkNewSites()).catch(() => {});
 		const removed = Math.max(0, (db().prepare("SELECT COUNT(*) n FROM sites WHERE permission = 'none'").get() as { n: number }).n - noneBefore);
 		const sites = db()
 			.prepare("SELECT s.id FROM sites s JOIN accounts a ON a.id = s.account_id WHERE s.hidden = 0 AND a.status = 'active' AND s.permission NOT IN ('siteUnverifiedUser','none')")

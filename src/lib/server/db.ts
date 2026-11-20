@@ -619,6 +619,21 @@ CREATE TABLE IF NOT EXISTS bing_links (             -- Bing's inbound-link count
 	error TEXT,                         -- why the last read failed; the previous payload is kept
 	error_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS link_skips (             -- a site someone unlinked on purpose: automatic matching leaves this source alone for it
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL,                 -- bing | ga4 | gtm | openseo
+	at INTEGER NOT NULL,
+	PRIMARY KEY (site_id, kind)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS link_candidates (        -- several properties or containers matched a site equally well: offered as a choice on Connect
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL,                 -- ga4 | gtm
+	external_id TEXT NOT NULL,          -- properties/123 or accounts/1/containers/2
+	label TEXT,
+	account_id INTEGER,                 -- the Google account that can read it (may differ from the site's own account)
+	found_at INTEGER NOT NULL,
+	PRIMARY KEY (site_id, kind, external_id)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS clarity_scans (          -- is Clarity's script on the site's pages? (newest check only)
 	site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
 	checked_at INTEGER NOT NULL,

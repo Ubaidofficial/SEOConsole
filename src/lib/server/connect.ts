@@ -8,7 +8,7 @@ import { containerHosts, isWebContainer, type GtmContainer } from './gtm';
 import { fetchInsights, ClarityApiError, utcDay } from './clarity';
 import { demoClarityFetch, demoOpenSeoProjects } from './demo-channels';
 import { listOpenSeoProjects } from './openseo';
-import { getIntegration, integrationMeta, linksFor, listIntegrations, removeIntegration, saveIntegration, setLink } from './links';
+import { autoLinkable, getIntegration, integrationMeta, integrationSecret, linksFor, listIntegrations, removeIntegration, saveCandidates, saveIntegration, setLink } from './links';
 import { enqueueCruxSync, enqueueLinkSync } from './jobs';
 import { CruxError, queryOrigin } from './crux';
 import { audit } from './db';
@@ -27,7 +27,7 @@ export function autoMatchBing(integrationId: number) {
 		let matched = 0;
 		const linked = new Set<string>();
 		for (const site of visibleSites()) {
-			if (linksFor(site.id).bing) continue;
+			if (!autoLinkable(site.id, 'bing')) continue;
 			const m = bestMatch(site.site_url, verified, (b) => b.url);
 			if (!m) continue;
 			setLink(site.id, 'bing', { integrationId, externalId: m.url, label: m.url });
@@ -61,9 +61,12 @@ export function saveBingOAuth(tokens: { access_token: string; refresh_token?: st
 // ── GA4 ──────────────────────────────────────────────────────────────────────
 export interface Ga4PropertyWithUrls { property: string; displayName: string; urls: string[] }
 
-/** An account's GA4 properties (the first 100) with the website address of each one's web streams. */
-export async function ga4PropertiesWithUrls(src: Pick<Ga4Source, 'listProperties' | 'streamUrls'>): Promise<Ga4PropertyWithUrls[]> {
-	const props = (await src.listProperties()).slice(0, 100);
+/**
+ * An account's GA4 properties with the website address of each one's web streams. One Admin API call per property, so it stops
+ * at `max` (500 by default); an account with more properties than that needs its extra sites linked by hand.
+ */
+export async function ga4PropertiesWithUrls(src: Pick<Ga4Source, 'listProperties' | 'streamUrls'>, max = 500): Promise<Ga4PropertyWithUrls[]> {
+	const props = (await src.listProperties()).slice(0, max);
 	const out: Ga4PropertyWithUrls[] = [];
 	let i = 0;
 	await Promise.all(Array.from({ length: 4 }, async () => {
@@ -78,32 +81,51 @@ export async function ga4PropertiesWithUrls(src: Pick<Ga4Source, 'listProperties
 /** The properties with a web stream on this site's host (or a parent / sub-domain of it). One means a match; several are ambiguous. */
 export const ga4Candidates = (props: Ga4PropertyWithUrls[], siteUrl: string) => props.filter((p) => p.urls.some((u) => hostsMatch(u, siteUrl)));
 
+/**
+ * Link each site that may be linked automatically to the one GA4 property with a web stream on its host. The site's own Google
+ * account is searched first, then every other connected account with GA4 access (an agency often reads GA4 through a different
+ * login than Search Console). Several equally good properties are saved as choices for Connect instead of being guessed.
+ */
 export async function autoMatchGa4() {
-	const accounts = db().prepare("SELECT id, scopes, is_demo, email FROM accounts WHERE status = 'active'").all() as { id: number; scopes: string; is_demo: number; email: string }[];
+	const accounts = db().prepare("SELECT id, scopes, is_demo, email FROM accounts WHERE status = 'active' ORDER BY id").all() as { id: number; scopes: string; is_demo: number; email: string }[];
 	let matched = 0;
 	const ambiguous: string[] = [];
-	const noScope: string[] = [];
 	const unmatchedSites: string[] = [];
-	const sites = visibleSites().filter((s) => !linksFor(s.id).ga4);
-	for (const acc of accounts) {
-		if (!hasGa4Scope(acc)) {
-			noScope.push(acc.email);
+	const errors: string[] = [];
+	const noScope = accounts.filter((a) => !hasGa4Scope(a)).map((a) => a.email);
+	const readable = accounts.filter(hasGa4Scope);
+	const sites = visibleSites().filter((s) => autoLinkable(s.id, 'ga4'));
+	// Each account's properties are read at most once per run, and only when a site needs them.
+	const cache = new Map<number, Promise<Ga4PropertyWithUrls[]>>();
+	const propsOf = (acc: (typeof readable)[number]) => {
+		if (!cache.has(acc.id))
+			cache.set(acc.id, ga4PropertiesWithUrls(ga4SourceFor(acc.id)).catch((e) => (errors.push(`${acc.email}: ${e instanceof Error ? e.message : String(e)}`), [])));
+		return cache.get(acc.id)!;
+	};
+	for (const site of sites) {
+		const order = [...readable.filter((a) => a.id === site.account_id), ...readable.filter((a) => a.id !== site.account_id)];
+		let found: { acc: (typeof readable)[number]; props: Ga4PropertyWithUrls[] } | null = null;
+		for (const acc of order) {
+			const cands = ga4Candidates(await propsOf(acc), site.site_url);
+			if (cands.length) {
+				found = { acc, props: cands };
+				break;
+			}
+		}
+		if (!found) {
+			if (readable.length) unmatchedSites.push(site.site_url);
 			continue;
 		}
-		const mine = sites.filter((s) => s.account_id === acc.id && !linksFor(s.id).ga4);
-		if (!mine.length) continue;
-		const withUrls = await ga4PropertiesWithUrls(ga4SourceFor(acc.id));
-		for (const site of mine) {
-			const cands = ga4Candidates(withUrls, site.site_url);
-			if (cands.length === 1) {
-				setLink(site.id, 'ga4', { accountId: acc.id, externalId: cands[0].property, label: cands[0].displayName });
-				enqueueLinkSync(site.id, 'ga4');
-				matched++;
-			} else if (cands.length > 1) ambiguous.push(site.site_url);
-			else unmatchedSites.push(site.site_url);
+		if (found.props.length === 1) {
+			setLink(site.id, 'ga4', { accountId: found.acc.id, externalId: found.props[0].property, label: found.props[0].displayName });
+			enqueueLinkSync(site.id, 'ga4');
+			matched++;
+		} else {
+			saveCandidates(site.id, 'ga4', found.props.map((p) => ({ externalId: p.property, label: `${p.displayName} (${p.property})`, accountId: found.acc.id })));
+			ambiguous.push(site.site_url);
 		}
 	}
-	return { matched, ambiguous, unmatchedSites, noScope };
+	return { matched, ambiguous, unmatchedSites, noScope, errors };
 }
 
 export async function listGa4Candidates(accountId: number) {
@@ -133,13 +155,17 @@ export async function autoMatchGtm() {
 	const ambiguous: string[] = [];
 	const used = new Set<string>();
 	for (const acc of accounts.filter(hasGtmScope)) {
-		const sites = visibleSites().filter((s) => !linksFor(s.id).gtm);
+		const sites = visibleSites().filter((s) => autoLinkable(s.id, 'gtm'));
 		if (!sites.length) break;
 		const containers = (await gtmSourceFor(acc.id).listContainers()).filter(isWebContainer);
 		for (const site of sites) {
 			const { pick, candidates: cands } = pickGtm(containers, site.site_url);
 			if (!pick) {
-				if (cands.length > 1) ambiguous.push(site.site_url);
+				if (cands.length > 1) {
+					// Offered as a choice on Connect; a unique match in a later account still links it (and clears the choice).
+					saveCandidates(site.id, 'gtm', cands.map((c) => ({ externalId: c.path, label: `${c.publicId} · ${c.name}`, accountId: acc.id })));
+					if (!ambiguous.includes(site.site_url)) ambiguous.push(site.site_url);
+				}
 				continue;
 			}
 			setLink(site.id, 'gtm', { accountId: acc.id, externalId: pick.path, label: `${pick.publicId} · ${pick.name}` });
@@ -148,8 +174,11 @@ export async function autoMatchGtm() {
 			matched++;
 		}
 	}
-	const unmatchedSites = visibleSites().filter((s) => !linksFor(s.id).gtm && !ambiguous.includes(s.site_url)).map((s) => s.site_url);
-	return { matched, ambiguous, unmatchedSites, noScope };
+	// A site ambiguous in one account but matched uniquely in a later one is linked, not ambiguous.
+	const open = visibleSites().filter((s) => autoLinkable(s.id, 'gtm'));
+	const still = ambiguous.filter((u) => open.some((s) => s.site_url === u));
+	const unmatchedSites = open.filter((s) => !still.includes(s.site_url)).map((s) => s.site_url);
+	return { matched, ambiguous: still, unmatchedSites, noScope };
 }
 
 /** Link a site by hand to a container given as GTM-XXXXXXX or accounts/123/containers/456, looked up in the connected accounts. */
@@ -219,22 +248,59 @@ export async function connectOpenSeo(baseUrl: string, apiKey: string) {
 	const demo = config.demo && apiKey.trim() === 'demo';
 	const projects = demo ? demoOpenSeoProjects() : await listOpenSeoProjects(base, apiKey.trim());
 	const id = saveIntegration('openseo', new URL(base).host, { apiKey: apiKey.trim() }, { baseUrl: base }, demo);
-	let matched = 0;
-	const unmatchedProjects: string[] = [];
-	const linkedProjects = new Set<string>();
-	for (const site of visibleSites()) {
-		const withDomain = projects.filter((p) => p.domain);
-		const m = bestMatch(site.site_url, withDomain, (p) => p.domain!);
-		if (!m) continue;
-		setLink(site.id, 'openseo', { integrationId: id, externalId: m.id, label: m.name });
-		linkedProjects.add(m.id);
-		matched++;
-	}
-	for (const p of projects) if (!linkedProjects.has(p.id)) unmatchedProjects.push(`${p.name}${p.domain ? ` (${p.domain})` : ''}`);
+	const { matched, linkedProjects } = matchOpenSeo(id, projects, false);
+	const unmatchedProjects = projects.filter((p) => !linkedProjects.has(p.id)).map((p) => `${p.name}${p.domain ? ` (${p.domain})` : ''}`);
 	// Replace any older OpenSEO connection that no longer has links.
 	for (const old of listIntegrations('openseo')) if (old.id !== id) removeIntegration(old.id);
 	audit('openseo.connected', { detail: base });
 	return { id, matched, projects: projects.length, unmatchedProjects };
+}
+
+/**
+ * Link sites to the OpenSEO project on their domain. On a fresh connection every site is (re)linked to the new connection;
+ * `onlyNew` (the nightly run) touches only sites with no OpenSEO link. Sites unlinked on purpose are left alone either way.
+ */
+function matchOpenSeo(integrationId: number, projects: { id: string; name: string; domain?: string | null }[], onlyNew: boolean) {
+	let matched = 0;
+	const linkedProjects = new Set<string>();
+	const withDomain = projects.filter((p) => p.domain);
+	for (const site of visibleSites()) {
+		if (onlyNew ? !autoLinkable(site.id, 'openseo') : db().prepare("SELECT 1 FROM link_skips WHERE site_id = ? AND kind = 'openseo'").get(site.id)) continue;
+		const m = bestMatch(site.site_url, withDomain, (p) => p.domain!);
+		if (!m) continue;
+		setLink(site.id, 'openseo', { integrationId, externalId: m.id, label: m.name });
+		linkedProjects.add(m.id);
+		matched++;
+	}
+	return { matched, linkedProjects };
+}
+
+// ── All sources, for sites found later ───────────────────────────────────────
+/**
+ * Link every site that has no link yet to its GA4 property, Tag Manager container, Bing site and OpenSEO project, using the
+ * same matching as Connect's buttons. Runs after each nightly property refresh and after "Sync all", so a property added to
+ * Search Console later is joined up without anyone pressing anything. Each source fails on its own; nothing here unlinks.
+ */
+export async function autoLinkNewSites() {
+	const out: { ga4: number; gtm: number; bing: number; openseo: number; ambiguous: string[]; errors: string[] } = { ga4: 0, gtm: 0, bing: 0, openseo: 0, ambiguous: [], errors: [] };
+	const pending = (k: 'ga4' | 'gtm' | 'bing' | 'openseo') => visibleSites().some((s) => autoLinkable(s.id, k));
+	const note = (src: string, e: unknown) => out.errors.push(`${src}: ${e instanceof Error ? e.message : String(e)}`);
+	if (pending('ga4'))
+		await autoMatchGa4().then((r) => ((out.ga4 = r.matched), out.ambiguous.push(...r.ambiguous), out.errors.push(...r.errors.map((e) => `GA4 ${e}`))), (e) => note('GA4', e));
+	if (pending('gtm')) await autoMatchGtm().then((r) => ((out.gtm = r.matched), out.ambiguous.push(...r.ambiguous)), (e) => note('Tag Manager', e));
+	for (const b of listIntegrations('bing')) if (pending('bing')) await autoMatchBing(b.id).then((r) => (out.bing += r.matched), (e) => note('Bing', e));
+	const o = listIntegrations('openseo')[0];
+	if (o && pending('openseo')) {
+		try {
+			const projects = o.is_demo ? demoOpenSeoProjects() : await listOpenSeoProjects(integrationMeta(o).baseUrl, integrationSecret<{ apiKey: string }>(o).apiKey);
+			out.openseo = matchOpenSeo(o.id, projects, true).matched;
+		} catch (e) {
+			note('OpenSEO', e);
+		}
+	}
+	const total = out.ga4 + out.gtm + out.bing + out.openseo;
+	if (total) audit('links.auto', { detail: `linked automatically: GA4 ${out.ga4}, Tag Manager ${out.gtm}, Bing ${out.bing}, OpenSEO ${out.openseo}` });
+	return out;
 }
 
 export const openSeoProjectUrl = (integrationId: number | null, projectId: string) => {

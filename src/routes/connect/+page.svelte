@@ -111,10 +111,16 @@
 									</div>
 									<div class="text-[11px] text-muted-foreground">{k === 'openseo' ? 'linked by domain' : l.status === 'running' || l.status === 'queued' ? '⟳ ' + l.status : l.status === 'error' ? l.message : 'synced ' + ago(l.lastSync)}
 										{#if editing && k !== 'openseo'}<form method="POST" action="?/resync" use:enhance class="inline"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} /> <button class="underline">refresh</button></form>{/if}</div>
+								{:else if (k === 'ga4' || k === 'gtm') && r.candidates[k].length && !data.readOnly}
+									<!-- Several matched equally well: a choice, shown without "Edit links" because it is waiting on a decision. -->
+									<form method="POST" action="?/pick" use:enhance class="flex flex-col gap-1"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} />
+										<span class="text-[11px] text-warn">{r.candidates[k].length} matches, pick one</span>
+										<span class="flex gap-1"><select class="input pii w-40 !py-0.5 text-xs" name="externalId" aria-label="Choose the {k === 'ga4' ? 'GA4 property' : 'Tag Manager container'} for {r.name}">{#each r.candidates[k] as c}<option value={c.id}>{c.label}</option>{/each}</select><button class="btn !py-0.5">Link</button></span></form>
 								{:else if editing && (k === 'bing' || k === 'ga4' || k === 'gtm')}
 									<details><summary class="cursor-pointer text-muted-foreground">link…</summary>
 										<form method="POST" action="?/manual" use:enhance class="mt-1 flex gap-1"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} />
 											<input class="input w-40 !py-0.5 text-xs" name="externalId" aria-label={k === 'bing' ? 'Bing site address' : k === 'gtm' ? 'Tag Manager container ID' : 'GA4 property'} placeholder={k === 'bing' ? 'https://www.site.com/' : k === 'gtm' ? 'GTM-ABC1234' : 'properties/123456'} /><button class="btn !py-0.5">Link</button></form></details>
+								{:else if r.skipped.includes(k)}<span class="text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone. Link it by hand (Edit links) to undo.">– unlinked</span>
 								{:else}<span class="text-muted-foreground">–</span>{/if}
 							</td>
 						{/each}
