@@ -127,10 +127,12 @@ export const SYNC_RUNS_EXPLAIN = 'Every run re-pulls the newest few days, becaus
 
 /** How the site tabs are grouped in the tab bar: a caption and the tab paths under it. Every tab appears in exactly one group (a test checks it). */
 /**
- * The tabs always on show, in this order: the plan, the findings people act on, the two tables they look things up in, indexing and
- * tests. Everything else sits under "More" (grouped as below), so a site opens on a short row instead of 26 tabs.
+ * The tabs always on show, in this order: the plan, every source on one screen, the findings people act on, the two tables they look
+ * things up in, GA4 (users, conversions, referrers) and indexing. Everything else sits under "More" (grouped as below), so a site opens on
+ * a short row instead of 27 tabs. Opportunities and Tests sit under More: Quick wins and Actions already carry their best findings and
+ * finished tests, and a tab opened from More still shows in the row while it is open.
  */
-export const SITE_PRIMARY_TABS = ['', '/quickwins', '/actions', '/opportunities', '/queries', '/pages', '/indexing', '/tests'] as const;
+export const SITE_PRIMARY_TABS = ['', '/dashboard', '/actions', '/quickwins', '/queries', '/pages', '/analytics', '/indexing'] as const;
 
 export const SITE_TAB_GROUPS = [
 	['Traffic', ['', '/dashboard', '/queries', '/pages', '/trends', '/groups', '/segments', '/types']],
