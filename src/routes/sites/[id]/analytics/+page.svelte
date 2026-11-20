@@ -4,6 +4,7 @@
 	import DataTable from '$lib/components/DataTable.svelte';
 	import { ago } from '$lib/format';
 	import { enhance } from '$app/forms';
+	import { noKeyEventsText } from '$lib/keyeventtext';
 	let { data, form } = $props();
 	let rtBusy = $state(false);
 	const cols = [
@@ -82,7 +83,7 @@
 			{:else if data.keyEvents.status === 'failed'}
 				<p class="text-xs text-warn">GA4 could not return key events on the last sync; it will be retried. {data.keyEvents.error}</p>
 			{:else if data.keyEvents.status === 'none'}
-				<p class="text-xs text-muted-foreground">GA4 has recorded no key events for this site. Mark the events that matter (a sign-up, an application, a purchase) as key events in GA4 (Admin → Events) and they appear here.</p>
+				<p class="text-xs text-muted-foreground">{noKeyEventsText(data.keyEvents.marked)}</p>
 			{:else}
 				<p class="mb-2 text-xs text-muted-foreground">{data.keyEvents.window.start} to {data.keyEvents.window.end}, GA4's newest days. Only events marked as key events in GA4 are counted.</p>
 				{#if data.keyEvents.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so recent days may be missing: {data.keyEvents.staleError}</p>{/if}

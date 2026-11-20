@@ -5,6 +5,7 @@
 	import SegBar from '$lib/components/viz/SegBar.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import { fmtInt, fmtPct, fmtPos } from '$lib/format';
+	import { noKeyEventsText } from '$lib/keyeventtext';
 	let { data } = $props();
 	const g = $derived(data.dash.gsc);
 	const b = $derived(data.dash.bing);
@@ -183,7 +184,7 @@
 		{#if !a}{@render connect('GA4')}
 		{:else if !a.synced || !a.keyEventsByName || a.keyEventsByName.status === 'pending'}<p class="text-sm text-muted-foreground">Appears after the next GA4 sync.</p>
 		{:else if a.keyEventsByName.status === 'failed'}<p class="text-sm text-warn">Could not be fetched on the last sync (will retry): {a.keyEventsByName.error}</p>
-		{:else if a.keyEventsByName.status === 'none'}<p class="text-sm text-muted-foreground">GA4 has recorded no key events for this site. Mark the events that matter (a sign-up, an application, a purchase) as key events in GA4 (Admin → Events) and they appear here.</p>
+		{:else if a.keyEventsByName.status === 'none'}<p class="text-sm text-muted-foreground">{noKeyEventsText(a.keyEventsByName.marked)}</p>
 		{:else if !a.keyEventsByName.events.length}<p class="text-sm text-muted-foreground">No key events in {range(a.keyEventsByName.window)}.</p>
 		{:else}
 			<p class="mb-3 text-xs text-muted-foreground">{range(a.keyEventsByName.window)} · {fmtInt(a.keyEventsByName.total)} in all</p>
