@@ -619,6 +619,13 @@ CREATE TABLE IF NOT EXISTS bing_links (             -- Bing's inbound-link count
 	error TEXT,                         -- why the last read failed; the previous payload is kept
 	error_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS annotation_auto (         -- change-log entries the app wrote itself; the key outlives a deleted entry so it never comes back
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	key TEXT NOT NULL,                  -- robots:<id> | gtm:<container>:<version> | sitemap-added:<day> | sitemap-removed:<day>
+	annotation_id INTEGER,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (site_id, key)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS link_skips (             -- a site someone unlinked on purpose: automatic matching leaves this source alone for it
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	kind TEXT NOT NULL,                 -- bing | ga4 | gtm | openseo
@@ -815,6 +822,7 @@ function migrate(db: Database.Database) {
 	// Build the Request tab's list by itself once a day (and tell the webhook). Off unless the owner switched it on for the site.
 	// Resubmit the site's sitemaps by itself when a sitemap read finds new or changed pages. Off unless the owner switched it on.
 	if (!cols('sites').includes('sitemap_auto')) db.exec('ALTER TABLE sites ADD COLUMN sitemap_auto INTEGER NOT NULL DEFAULT 0');
+	if (!cols('sites').includes('changelog_auto')) db.exec('ALTER TABLE sites ADD COLUMN changelog_auto INTEGER NOT NULL DEFAULT 1');
 	if (!cols('sites').includes('bing_submit_auto')) db.exec('ALTER TABLE sites ADD COLUMN bing_submit_auto INTEGER NOT NULL DEFAULT 0');
 	if (!cols('sites').includes('request_auto')) db.exec('ALTER TABLE sites ADD COLUMN request_auto INTEGER NOT NULL DEFAULT 0');
 	if (!cols('ai_runs').includes('via')) db.exec('ALTER TABLE ai_runs ADD COLUMN via TEXT');

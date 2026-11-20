@@ -18,6 +18,7 @@ import { actionsFor } from './actions';
 import { getSite } from './clients';
 import { importGoogleUpdates, lastUpdatesCheck } from './gupdates';
 import { syncSitemapUrls } from './sitemapcov';
+import { logSitemapChanges } from './autolog';
 import { autoSubmit } from './indexnow';
 import { crawlLinks, RECRAWL_MS } from './internallinks';
 import { robotsCheckDue, runRobotsCheck } from './robotswatch';
@@ -154,6 +155,8 @@ export function enqueueSubmissionWork(siteId: number): boolean {
 export function enqueueSitemapSync(siteId: number): boolean {
 	return enqueue(`sitemap:${siteId}`, async () => {
 		const r = await syncSitemapUrls(siteId);
+		// Pages appearing in or leaving the sitemaps go into the change log (a no-op if the site switched that off).
+		logSitemapChanges(siteId, r.changes);
 		// New and changed URLs go to IndexNow if the site has switched that on (a no-op otherwise).
 		const site = getSite(siteId);
 		if (site) await autoSubmit(site, r.changes).catch(() => {});

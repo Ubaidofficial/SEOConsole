@@ -9,6 +9,7 @@ import { sitemapCoverage, syncSitemapUrls } from '$lib/server/sitemapcov';
 import { autoSubmit } from '$lib/server/indexnow';
 import { autoResubmitSitemaps, autoSubmitBing, autoSubmitFoundSitemaps } from '$lib/server/submission';
 import { linksFor } from '$lib/server/links';
+import { logSitemapChanges } from '$lib/server/autolog';
 import { urlClassesReport } from '$lib/server/insights';
 import { enqueueIndexMonitor } from '$lib/server/jobs';
 import { EVENT_SEVERITY } from '$lib/indexing';
@@ -40,6 +41,7 @@ export const actions: Actions = {
 	sitemapRefresh: async ({ params }) => {
 		const r = await syncSitemapUrls(Number(params.id));
 		const s = getSite(Number(params.id));
+		logSitemapChanges(Number(params.id), r.changes);
 		if (s) await autoSubmit(s, r.changes).catch(() => {});
 		if (s) await autoResubmitSitemaps(s, r.changes).catch(() => {});
 		if (s) await autoSubmitBing(s, r.changes).catch(() => {});

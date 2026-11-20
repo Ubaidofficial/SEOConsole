@@ -38,7 +38,7 @@
 			}
 		};
 	};
-	const dot = (k: string) => (k === 'experiment' ? 'var(--c-impr)' : k === 'migration' ? 'var(--bad)' : k === 'other' ? 'var(--muted-foreground)' : 'var(--warn)');
+	const dot = (k: string) => (k === 'experiment' ? 'var(--c-impr)' : k === 'migration' ? 'var(--bad)' : k === 'other' || k === 'detected' ? 'var(--muted-foreground)' : 'var(--warn)');
 </script>
 
 <!-- The plan comes first: what to do in the next two weeks, from the ranked findings. The chart and the log follow. -->
@@ -129,7 +129,8 @@
 
 	<section>
 		<div class="mb-2 flex items-center gap-2"><h2 class="text-base font-semibold tracking-tight">Change log</h2>
-				<details class="group ml-auto" bind:open={logOpen}><summary class="btn !h-8 cursor-pointer list-none text-xs [&::-webkit-details-marker]:hidden"><Plus class="size-3.5" />Log a change</summary></details></div>
+				<form method="POST" action="?/changelogAuto" use:enhance class="ml-auto"><input type="hidden" name="on" value={data.changelogAuto ? '0' : '1'} /><button class="text-xs text-muted-foreground underline underline-offset-2" title="robots.txt changes, new Tag Manager versions, and pages appearing in or leaving the sitemaps are logged here by the app ('detected'). Delete any you do not want: a deleted one does not come back.">Detected changes: {data.changelogAuto ? 'on' : 'off'}</button></form>
+				<details class="group" bind:open={logOpen}><summary class="btn !h-8 cursor-pointer list-none text-xs [&::-webkit-details-marker]:hidden"><Plus class="size-3.5" />Log a change</summary></details></div>
 				{#if logOpen}
 				<form method="POST" action="?/addNote" use:enhance={addNote} class="mb-3 grid gap-3 rounded-xl border bg-card p-4 shadow-xs">
 			<div class="grid grid-cols-2 gap-3">
@@ -158,7 +159,7 @@
 				<article class="rounded-xl border bg-card p-4 text-sm shadow-xs">
 					<div class="flex items-center gap-2">
 						<span class="size-2 rounded-full" style="background:{dot(a.kind)}"></span>
-						<span class="text-xs font-medium capitalize">{a.kind}</span>
+						<span class="text-xs font-medium capitalize" title={a.kind === 'detected' ? 'Logged by the app from a change it noticed (robots.txt, Tag Manager or sitemaps)' : undefined}>{a.kind === 'detected' ? 'detected automatically' : a.kind}</span>
 						<span class="text-xs text-muted-foreground tnum">· {a.date}</span>
 						<form method="POST" action="?/deleteNote" use:enhance class="ml-auto">
 							<input type="hidden" name="id" value={a.id} />

@@ -78,7 +78,7 @@ export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
 	'/team': { invite: A, revoke: A, role: A, disable: A, enable: A, remove: A, sites: A, resetLink: A },
 	// Everyone signed in may change their own account (each action checks the current password where it matters); the owner has no row to change.
 	'/profile': { name: 'viewer', email: 'viewer', password: 'viewer', linkGoogle: 'viewer', unlinkGoogle: 'viewer' },
-	'/sites/[id]': { addNote: E, makeTest: E, deleteNote: E },
+	'/sites/[id]': { addNote: E, makeTest: E, deleteNote: E, changelogAuto: E },
 	'/sites/[id]/actions': { state: E },
 	'/sites/[id]/bing': { refreshLinks: E },
 	'/sites/[id]/clarity': { check: E, plan: E, install: A },

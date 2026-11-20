@@ -9,6 +9,7 @@ import * as gtm from './gtm';
 import { addDays, pacificToday, retentionHorizon } from './dates';
 import { getIntegration, integrationSecret, linksFor, markLink } from './links';
 import { getSite } from './clients';
+import { logGtmVersion } from './autolog';
 import { PERIODS } from '../periods';
 
 // ── factories (real vs demo) ─────────────────────────────────────────────────
@@ -307,6 +308,9 @@ export async function syncGtm(siteId: number, source?: gtm.GtmSource, ga4Source?
 			// Best effort: the audit simply skips the ID comparison when this is empty.
 			measurementIds = await (ga4Source ?? ga4SourceFor(links.ga4.account_id)).measurementIds(links.ga4.external_id).catch(() => []);
 		}
+		// The live version stored at the previous sync of this same container: a different one now means a publish happened since.
+		const before = (db().prepare('SELECT live_version_id v FROM gtm_snapshots WHERE site_id = ? AND container_path = ?').get(siteId, link.external_id) as { v: string | null } | undefined)?.v;
+		logGtmVersion(siteId, { path: link.external_id, publicId: container?.publicId ?? null, before, versionId: live?.versionId ?? null, versionName: live?.versionName ?? null });
 		db()
 			.prepare('INSERT OR REPLACE INTO gtm_snapshots VALUES (?,?,?,?,?,?,?,?,?,?)')
 			.run(
