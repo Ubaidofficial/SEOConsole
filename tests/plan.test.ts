@@ -46,9 +46,8 @@ describe('the site tab bar', () => {
 		for (const t of SITE_PRIMARY_TABS) expect(all, t).toContain(t);
 		const grouped = SITE_TAB_GROUPS.flatMap(([, paths]) => [...paths] as string[]);
 		for (const t of all) expect(grouped, t).toContain(t); // the More menu is built from the groups
-		expect(SITE_PRIMARY_TABS).toContain('/quickwins');
-		expect(SITE_PRIMARY_TABS).toContain('/actions');
-		expect(SITE_PRIMARY_TABS).toContain('/opportunities');
+		// the findings people act on, every source on one screen, and GA4; Opportunities and Tests are reached through Quick wins / Actions and More
+		for (const t of ['/quickwins', '/actions', '/dashboard', '/analytics', '/queries', '/pages']) expect(SITE_PRIMARY_TABS, t).toContain(t);
 	});
 });
 
