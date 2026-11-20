@@ -59,13 +59,13 @@ afterEach(() => {
 });
 
 /** The app-changing tools (the ones marked `write`); the search-engine tools of the submit and delete levels are tested in submission.test.ts. */
-const WRITES = ['mark_action', 'log_change', 'start_seo_test', 'set_brand_terms', 'sync_site', 'read_sitemaps', 'run_onpage_check', 'submit_indexnow', 'watch_urls'];
-const NEW_READS = ['get_portfolio', 'get_change_log', 'get_history', 'get_site_settings'];
+const WRITES = ['mark_action', 'log_change', 'start_seo_test', 'set_brand_terms', 'sync_site', 'read_sitemaps', 'run_onpage_check', 'submit_indexnow', 'watch_urls', 'set_automation'];
+const NEW_READS = ['get_portfolio', 'get_change_log', 'get_history', 'get_site_settings', 'get_automation'];
 
 describe('what the server offers', () => {
-	it('the nine app-changing tools are all there among the tools that change things, and the rest only read', () => {
+	it('the ten app-changing tools are all there among the tools that change things, and the rest only read', () => {
 		for (const w of WRITES) expect(MCP_WRITE_TOOL_NAMES, w).toContain(w);
-		expect(MCP_READ_TOOL_NAMES).toHaveLength(47);
+		expect(MCP_READ_TOOL_NAMES).toHaveLength(48);
 		expect(MCP_READ_TOOL_NAMES.length + MCP_WRITE_TOOL_NAMES.length).toBe(MCP_TOOL_NAMES.length);
 		expect(new Set(MCP_TOOL_NAMES).size).toBe(MCP_TOOL_NAMES.length);
 		for (const n of NEW_READS) expect(MCP_READ_TOOL_NAMES).toContain(n);
@@ -79,7 +79,7 @@ describe('what the server offers', () => {
 		}
 		// only the two tools of the delete level are marked destructive (see submission.test.ts)
 		expect(list.filter((t) => t.annotations.destructiveHint).map((t) => t.name).sort()).toEqual(['cancel_indexing_queue', 'delete_sitemap']);
-		expect(list).toHaveLength(69);
+		expect(list).toHaveLength(71);
 	});
 	it('the server instructions say changes need the owner\'s permission and nothing can delete', async () => {
 		const i = (await rpc(reader, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).json.result.instructions as string;
@@ -99,7 +99,7 @@ describe('a key that cannot make changes is refused, and nothing changes', () =>
 	const ARGS: Record<string, object> = {
 		mark_action: { site: '1', key: 'x', state: 'done' }, log_change: { site: '1', date: '2026-10-01', title: 'refused' }, start_seo_test: { site: '1', name: 't', startDate: '2026-10-01', pages: ['/blog/'] },
 		set_brand_terms: { site: '1', terms: ['refused brand'] }, sync_site: { site: '1' }, read_sitemaps: { site: '1' }, run_onpage_check: { site: '1' },
-		submit_indexnow: { site: '1', urls: ['https://greenleaf.example/a'] }, watch_urls: { site: '1', urls: ['https://greenleaf.example/a'] }
+		submit_indexnow: { site: '1', urls: ['https://greenleaf.example/a'] }, watch_urls: { site: '1', urls: ['https://greenleaf.example/a'] }, set_automation: { switch: 'bingAuto', on: true }
 	};
 	it('every one of them says so in plain words and tells the owner where to allow it', async () => {
 		expect(Object.keys(ARGS).sort()).toEqual([...WRITES].sort());
@@ -477,5 +477,59 @@ describe('the owner decides, on the sign-in page and on the Agents page', () => 
 		expect(agents).not.toMatch(/name="permission" value="(submit|delete)"[^>]*checked/);
 		expect(agents).toContain('(default)');
 		expect(agents).toContain('Nothing can delete your data');
+	});
+});
+
+describe('automation over MCP (get_automation, set_automation)', () => {
+	const state = (id: number) => db().prepare('SELECT bing_submit_auto b, sitemap_auto s, changelog_auto c FROM sites WHERE id = ?').get(id) as { b: number; s: number; c: number };
+	const defaults = () => JSON.parse((db().prepare("SELECT value FROM kv WHERE key = 'automation_defaults'").get() as { value: string } | undefined)?.value ?? '{}');
+	afterEach(() => {
+		db().prepare('UPDATE sites SET bing_submit_auto = 0, sitemap_auto = 0, changelog_auto = 1').run();
+		db().prepare("DELETE FROM kv WHERE key = 'automation_defaults'").run();
+	});
+
+	it('a read key sees every switch with the sites on and off, and cannot change any', async () => {
+		const r = await call(reader, 'get_automation');
+		expect(r.data.switches.map((s: { key: string }) => s.key)).toEqual(['indexMonitor', 'requestAuto', 'sitemapAuto', 'bingAuto', 'detectedChanges']);
+		const bing = r.data.switches.find((s: { key: string }) => s.key === 'bingAuto');
+		expect(bing).toMatchObject({ canTurnOn: true, newSitesStartWithIt: false, on: [] });
+		expect(bing.off.length).toBeGreaterThan(1);
+		expect((await call(reader, 'set_automation', { switch: 'bingAuto', on: true })).isError).toBe(true);
+		expect(state(1).b).toBe(0);
+	});
+
+	it('turns a switch on for every site the key sees, and for sites found later', async () => {
+		const r = await call(writer, 'set_automation', { switch: 'bingAuto', on: true, new_sites: true });
+		expect(r.isError).toBe(false);
+		expect(r.data).toMatchObject({ switch: 'bingAuto', on: true, newSitesStartWithIt: true, alreadyThatWay: [] });
+		expect(r.data.changed.length).toBeGreaterThan(1);
+		expect([state(1).b, state(2).b]).toEqual([1, 1]);
+		expect(defaults().bingAuto).toBe(true);
+		const again = await call(writer, 'set_automation', { switch: 'bingAuto', on: true });
+		expect(again.data.changed).toEqual([]);
+		expect((await call(writer, 'get_automation')).data.switches.find((s: { key: string }) => s.key === 'bingAuto').off).toEqual([]);
+	});
+
+	it('a key limited to some sites changes only those, and cannot set what new sites start with', async () => {
+		expect((await call(scopedWriter, 'set_automation', { switch: 'sitemapAuto', on: true })).data.changed).toHaveLength(1);
+		expect([state(1).s, state(2).s]).toEqual([1, 0]);
+		expect((await call(scopedWriter, 'set_automation', { switch: 'sitemapAuto', on: true, sites: ['2'] })).isError).toBe(true);
+		const nd = await call(scopedWriter, 'set_automation', { switch: 'sitemapAuto', on: true, new_sites: true });
+		expect(nd.isError).toBe(true);
+		expect(nd.text).toMatch(/limited to some sites/);
+		expect(defaults().sitemapAuto).toBeUndefined();
+	});
+
+	it('switches detected changes per site, refuses unknown switches, and keeps write switches off on a read-only server', async () => {
+		const r = await call(writer, 'set_automation', { switch: 'detectedChanges', on: false, sites: ['1'] });
+		expect(r.data.changed).toHaveLength(1);
+		expect([state(1).c, state(2).c]).toEqual([0, 1]);
+		expect((await call(writer, 'set_automation', { switch: 'detectedChanges', on: true, new_sites: false })).isError).toBe(true);
+		expect((await call(writer, 'set_automation', { switch: 'everything', on: true })).isError).toBe(true);
+		expect((await call(writer, 'set_automation', { switch: 'bingAuto', on: 'yes' })).isError).toBe(true);
+		process.env.READ_ONLY = '1';
+		const ro = await call(writer, 'set_automation', { switch: 'bingAuto', on: true });
+		expect(ro.isError).toBe(true);
+		expect(state(1).b).toBe(0);
 	});
 });

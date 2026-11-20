@@ -228,7 +228,8 @@ describe('the Agents page and the tool list', () => {
 		// Raised from 45,000 to 48,000 when five read tools were added (drop diagnosis, publishing health, niche fit, link health, stored research): they are about 3 KB together, and the old ceiling had under 0.3 KB of room.
 		// Raised from 48,000 to 49,000 for track_key_event (Tag Manager + GA4 key event, about 0.9 KB): the old ceiling had a few bytes of room left.
 		// Raised from 49,000 to 50,000 for setup_google_tag (the Google tag install, until then only a button on the Connect page).
-		expect(text.length, `tools/list is ${text.length} bytes`).toBeLessThan(50_000);
+		// Raised from 50,000 to 51,000 for get_automation and set_automation (the Connect page's automation switches, about 1.1 KB after trimming).
+		expect(text.length, `tools/list is ${text.length} bytes`).toBeLessThan(51_000);
 		for (const t of tools) {
 			// get_opportunities lists every kind of finding it can return, so it is the one long definition
 			const long = t.name === 'get_opportunities';

@@ -95,3 +95,28 @@ export function applyDefaultsToNewSite(siteId: number) {
 	const r = db().prepare(`UPDATE sites SET ${sets.join(', ')} WHERE id = ? AND ${ELIGIBLE}`).run(siteId);
 	if (r.changes) audit('automation.new_site', { siteId, detail: `started with: ${SWITCHES.filter((s) => d[s.key] && available(s.key)).map((s) => s.label).join(', ')}` });
 }
+
+/**
+ * Set one switch on (or off) for the given sites only, with the same rules as applyToAll: only sites the dashboard shows, and a
+ * switch that writes to Google or Bing cannot be turned on in READ_ONLY mode. Returns the ids that actually changed.
+ */
+export function setForSites(key: SwitchKey, on: boolean, siteIds: number[]): number[] {
+	const s = byKey(key)!;
+	if (on && !available(key)) return [];
+	const d = db();
+	const changed: number[] = [];
+	const upd = d.prepare(`UPDATE sites SET ${s.column} = ? WHERE id = ? AND ${ELIGIBLE} AND ${s.column} != ?`);
+	d.transaction(() => {
+		for (const id of new Set(siteIds)) if (upd.run(on ? 1 : 0, id, on ? 1 : 0).changes) changed.push(id);
+	})();
+	if (changed.length) audit('automation.apply', { detail: `${s.label}: ${on ? 'on' : 'off'} for ${changed.length} site(s)` });
+	return changed;
+}
+
+/** Which of the given sites have each switch on, for reporting. Sites the dashboard does not show are left out. */
+export function switchStates(siteIds: number[]): { id: number; on: Record<SwitchKey, boolean> }[] {
+	if (!siteIds.length) return [];
+	const cols = SWITCHES.map((s) => `${s.column} AS "${s.key}"`).join(', ');
+	const rows = db().prepare(`SELECT id, ${cols} FROM sites WHERE ${ELIGIBLE} AND id IN (${siteIds.map(() => '?').join(',')})`).all(...siteIds) as Record<string, number>[];
+	return rows.map((r) => ({ id: r.id, on: Object.fromEntries(SWITCHES.map((s) => [s.key, !!r[s.key]])) as Record<SwitchKey, boolean> }));
+}

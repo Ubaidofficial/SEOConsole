@@ -12,15 +12,16 @@ import { db } from './db';
 import { config } from './config';
 import { addDays, pacificToday } from './dates';
 import { getSite, clientForSite, displayName } from './clients';
+import { SWITCHES, available, getDefaults, isSwitchKey, setDefault, setForSites, switchStates } from './automation';
 import { annotationsFor, experiment, pageHistory, portfolioTotals, queryHistory, fillDays, siteCards, siteEnd } from './queries';
 import { portfolioAnomalies, portfolioCannibalization, portfolioDecay, portfolioStriking } from './portfolio';
 import { actionsFor, actionStates, setActionState } from './actions';
 import { createTest, suggestControlMatched, testsByAnnotation } from './seotests';
 import { isAssistant } from './llmtests';
 import { AI_ASSISTANTS } from '../ai';
-import { enqueueGa4Pages, enqueueSiteSync } from './jobs';
+import { afterSitemapRead, enqueueGa4Pages, enqueueSiteSync } from './jobs';
 import { syncSitemapUrls } from './sitemapcov';
-import { autoSubmit, submitUrls } from './indexnow';
+import { submitUrls } from './indexnow';
 import { addWatch } from './indexmon';
 import { checkUrls, hostAllowed, pagesToCheck } from './onpage';
 import { linksFor } from './links';
@@ -136,6 +137,40 @@ const readTools: Tool[] = [
 			const start = addDays(end, -(days(a) - 1));
 			const rows = fillDays(query ? queryHistory(site.id, query, start, end) : pageHistory(site.id, page, start, end), start, end);
 			return { [query ? 'query' : 'page']: query || page, from: start, to: end, days: rows.map((r) => ({ date: r.date, clicks: r.clicks, impressions: r.impressions, position: r.position ? r2(r.position) : null })), note: 'Position is blank on days with no impressions. Anonymised queries are not in query-level history.' };
+		}
+	},
+	{
+		name: 'get_automation',
+		description: 'Per-site automations (indexMonitor, requestAuto, sitemapAuto, bingAuto, detectedChanges): what each does and costs, whether sites found later start with it, and which sites have it on or off.',
+		schema: {},
+		run: (_a, sites) => {
+			const ids = sites.map((x) => x.id);
+			const states = new Map(switchStates(ids).map((r) => [r.id, r.on]));
+			const name = (id: number) => displayName(sites.find((x) => x.id === id)!.site_url);
+			const shown = ids.filter((id) => states.has(id));
+			const defaults = getDefaults();
+			const changelog = new Map((db().prepare(`SELECT id, changelog_auto a FROM sites WHERE id IN (${ids.map(() => '?').join(',') || 'NULL'})`).all(...ids) as { id: number; a: number }[]).map((r) => [r.id, !!r.a]));
+			return {
+				serverReadOnly: config.readOnly,
+				switches: [
+					...SWITCHES.map((w) => ({
+						key: w.key, label: w.label, what: w.what, cost: w.cost,
+						canTurnOn: available(w.key),
+						newSitesStartWithIt: defaults[w.key],
+						on: shown.filter((id) => states.get(id)![w.key]).map(name),
+						off: shown.filter((id) => !states.get(id)![w.key]).map(name),
+						...(w.key === 'bingAuto' ? { note: 'Does nothing for a site without a Bing link, or while its IndexNow auto-submit is on (IndexNow already reaches Bing).' } : {})
+					})),
+					{
+						key: 'detectedChanges', label: 'Detected changes in the change log',
+						what: 'Notes robots.txt changes, new live Tag Manager versions, and sitemap reads that add 3+ or drop 10+ pages in the change log by itself. A deleted entry does not come back.',
+						cost: 'None: it only writes to the change log in SEOConsole.',
+						canTurnOn: true, newSitesStartWithIt: true,
+						on: shown.filter((id) => changelog.get(id)).map(name),
+						off: shown.filter((id) => !changelog.get(id)).map(name)
+					}
+				]
+			};
 		}
 	},
 	{
@@ -335,6 +370,53 @@ const writeTools: Tool[] = [
 		}
 	}),
 	w({
+		name: 'set_automation',
+		description: 'Switch one automation (see get_automation) on or off for `sites`, or for every site this key sees when omitted. `new_sites` also sets what sites found later start with (keys that see every site; not detectedChanges). Switches that write to Google or Bing cannot be turned on on a read-only server.',
+		schema: {
+			switch: { type: 'string', enum: [...SWITCHES.map((w) => w.key), 'detectedChanges'] },
+			on: { type: 'boolean' },
+			sites: { type: 'array', items: { type: 'string' } },
+			new_sites: { type: 'boolean' }
+		},
+		run: (a, sites, ctx) => {
+			const key = String(a.switch ?? '');
+			if (key !== 'detectedChanges' && !isSwitchKey(key)) throw new Error(`\`switch\` must be one of ${[...SWITCHES.map((w) => w.key), 'detectedChanges'].join(', ')}.`);
+			if (typeof a.on !== 'boolean') throw new Error('`on` must be true or false.');
+			const on = a.on;
+			const refs = Array.isArray(a.sites) ? a.sites.slice(0, 500) : a.sites == null ? null : [a.sites];
+			const targets = refs ? [...new Map(refs.map((r) => resolveSite(sites, r)).map((x) => [x.id, x])).values()] : sites;
+			if (!targets.length) throw new Error('No sites to change.');
+			const name = (id: number) => displayName(targets.find((x) => x.id === id)!.site_url);
+			if (a.new_sites != null) {
+				if (key === 'detectedChanges') throw new Error('detectedChanges has no setting for new sites: they always start with it on.');
+				if (typeof a.new_sites !== 'boolean') throw new Error('`new_sites` must be true or false.');
+				if (ctx.scoped) throw new Error('This key is limited to some sites, so it cannot set what every new site starts with. Leave out `new_sites`.');
+			}
+			if (key === 'detectedChanges') {
+				const d = db();
+				const changed: number[] = [];
+				const upd = d.prepare("UPDATE sites SET changelog_auto = ? WHERE id = ? AND hidden = 0 AND permission NOT IN ('siteUnverifiedUser','none') AND changelog_auto != ?");
+				d.transaction(() => { for (const t of targets) if (upd.run(on ? 1 : 0, t.id, on ? 1 : 0).changes) changed.push(t.id); })();
+				return { switch: key, on, changed: changed.map(name), alreadyThatWay: targets.filter((t) => !changed.includes(t.id)).map((t) => displayName(t.site_url)) };
+			}
+			if ((on || a.new_sites === true) && !available(key)) throw new Error('This server is read-only (READ_ONLY=1), so a switch that writes to Google or Bing cannot be turned on.');
+			const changed = setForSites(key, on, targets.map((t) => t.id));
+			if (typeof a.new_sites === 'boolean') setDefault(key, a.new_sites);
+			const notes: string[] = [];
+			if (key === 'bingAuto' && on) {
+				const noBing = targets.filter((t) => !linksFor(t.id).bing).map((t) => displayName(t.site_url));
+				if (noBing.length) notes.push(`No Bing link, so nothing is sent for: ${noBing.join(', ')} (until Bing is linked on the Connect page).`);
+			}
+			return {
+				switch: key, on,
+				changed: changed.map(name),
+				alreadyThatWay: targets.filter((t) => !changed.includes(t.id)).map((t) => displayName(t.site_url)),
+				newSitesStartWithIt: getDefaults()[key],
+				notes: notes.length ? notes : undefined
+			};
+		}
+	}),
+	w({
 		name: 'sync_site',
 		description: 'Ask SEOConsole to pull the latest data for a site now (Search Console, then its linked Bing, GA4 and Clarity). It runs in the background; check get_site_settings for when it finishes. Allowed once every 5 minutes per site.',
 		schema: siteArg,
@@ -354,8 +436,16 @@ const writeTools: Tool[] = [
 			const left = cooldown('read_sitemaps', site.id, 2 * 60_000);
 			if (left) throw new Error(`Sitemaps were read less than 2 minutes ago. Try again in about ${wait(left)} minute${wait(left) === 1 ? '' : 's'}.`);
 			const r = await syncSitemapUrls(site.id);
-			const sent = await autoSubmit(getSite(site.id)!, r.changes).catch(() => null);
-			return { sitemapFiles: r.sitemaps, urls: r.urls, cutOffAtLimit: r.truncated, problem: r.error, sentToIndexNow: sent ? sent.accepted : 0, note: r.urls === 0 ? 'No sitemap URLs were found. Submit a sitemap first (submit_sitemap).' : undefined };
+			// The same follow-up as the daily job and the app's button (each step only if the site switched it on).
+			const after = await afterSitemapRead(site.id, r);
+			return {
+				sitemapFiles: r.sitemaps, urls: r.urls, cutOffAtLimit: r.truncated, problem: r.error,
+				sentToIndexNow: after.indexNow ? after.indexNow.accepted : 0,
+				sentToBing: after.bing ? (after.bing.channels.find((c) => c.channel === 'bing')?.accepted ?? 0) : 0,
+				sitemapsResubmitted: after.resubmitted ? after.resubmitted.submitted : [],
+				foundOnSite: r.found?.length ? { sitemaps: r.found, submitted: after.foundSubmitted } : undefined,
+				note: r.urls === 0 ? 'No sitemap URLs were found. Submit a sitemap first (submit_sitemap).' : undefined
+			};
 		}
 	}),
 	w({
