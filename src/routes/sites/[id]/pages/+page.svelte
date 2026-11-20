@@ -13,13 +13,21 @@
 		history = await fetch(`/sites/${page.params.id}/history?kind=page&value=${encodeURIComponent(row.url)}&days=480`).then((r) => r.json());
 	}
 	// One header band and tint per source.
-	const G = { group: 'Google', groupColor: '#d97706' };
+	// Colours follow the dashboard's sources: Google green, GA4 orange, Bing blue.
+	const T = { group: 'GA4 · all traffic', groupColor: '#ea580c' };
+	const G = { group: 'Google', groupColor: '#16a34a' };
 	const B = { group: 'Bing', groupColor: '#0284c7' };
 	const A = { group: 'GA4 · Google organic', groupColor: '#ea580c' };
 	const AI = { group: 'AI assistants · GA4', groupColor: '#6366f1' };
 	const C = { group: 'Clarity · last 24 h', groupColor: '#7c3aed' };
 	const cols = $derived([
 		{ key: 'path', label: 'Page', type: 'link' as const, href: (r: { url: string }) => r.url, display: (r: { path: string }) => r.path },
+		...(data.sources.all.hasData
+			? [
+					{ key: 'tSessions', label: 'Sessions', type: 'int' as const, bar: true, deltaKey: 'tSessionsD', title: 'Every GA4 session that landed on this page, from any channel (search, direct, social, referral, email, AI assistants…), with the change against the previous window', ...T },
+					{ key: 'tTop', label: 'Top channel', type: 'text' as const, title: 'The GA4 channel group that sent the most sessions to this page', ...T }
+				]
+			: []),
 		{ key: 'gClicks', label: 'Clicks', type: 'int' as const, bar: true, deltaKey: 'gClicksD', title: 'Google clicks, with the change against the previous period of the same length', ...G },
 		{ key: 'gImpr', label: 'Impr.', type: 'int' as const, deltaKey: 'gImprD', title: 'Google impressions and their change', ...G },
 		{ key: 'gCtr', label: 'CTR', type: 'pct' as const, ...G },
@@ -59,6 +67,7 @@
 			data.sources.bing.linked && !data.sources.bing.hasData ? 'Bing is linked: its pages appear after the next Bing sync.' : data.sources.bing.hasData && !data.sources.bing.comparable ? 'Bing: stored history does not reach the previous period, so no Bing changes are shown.' : '',
 			data.sources.ga4.linked && !data.sources.ga4.hasData ? 'GA4 is linked: sessions per page appear after the next GA4 sync.' : data.sources.ga4.hasData && !data.sources.ga4.comparable ? 'GA4: the previous period is pulled with the next daily sync, so changes appear then.' : '',
 			data.sources.ai.status === 'failed' ? 'AI assistants: the last pull of the AI report from GA4 failed and will be retried, so no AI columns are shown (zeros would not be real).' : data.sources.ai.status === 'ok' && !data.sources.ai.hasData ? 'AI assistants: GA4 reported no sessions from ChatGPT, Perplexity, Gemini, Claude or Copilot in this period.' : data.sources.ai.hasData && !data.sources.ai.comparable ? 'AI assistants: no previous-period AI sessions are stored (the previous window arrives with the next daily GA4 pull, or it had none), so no AI changes are shown.' : '',
+			data.sources.all.hasData && data.sources.all.window ? `GA4 all traffic covers ${data.sources.all.window.start} to ${data.sources.all.window.end} (GA4's own newest days)${data.sources.all.comparable ? '' : '; the previous window is not stored yet, so no changes are shown'}.` : data.sources.all.linked && !data.allPeriod ? `GA4 all traffic per page is pulled for ${data.periods.join(', ')}-day periods only; pick one of those to see it.` : '',
 			data.sources.clarity.hasData ? `Clarity covers only the last 24 hours (snapshot of ${data.sources.clarity.day}), not the selected period.` : ''
 		].filter(Boolean)
 	);
@@ -66,7 +75,7 @@
 
 <div class="mb-3 flex"><a class="btn ml-auto" href="/sites/{page.params.id}/export?dim=page&days={page.url.searchParams.get('days') ?? 28}">Export CSV</a></div>
 <Explainer lead="Every source side by side, joined on the page. Arrows show the change against the previous period; a dash means no data.">
-	<p>Every source side by side, joined on the page's path (so www, http and https variants count as one page). Arrows show the change against the previous period; a dash means that source has nothing for the page. GA4 counts Google-organic sessions only: sessions and clicks are different measurements, so expect them close, not equal. The AI group counts GA4 sessions whose referrer is an AI assistant; an assistant that sends no referrer shows up as Direct and is not counted, so treat it as a floor. It does not include citations or bot crawls.</p>
+	<p>Every source side by side, joined on the page's path (so www, http and https variants count as one page). Arrows show the change against the previous period; a dash means that source has nothing for the page. The first group, GA4 all traffic, counts every GA4 session that landed on the page from any channel, so it is the closest thing here to total visits. The second GA4 group counts Google-organic sessions only: sessions and clicks are different measurements, so expect them close, not equal. The AI group counts GA4 sessions whose referrer is an AI assistant; an assistant that sends no referrer shows up as Direct and is not counted, so treat it as a floor. It does not include citations or bot crawls.</p>
 </Explainer>
 {#each notes as n}<p class="mb-1 text-xs text-muted-foreground">{n}</p>{/each}
 <div class="mt-2"></div>

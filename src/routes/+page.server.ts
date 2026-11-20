@@ -15,6 +15,8 @@ import { getSite } from '$lib/server/clients';
 import { audit } from '$lib/server/db';
 import { authorityMap } from '$lib/server/authority';
 import { hasRole } from '$lib/server/roles';
+import { cardTraffic, sumSource } from '$lib/server/traffic';
+import { eachDay } from '$lib/server/dates';
 
 export const load: PageServerLoad = ({ url, locals }) => {
 	const showHidden = url.searchParams.get('hidden') === '1';
@@ -28,6 +30,20 @@ export const load: PageServerLoad = ({ url, locals }) => {
 	const totals = portfolioTotals(cards.filter((c) => !c.site.hidden && c.site.permission !== 'none'));
 	const links = allLinks();
 	const has = (id: number, k: string) => links.some((l) => l.site_id === id && l.kind === k);
+	const link = (id: number, k: string) => links.find((l) => l.site_id === id && l.kind === k);
+	// GA4 (every channel) and Bing beside Search Console, each over its own newest window, drawn on one shared calendar.
+	const traffic = new Map(
+		cards.map((c) => {
+			const dates = eachDay(c.period.start, c.period.end);
+			const daily = c.site.synced_through ? c.spark.map((clicks, i) => ({ date: dates[i], clicks })) : [];
+			return [c.site.id, cardTraffic(c.site, { end: c.period.end, daily }, days, { ga4: link(c.site.id, 'ga4'), bing: link(c.site.id, 'bing') })];
+		})
+	);
+	// Portfolio GA4 and Bing totals count the same sites as the Search Console totals (visible, not removed, not covered by a Domain property).
+	const counted = cards.filter((c) => !c.site.hidden && c.site.permission !== 'none' && c.coveredBy === null);
+	const ga4Total = sumSource(counted.map((c) => traffic.get(c.site.id)!.ga4));
+	const bingTotal = sumSource(counted.map((c) => traffic.get(c.site.id)!.bing));
+	const delta = (t: { value: number; prev: number; comparable: boolean } | null) => (t && t.comparable ? pctChangeMin(t.value, t.prev, 10) : null);
 	return {
 		days,
 		latest,
@@ -46,7 +62,9 @@ export const load: PageServerLoad = ({ url, locals }) => {
 			ctrDelta: totals.comparable && totals.prev.impressions >= 100 && totals.now.impressions >= 100 ? pctChangeMin(ctrOf(totals.now), ctrOf(totals.prev), 1e-9) : null,
 			positionDelta: totals.comparable ? positionShift(totals.now, totals.prev) : null,
 			sites: totals.sites,
-			duplicates: totals.duplicates
+			duplicates: totals.duplicates,
+			ga4: ga4Total && { sessions: ga4Total.value, delta: delta(ga4Total), comparable: ga4Total.comparable, properties: ga4Total.properties },
+			bing: bingTotal && { clicks: bingTotal.value, delta: delta(bingTotal), comparable: bingTotal.comparable, properties: bingTotal.properties }
 		},
 		duplicates: scope === null ? hideableDuplicates().map((d) => ({ id: d.id, name: displayName(d.url) })) : [],
 		accounts: listAccounts()
@@ -81,7 +99,15 @@ export const load: PageServerLoad = ({ url, locals }) => {
 			impressionsDelta: c.comparable ? pctChangeMin(c.now.impressions, c.prev.impressions, 100) : null,
 			ctrDelta: c.comparable && c.prev.impressions >= 100 && c.now.impressions >= 100 ? pctChangeMin(ctrOf(c.now), ctrOf(c.prev), 1e-9) : null,
 			positionDelta: c.comparable ? positionShift(c.now, c.prev) : null,
-			spark: c.spark
+			spark: c.spark,
+			traffic: (() => {
+				const t = traffic.get(c.site.id)!;
+				return {
+					ga4: t.ga4 && { sessions: t.ga4.value, delta: delta(t.ga4), comparable: t.ga4.comparable, window: t.ga4.window },
+					bing: t.bing && { clicks: t.bing.value, delta: delta(t.bing), comparable: t.bing.comparable, window: t.bing.window },
+					chart: t.chart
+				};
+			})()
 		}))
 	};
 };
