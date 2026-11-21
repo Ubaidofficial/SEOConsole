@@ -236,7 +236,7 @@
 					{#if c.connected.openseo}<span class="chip !py-0 text-[10px]" title="OpenSEO connected">OpenSEO</span>{/if}
 					{#each c.tags as t}<span class="chip !py-0 text-[10px]">{t}</span>{/each}
 					<span class="ml-auto truncate">
-						{#if c.removed}removed · no longer synced{:else if c.syncStatus === 'running' || c.syncStatus === 'queued'}<RefreshCw class="mr-1 inline size-3 animate-spin" />{c.syncStatus}{:else if c.syncStatus === 'error'}<span class="text-bad" title={privacy.on ? undefined : (c.syncMessage ?? 'Sync failed')}>⚠ sync error</span>{:else}synced {ago(c.lastSync)}{/if} {#if !c.backfillDone && c.hasData}· loading history{/if}
+						{#if c.removed}removed · no longer synced{:else if c.accountRevoked}<a href="/accounts" class="relative z-10 font-medium text-bad underline underline-offset-2" title="Google withdrew this account's access, so this site has stopped updating. Reconnect the account on the Accounts page.">⚠ Google access lost · reconnect</a>{:else if c.syncStatus === 'running' || c.syncStatus === 'queued'}<RefreshCw class="mr-1 inline size-3 animate-spin" />{c.syncStatus}{:else if c.syncStatus === 'error'}<span class="text-bad" title={privacy.on ? undefined : (c.syncMessage ?? 'Sync failed')}>⚠ sync error</span>{:else}synced {ago(c.lastSync)}{/if} {#if !c.backfillDone && c.hasData}· loading history{/if}
 					</span>
 				</div>
 			</article>

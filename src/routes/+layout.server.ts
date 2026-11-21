@@ -4,7 +4,10 @@ import { db } from '$lib/server/db';
 import { queueDepth } from '$lib/server/jobs';
 import { ROLE_LABEL } from '$lib/server/roles';
 
-export const load: LayoutServerLoad = ({ locals }) => {
+export const load: LayoutServerLoad = ({ locals, url }) => {
+	// Read so SvelteKit runs this again on every page change: otherwise the "lost access" banner and the queue count keep the values
+	// from the first page load, and an account that loses access while a tab is open is never announced. Two small counts.
+	void url?.pathname;
 	// Before sign-in the login page gets nothing about the installation (account counts, queue depth, whether Google is set up).
 	if (config.hasPassword && !locals.authed) return { demo: false, readOnly: false, hasPassword: true, authed: false, user: null, accounts: 0, revoked: 0, googleConfigured: false, queue: { waiting: 0, active: 0 } };
 	const u = locals.user;

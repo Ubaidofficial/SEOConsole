@@ -257,6 +257,22 @@ export function schedulerTick() {
 	for (const l of links) if (!l.last_sync_at || Date.now() - l.last_sync_at > REFRESH_MS[l.kind]) enqueueLinkSync(l.site_id, l.kind);
 }
 
+/**
+ * After a Google account is connected again: re-read its property list, then sync every one of its sites, and also every GA4
+ * property and Tag Manager container it is used for. Those links keep their last "token expired" error until they run again,
+ * and without this they would wait for their next scheduled turn (hours) while showing the old error.
+ */
+export async function resumeAccount(accountId: number) {
+	await syncAccountSites(accountId);
+	const sites = db().prepare("SELECT id FROM sites WHERE account_id = ? AND hidden = 0 AND permission NOT IN ('siteUnverifiedUser','none')").all(accountId) as { id: number }[];
+	for (const s of sites) enqueueSiteSync(s.id, 'auto');
+	// A GA4 link can use a different Google account than the site's own (automatic matching looks in every account), so links are
+	// found by the account they read through, not by the site.
+	const links = db().prepare("SELECT l.site_id, l.kind FROM site_links l JOIN sites s ON s.id = l.site_id WHERE l.account_id = ? AND l.kind IN ('ga4','gtm') AND s.hidden = 0").all(accountId) as { site_id: number; kind: 'ga4' | 'gtm' }[];
+	for (const l of links) enqueueLinkSync(l.site_id, l.kind);
+	return { sites: sites.length, links: links.length };
+}
+
 export async function refreshAllAccountSites() {
 	const accs = db().prepare("SELECT id FROM accounts WHERE status = 'active'").all() as { id: number }[];
 	for (const a of accs) await syncAccountSites(a.id).catch(() => {});

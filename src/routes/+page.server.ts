@@ -80,6 +80,8 @@ export const load: PageServerLoad = ({ url, locals }) => {
 			account: c.site.account_label ?? c.site.account_email,
 			accountId: c.site.account_id,
 			permission: c.site.permission,
+			// Its Google account lost access: the scheduler skips it, so the card must say so instead of a calm "synced 9 h ago".
+			accountRevoked: c.site.account_status === 'revoked',
 			hidden: !!c.site.hidden,
 			removed: c.site.permission === 'none',
 			coveredBy: c.coveredBy ? (cards.find((x) => x.site.id === c.coveredBy)?.site.site_url ?? null) : null,
