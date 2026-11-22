@@ -102,7 +102,7 @@
 					<tr>
 						<td class="td whitespace-nowrap"><a class="pii hover:underline" href="/sites/{r.id}">{r.name}</a><div class="pii text-[11px] text-muted-foreground">{r.account}</div>
 							{#if r.needsSetup && !data.readOnly}<a class="mt-1 inline-block text-[11px] underline" href="/connect?setup={r.id}#setup">Set up GA4 &amp; Tag Manager</a>{/if}</td>
-						<td class="td {r.google === 'synced' ? 'text-good' : 'text-muted-foreground'}">{r.google === 'synced' ? '✓' : r.google}</td>
+						<td class="td text-xs {r.google === 'synced' ? 'text-good' : r.google === 'error' ? 'text-bad' : 'text-muted-foreground'}">{#if r.google === 'synced'}<span class="text-sm">✓</span>{:else if r.google === 'running' || r.google === 'queued'}⟳ syncing…{:else if r.google === 'error'}⚠ sync error{:else}<span title="Search Console has no data for this property yet. A newly added property usually takes a few days before Google reports any.">no data yet</span>{/if}</td>
 						{#each ['bing', 'ga4', 'gtm', 'clarity', 'openseo'] as const as k}
 							{@const l = r.links[k]}
 							<td class="td text-xs">
@@ -128,6 +128,17 @@
 											<span class="text-[11px] text-muted-foreground">{k === 'ga4' ? 'GA4 → Admin → Property details → Property ID, as properties/<ID>' : k === 'gtm' ? 'The GTM-… ID at the top of Tag Manager' : 'The site address exactly as Bing Webmaster lists it'}</span></form>
 									</details>
 									{#if r.skipped.includes(k)}<div class="mt-1 text-[11px] text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone. Linking it by hand undoes that.">unlinked on purpose</div>{/if}
+								{:else if k === 'clarity' && !data.readOnly}
+									<!-- Clarity has one token per project, so it is connected per site; the same action as the form under Sources. -->
+									<details>
+										<summary class="btn btn-xs inline-flex cursor-pointer list-none [&::-webkit-details-marker]:hidden"><Plus class="size-3.5" />Connect Clarity</summary>
+										<form method="POST" action="?/clarity" use:enhance class="mt-1.5 flex flex-col gap-1"><input type="hidden" name="siteId" value={r.id} />
+											<span class="flex gap-1"><input class="input w-44 !py-0.5 text-xs" name="token" type="password" autocomplete="off" aria-label="Clarity API token for {r.name}" placeholder="Clarity API token" /><button class="btn btn-primary btn-xs">Connect</button></span>
+											<span class="text-[11px] text-muted-foreground">Clarity → Settings → Data Export → Generate new API token</span></form>
+									</details>
+								{:else if k === 'openseo' && !data.openseo && !data.readOnly}
+									<a class="btn btn-xs" href="#openseo-source" onclick={() => { const d = document.getElementById('openseo-source'); if (d instanceof HTMLDetailsElement) d.open = true; }}><Plus class="size-3.5" />Connect OpenSEO</a>
+								{:else if k === 'openseo' && data.openseo}<span class="text-[11px] text-muted-foreground" title="OpenSEO links a site to the project on its domain, automatically (also nightly). Create a project for this domain in OpenSEO and it links on its own.">no project for this domain</span>
 								{:else if r.skipped.includes(k)}<span class="text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone.">– unlinked</span>
 								{:else}<span class="text-muted-foreground">–</span>{/if}
 							</td>
@@ -243,7 +254,7 @@
 </details>
 
 <!-- 5 OpenSEO -->
-<details class="card mt-4 p-4 [&[open]>summary]:mb-2" open={!complete.openseo}>
+<details id="openseo-source" class="card mt-4 scroll-mt-20 p-4 [&[open]>summary]:mb-2" open={!complete.openseo}>
 		<summary class="flex cursor-pointer list-none flex-wrap items-center gap-2 select-none [&::-webkit-details-marker]:hidden"><h2 class="font-medium">6 · OpenSEO <span class="chip ml-1">optional</span></h2><span class="ml-auto text-xs {complete.openseo ? 'text-good' : 'text-muted-foreground'}">{statusOf.openseo}</span></summary>
 	<p class="mb-3 text-xs text-muted-foreground">Links each site to its OpenSEO project (matched by domain) so an AI agent can combine OpenSEO's keyword/rank/audit data with this first-party data. Use an API key from OpenSEO → Settings.</p>
 	{#if data.openseo}

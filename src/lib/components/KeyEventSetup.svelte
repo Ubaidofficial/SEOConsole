@@ -62,7 +62,7 @@
 								<span class="font-mono font-medium">{e.event}</span>
 								{#if e.params.length}<span class="font-mono text-muted-foreground">{e.params.join(', ')}</span>{/if}
 								<span class="text-muted-foreground">· {e.how === 'push' ? 'pushed directly' : 'through a helper (very likely)'}</span>
-								<form method="POST" action="?/keyEventPlan" use:enhance={done('plan')} class="inline"><input type="hidden" name="event" value={e.event} /><input type="hidden" name="params" value={e.params.join(',')} /><button class="underline" disabled={!!busy}>Preview tracking this</button></form>
+								<form method="POST" action="?/keyEventPlan" use:enhance={done('plan')} class="inline"><input type="hidden" name="event" value={e.event} /><input type="hidden" name="params" value={e.params.join(',')} /><button class="btn btn-xs" disabled={!!busy}>Preview tracking this</button></form>
 							</li>
 						{/each}
 					</ul>
