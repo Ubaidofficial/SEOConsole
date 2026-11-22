@@ -2,6 +2,8 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getSite } from '$lib/server/clients';
 import { addDays } from '$lib/server/dates';
+import { cardTraffic } from '$lib/server/traffic';
+import { linksFor } from '$lib/server/links';
 import { anonymisedShare, annotationsFor, brandTerms, dailySeries, experiment, historyCoversPrevious, periodFor, topQueries } from '$lib/server/queries';
 import { isBranded } from '$lib/analytics';
 import { detectAnomalies, relativeLift } from '$lib/analytics';
@@ -81,6 +83,13 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 			},
 		annotationTests,
 		series: dailySeries(site.id, period.start, period.end),
+		// Every source's daily line on one calendar, for the "All traffic" chart (only when GA4 or Bing is linked).
+		allTraffic: (() => {
+			const links = linksFor(site.id);
+			if (!links.ga4 && !links.bing) return null;
+			const t = cardTraffic(site, { end: period.end, daily: dailySeries(site.id, period.start, period.end).map((r) => ({ date: r.date, clicks: r.clicks })) }, days, { ga4: links.ga4, bing: links.bing });
+			return t.chart.ga4 || t.chart.bing ? t : null;
+		})(),
 		anomalies,
 		googleUpdates: updatesBetween(period.start, period.end),
 		annotations,

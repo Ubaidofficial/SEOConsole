@@ -8,6 +8,7 @@ import { PERIODS } from '../periods';
 import { keyEventsReport, landingPagesReport, trafficSourcesReport } from './insights';
 import type { ClarityMetric } from './clarity';
 import type { Ga4Dim } from './ga4';
+import { ga4UsersFor } from './traffic';
 
 type Site = Pick<SiteRow, 'id' | 'synced_through' | 'site_url' | 'brand_terms' | 'backfilled_to' | 'backfill_done'>;
 type Window = { start: string; end: string; prevStart: string; prevEnd: string };
@@ -85,6 +86,8 @@ function ga4(site: Site, days: number) {
 		synced: true as const,
 		window: { start: w.start, end: w.end },
 		sessions: now.sessions,
+		// GA4's unique users over the period (exact, pulled once a day for the preset lengths; null for other lengths)
+		users: ga4UsersFor(site.id, days),
 		engagementRate: now.sessions ? now.engaged / now.sessions : 0,
 		keyEvents: Math.round(now.keyEvents * 10) / 10,
 		pageviews: now.pageviews,

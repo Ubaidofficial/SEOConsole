@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	const site = getSite(Number(params.id))!;
 	const r = pageInsights(site, days);
 	return {
-		sources: { google: r.google, bing: r.bing, ga4: r.ga4, ai: r.ai, clarity: r.clarity, all: r.all },
+		sources: { google: r.google, bing: r.bing, ga4: r.ga4, ai: r.ai, clarity: r.clarity, all: r.all, views: r.views },
 		period: r.period,
 		periods: [...PERIODS],
 		allPeriod: (PERIODS as readonly number[]).includes(days),

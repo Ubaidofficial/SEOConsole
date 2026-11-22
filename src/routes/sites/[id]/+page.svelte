@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { LoaderCircle, Plus, Trash2, TrendingDown, TrendingUp } from '@lucide/svelte';
 	import Chart from '$lib/components/Chart.svelte';
+	import SourceSpark, { type SparkSeries } from '$lib/components/SourceSpark.svelte';
 	import { ConfirmButton } from '$lib/components/ui/confirm';
 	import { fmtInt, fmtPct, fmtPos, fmtSigned } from '$lib/format';
 	import PlanList from '$lib/components/PlanList.svelte';
@@ -17,6 +18,16 @@
 		...data.googleUpdates.map((u) => ({ date: u.begin, label: `Google: ${u.name}`, color: 'var(--c-pos)' }))
 	]);
 	const today = new Date().toISOString().slice(0, 10);
+	/** Google clicks, GA4 sessions and Bing clicks on one calendar, when GA4 or Bing is linked. */
+	const allSeries = $derived<SparkSeries[]>(
+		data.allTraffic
+			? [
+					{ key: 'gsc', label: 'Google clicks', color: 'var(--src-gsc)', values: data.allTraffic.chart.gsc, dashed: 2 },
+					...(data.allTraffic.chart.ga4 ? [{ key: 'ga4', label: 'GA4 sessions', color: 'var(--src-ga4)', values: data.allTraffic.chart.ga4, dashed: 1 }] : []),
+					...(data.allTraffic.chart.bing ? [{ key: 'bing', label: 'Bing clicks', color: 'var(--src-bing)', values: data.allTraffic.chart.bing }] : [])
+				]
+			: []
+	);
 
 	// Controlled fields so the date survives a submit (a plain form reset would blank it).
 	let date = $state(today);
@@ -71,9 +82,22 @@
 	{/if}
 </section>
 
+{#if data.allTraffic && data.allTraffic.chart.dates.length > 1}
+<section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs">
+	<div class="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+		<h2 class="text-base font-semibold tracking-tight">All traffic</h2>
+		<p class="text-xs text-muted-foreground" title="Each source keeps its own newest days, so a line can stop a day early. GA4 sessions already include most Google clicks: the lines overlap, they do not add up.">One scale · {data.allTraffic.chart.dates[0]} → {data.allTraffic.chart.dates.at(-1)} · dashed = days still being revised</p>
+	</div>
+	<SourceSpark series={allSeries} height={150} />
+	<div class="tnum mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+		{#each allSeries as s}<span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-3 rounded-full" style="background:{s.color}" aria-hidden="true"></span>{s.label}</span>{/each}
+	</div>
+</section>
+{/if}
+
 <section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs">
 	<div class="mb-3 flex items-baseline justify-between gap-3">
-		<h2 class="text-base font-semibold tracking-tight">Traffic</h2>
+		<h2 class="text-base font-semibold tracking-tight">{data.allTraffic ? 'Search Console' : 'Traffic'}</h2>
 		<p class="text-xs text-muted-foreground">Shaded bands = unusual days · dots = your change log · dashed end = last 2 days (Google may still revise them)</p>
 	</div>
 	<Chart data={data.series} {markers} anomalies={data.anomalies} />

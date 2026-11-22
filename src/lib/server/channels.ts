@@ -2,7 +2,7 @@ import { db } from './db';
 import { config } from './config';
 import { RealBingClient, type BingClient, type BingLinksClient } from './bing';
 import { bingLinksDue, syncBingLinks } from './binglinks';
-import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGa4KeyEvents, demoGa4LandingAll, demoGtmContainers, demoGtmLive } from './demo-channels';
+import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGa4KeyEvents, demoGa4LandingAll, demoGa4PageViews, demoGa4PageTitles, demoGa4UsersTotal, demoGtmContainers, demoGtmLive } from './demo-channels';
 import { callsLeft, CLARITY_FRESH_MS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
 import * as ga4 from './ga4';
 import * as gtm from './gtm';
@@ -43,6 +43,12 @@ export interface Ga4Source {
 	keyEventsDaily?(property: string, start: string, end: string): Promise<ga4.Ga4EventDay[]>;
 	/** Landing pages over a whole window, every channel, per channel group. Optional so a test double can leave it out. */
 	landingAll?(property: string, start: string, end: string): Promise<{ rows: ga4.Ga4LandingChannel[]; truncated: boolean }>;
+	/** Page views by day and page path, every channel. Optional so a test double can leave it out. */
+	pageViews?(property: string, start: string, end: string): Promise<{ rows: ga4.Ga4PageViewDay[]; truncated: boolean }>;
+	/** The most common title per page path over a window. Optional so a test double can leave it out. */
+	pageTitles?(property: string, start: string, end: string): Promise<{ page: string; title: string }[]>;
+	/** Unique active and new users over one whole window. Optional so a test double can leave it out. */
+	usersTotal?(property: string, start: string, end: string): Promise<{ activeUsers: number; newUsers: number }>;
 }
 
 export function ga4SourceFor(accountId: number): Ga4Source {
@@ -63,7 +69,10 @@ export function ga4SourceFor(accountId: number): Ga4Source {
 			sources: async (property, s, e) => demoGa4Sources(property, s, e),
 			dimDaily: async (property, dim, s, e) => demoGa4DimDaily(property, dim, s, e),
 			keyEventsDaily: async (property, s, e) => demoGa4KeyEvents(property, s, e),
-			landingAll: (property, s, e) => demoGa4LandingAll(property, s, e)
+			landingAll: (property, s, e) => demoGa4LandingAll(property, s, e),
+			pageViews: (property, s, e) => demoGa4PageViews(property, s, e),
+			pageTitles: (property, s, e) => demoGa4PageTitles(property, s, e),
+			usersTotal: async (property, s, e) => demoGa4UsersTotal(property, s, e)
 		};
 	}
 	return {
@@ -79,7 +88,10 @@ export function ga4SourceFor(accountId: number): Ga4Source {
 		sources: (p, s, e) => ga4.trafficSources(accountId, p, s, e),
 		dimDaily: (p, dim, s, e) => ga4.dailyByDimension(accountId, p, dim, s, e),
 		keyEventsDaily: (p, s, e) => ga4.keyEventsDaily(accountId, p, s, e),
-		landingAll: (p, s, e) => ga4.landingAllChannels(accountId, p, s, e)
+		landingAll: (p, s, e) => ga4.landingAllChannels(accountId, p, s, e),
+		pageViews: (p, s, e) => ga4.pageViewsDaily(accountId, p, s, e),
+		pageTitles: (p, s, e) => ga4.pageTitles(accountId, p, s, e),
+		usersTotal: (p, s, e) => ga4.usersTotal(accountId, p, s, e)
 	};
 }
 
@@ -261,6 +273,66 @@ export async function pullGa4Dims(siteId: number, property: string, src: Ga4Sour
 	}
 }
 
+/** Window lengths whose unique users are stored: the period picker's presets. */
+export const USER_WINDOWS = [1, 3, 7, 28, 90, 180, 480] as const;
+const PAGE_VIEWS_FIRST_DAYS = 90;
+
+/**
+ * Page views per page per day (the first pull covers 90 days, later ones re-read the last 10 because GA4 reprocesses), page titles
+ * once a day, and unique users for each preset window once a day (windows end yesterday: today is still filling in). An extra like
+ * the breakdowns: a failure is recorded in ga4_views_error and never fails the GA4 sync.
+ */
+export async function pullGa4PageViews(siteId: number, property: string, src: Ga4Source, today: string): Promise<{ ok: boolean }> {
+	const d = db();
+	const horizon = retentionHorizon(today);
+	try {
+		if (src.pageViews) {
+			const have = !!d.prepare('SELECT 1 FROM ga4_page_views WHERE site_id = ? LIMIT 1').get(siteId);
+			let start = have ? addDays(today, -10) : addDays(today, -(PAGE_VIEWS_FIRST_DAYS - 1));
+			if (start < horizon) start = horizon;
+			const { rows, truncated } = await src.pageViews(property, start, today);
+			const ins = d.prepare('INSERT OR REPLACE INTO ga4_page_views VALUES (?,?,?,?)');
+			d.transaction(() => {
+				d.prepare('DELETE FROM ga4_page_views WHERE site_id = ? AND date >= ?').run(siteId, start);
+				for (const r of rows) ins.run(siteId, r.date, r.page, r.views);
+				d.prepare('UPDATE sites SET ga4_views_truncated = ? WHERE id = ?').run(truncated ? 1 : 0, siteId);
+			})();
+		}
+		const once = (what: string) => {
+			const key = `${what}:${siteId}`;
+			if ((d.prepare('SELECT value v FROM kv WHERE key = ?').get(key) as { v: string } | undefined)?.v === today) return false;
+			return () => d.prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run(key, today);
+		};
+		const titlesDone = src.pageTitles && once('ga4titles');
+		if (src.pageTitles && titlesDone) {
+			const titles = await src.pageTitles(property, addDays(today, -27) < horizon ? horizon : addDays(today, -27), today);
+			const ins = d.prepare('INSERT OR REPLACE INTO ga4_page_titles VALUES (?,?,?)');
+			d.transaction(() => {
+				d.prepare('DELETE FROM ga4_page_titles WHERE site_id = ?').run(siteId);
+				for (const t of titles) ins.run(siteId, t.page, t.title);
+			})();
+			titlesDone();
+		}
+		const usersDone = src.usersTotal && once('ga4users');
+		if (src.usersTotal && usersDone) {
+			const end = addDays(today, -1);
+			const ins = d.prepare('INSERT OR REPLACE INTO ga4_users VALUES (?,?,?,?,?,?,?)');
+			for (const days of USER_WINDOWS) {
+				let start = addDays(end, -(days - 1));
+				if (start < horizon) start = horizon;
+				const u = await src.usersTotal(property, start, end);
+				ins.run(siteId, days, start, end, u.activeUsers, u.newUsers, today);
+			}
+			usersDone();
+		}
+		d.prepare('UPDATE sites SET ga4_views_error = NULL WHERE id = ?').run(siteId);
+		return { ok: true };
+	} catch (e) {
+		d.prepare('UPDATE sites SET ga4_views_error = ? WHERE id = ?').run((e instanceof Error ? e.message : String(e)).slice(0, 500), siteId);
+		return { ok: false };
+	}
+}
+
 // ── sync: GA4 ────────────────────────────────────────────────────────────────
 export async function syncGa4(siteId: number, source?: Ga4Source, today = pacificToday()) {
 	const link = linksFor(siteId).ga4;
@@ -282,6 +354,7 @@ export async function syncGa4(siteId: number, source?: Ga4Source, today = pacifi
 		// Recorded on the site and shown with the sources table; it does not change the sync status.
 		await pullGa4Sources(siteId, link.external_id, src, today);
 		await pullGa4Dims(siteId, link.external_id, src, today);
+		await pullGa4PageViews(siteId, link.external_id, src, today);
 		markLink(siteId, 'ga4', 'idle', periods.ok ? null : 'Daily data synced; user and landing-page reports could not be fetched (will retry).', true);
 		return { rows: rows.length };
 	} catch (e) {

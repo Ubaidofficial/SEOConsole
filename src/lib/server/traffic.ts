@@ -104,3 +104,33 @@ export function sumSource(items: (SourceTotals | null)[]) {
 		properties: list.length
 	};
 }
+
+/** GA4's unique active and new users for a preset window length, as stored by the daily pull; null for other lengths or before the first pull. */
+export function ga4UsersFor(siteId: number, days: number): { activeUsers: number; newUsers: number; window: { start: string; end: string } } | null {
+	const r = db().prepare('SELECT active_users a, new_users n, start_date s, end_date e FROM ga4_users WHERE site_id = ? AND days = ?').get(siteId, days) as { a: number; n: number; s: string; e: string } | undefined;
+	return r ? { activeUsers: r.a, newUsers: r.n, window: { start: r.s, end: r.e } } : null;
+}
+
+export interface PageViews {
+	window: { start: string; end: string };
+	views: Map<string, number>;
+	/** null when the stored days do not reach back over the whole previous window: no change is claimed */
+	prev: Map<string, number> | null;
+	titles: Map<string, string>;
+	/** the first pull hit GA4's row limit, so the oldest days are missing */
+	truncated: boolean;
+}
+
+/** GA4 page views per page for `days` ending on GA4's newest complete stored day (today, still filling in, is left out). */
+export function pageViewsFor(siteId: number, days: number, today = pacificToday()): PageViews | null {
+	const d = db();
+	const range = d.prepare('SELECT MIN(date) a, MAX(date) b FROM ga4_page_views WHERE site_id = ? AND date < ?').get(siteId, today) as { a: string | null; b: string | null };
+	if (!range.b) return null;
+	const end = range.b;
+	const start = addDays(end, -(days - 1));
+	const prevStart = addDays(start, -days);
+	const sum = (s: string, e: string) => new Map((d.prepare('SELECT page, SUM(views) v FROM ga4_page_views WHERE site_id = ? AND date BETWEEN ? AND ? GROUP BY page').all(siteId, s, e) as { page: string; v: number }[]).map((r) => [r.page, r.v]));
+	const titles = new Map((d.prepare('SELECT page, title FROM ga4_page_titles WHERE site_id = ?').all(siteId) as { page: string; title: string }[]).map((r) => [r.page, r.title]));
+	const truncated = !!(d.prepare('SELECT ga4_views_truncated t FROM sites WHERE id = ?').get(siteId) as { t: number } | undefined)?.t;
+	return { window: { start, end }, views: sum(start, end), prev: range.a! <= prevStart ? sum(prevStart, addDays(start, -1)) : null, titles, truncated };
+}

@@ -680,3 +680,37 @@ export function demoMozFetch(): typeof fetch {
 		return new Response(JSON.stringify({ results }), { status: 200, headers: { 'content-type': 'application/json' } });
 	}) as typeof fetch;
 }
+
+/** Page views by day for the demo: each landing page's share of the window, spread over the days like the daily sessions. */
+export async function demoGa4PageViews(property: string, startDate: string, endDate: string): Promise<{ rows: { date: string; page: string; views: number }[]; truncated: boolean }> {
+	const daily = demoGa4Daily(property, startDate, endDate);
+	const perDay = new Map<string, number>();
+	for (const r of daily) perDay.set(r.date, (perDay.get(r.date) ?? 0) + r.sessions);
+	const total = [...perDay.values()].reduce((a, b) => a + b, 0) || 1;
+	const pages = (await demoGa4LandingAll(property, startDate, endDate)).rows;
+	const byPage = new Map<string, number>();
+	for (const p of pages) byPage.set(p.page, (byPage.get(p.page) ?? 0) + p.sessions);
+	const rows: { date: string; page: string; views: number }[] = [];
+	for (const [date, s] of perDay) for (const [page, sessions] of byPage) {
+		const views = Math.round(sessions * 1.9 * (s / total));
+		if (views) rows.push({ date, page, views });
+	}
+	return { rows, truncated: false };
+}
+
+/** A readable title per demo page path, built from its last segment. */
+export async function demoGa4PageTitles(property: string, startDate: string, endDate: string): Promise<{ page: string; title: string }[]> {
+	const pages = new Set((await demoGa4LandingAll(property, startDate, endDate)).rows.map((r) => r.page));
+	return [...pages].map((page) => {
+		const last = page.split('/').filter(Boolean).pop() ?? '';
+		const words = last ? last.replace(/-/g, ' ') : 'Home';
+		return { page, title: `${words.charAt(0).toUpperCase()}${words.slice(1)} | Demo` };
+	});
+}
+
+/** Unique users for the demo: a steady share of the window's sessions (returning visitors make it less than the sessions). */
+export function demoGa4UsersTotal(property: string, startDate: string, endDate: string): { activeUsers: number; newUsers: number } {
+	const sessions = demoGa4Daily(property, startDate, endDate).reduce((a, r) => a + r.sessions, 0);
+	const activeUsers = Math.round(sessions * 0.7);
+	return { activeUsers, newUsers: Math.round(activeUsers * 0.6) };
+}
