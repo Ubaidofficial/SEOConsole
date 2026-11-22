@@ -681,6 +681,18 @@ CREATE TABLE IF NOT EXISTS sa_hourly (               -- Search Console clicks by
 	position REAL NOT NULL,
 	PRIMARY KEY (site_id, hour, page)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS site_type_pages (         -- pages in the non-web search types (Discover, News, Google News, Image, Video) over whole windows
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	search_type TEXT NOT NULL,          -- image | video | news | discover | googleNews
+	days INTEGER NOT NULL,              -- window length (one of PERIODS), ending on pulled_on
+	which TEXT NOT NULL,                -- now | prev (the equally long window before, when Google still keeps all of it)
+	page TEXT NOT NULL,
+	clicks INTEGER NOT NULL,
+	impressions INTEGER NOT NULL,
+	position REAL NOT NULL,             -- 0 where Google reports none (Discover)
+	pulled_on TEXT NOT NULL,
+	PRIMARY KEY (site_id, search_type, days, which, page)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS annotation_auto (         -- change-log entries the app wrote itself; the key outlives a deleted entry so it never comes back
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	key TEXT NOT NULL,                  -- robots:<id> | gtm:<container>:<version> | sitemap-added:<day> | sitemap-removed:<day>
@@ -895,6 +907,7 @@ function migrate(db: Database.Database) {
 	// Search Console hourly data: when it was last read (ms), and whether Google answered the per-page hourly request.
 	if (!cols('sites').includes('hourly_at')) db.exec('ALTER TABLE sites ADD COLUMN hourly_at INTEGER');
 	if (!cols('sites').includes('hourly_pages')) db.exec('ALTER TABLE sites ADD COLUMN hourly_pages INTEGER NOT NULL DEFAULT 0');
+	if (!cols('sites').includes('type_pages_on')) db.exec('ALTER TABLE sites ADD COLUMN type_pages_on TEXT');
 	if (!cols('ai_runs').includes('via')) db.exec('ALTER TABLE ai_runs ADD COLUMN via TEXT');
 	if (!cols('ai_runs').includes('cost')) db.exec('ALTER TABLE ai_runs ADD COLUMN cost REAL');
 	// The Google identity (the stable "sub") a team member signs in with, once they have used or linked "Sign in with Google".

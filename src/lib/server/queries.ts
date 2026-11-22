@@ -1,5 +1,5 @@
 import { db, withRegexBudget } from './db';
-import { addDays, daysBetween, eachDay, makePeriod, pacificToday, type Period } from './dates';
+import { addDays, daysBetween, eachDay, makePeriod, pacificToday, retentionHorizon, type Period } from './dates';
 import { fitCtrCurve, isBranded, parseTerms, sumMetrics, type CtrCurve, type Metrics, type PRow, type QPRow, type QRow } from '../analytics';
 import type { SiteRow } from './clients';
 import { coverageMap } from '../property';
@@ -64,6 +64,36 @@ export function appearanceFor(siteId: number, days: number): { rows: AppearanceR
 		.prepare('SELECT appearance, clicks, impressions, position, pulled_on FROM site_appearance WHERE site_id = ? AND days = ? ORDER BY clicks DESC, impressions DESC')
 		.all(siteId, days) as (AppearanceRow & { pulled_on: string })[];
 	return { rows: rows.map((r) => ({ appearance: r.appearance, ...metrics(r) })), pulledOn: rows[0]?.pulled_on ?? null };
+}
+
+export interface TypePageRow { page: string; clicks: number; impressions: number; ctr: number; position: number; prevClicks: number | null; clicksDelta: number | null }
+
+/**
+ * Pages in each non-web search type over one of the stored windows, with the clicks each had in the window before when that was fetched
+ * (a page absent from a fetched previous window had none then). Types with no stored pages are left out. pulledOn is null before the first pull.
+ */
+export function typePagesFor(siteId: number, days: number): { pulledOn: string | null; types: Partial<Record<AnyType, { rows: TypePageRow[]; hasPrev: boolean }>> } {
+	const d = db();
+	const all = d.prepare('SELECT search_type type, which, page, clicks, impressions, position, pulled_on FROM site_type_pages WHERE site_id = ? AND days = ?').all(siteId, days) as { type: AnyType; which: string; page: string; clicks: number; impressions: number; position: number; pulled_on: string }[];
+	const types: Partial<Record<AnyType, { rows: TypePageRow[]; hasPrev: boolean }>> = {};
+	for (const t of new Set(all.map((r) => r.type))) {
+		const mine = all.filter((r) => r.type === t);
+		// The pull asks for the previous window exactly when Google still keeps all of it, so an empty answer means "no clicks then", not "unknown".
+		const pulled = mine[0].pulled_on;
+		const hasPrev = mine.some((r) => r.which === 'prev') || addDays(pulled, -(2 * days - 1)) >= retentionHorizon(pulled);
+		const prev = new Map(mine.filter((r) => r.which === 'prev').map((r) => [r.page, r.clicks]));
+		types[t] = {
+			hasPrev,
+			rows: mine
+				.filter((r) => r.which === 'now')
+				.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)
+				.map((r) => {
+					const p = hasPrev ? (prev.get(r.page) ?? 0) : null;
+					return { page: r.page, clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position, prevClicks: p, clicksDelta: p ? r.clicks / p - 1 : null };
+				})
+		};
+	}
+	return { pulledOn: all[0]?.pulled_on ?? null, types };
 }
 
 /**

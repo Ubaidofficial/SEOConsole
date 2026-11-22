@@ -1,6 +1,6 @@
 import { db } from './db';
-import { type PerfFilters, allSites, brandTerms, fittedCurve, historyCoversPrevious, performanceBy, periodFor, queryPageRows, siteEnd, summary, topPages, topQueries, pageTotals, dailySeries, anonymisedShare, typeBreakdown, appearanceFor } from './queries';
-import { ALL_TYPES } from '../searchTypes';
+import { type PerfFilters, allSites, brandTerms, fittedCurve, historyCoversPrevious, performanceBy, periodFor, queryPageRows, siteEnd, summary, topPages, topQueries, pageTotals, dailySeries, anonymisedShare, typeBreakdown, appearanceFor, typePagesFor } from './queries';
+import { ALL_TYPES, SEARCH_TYPES, type SearchType } from '../searchTypes';
 import { cruxIntegration, cruxLatest } from './crux';
 import { rate, VITALS } from '../vitals';
 import { clientForSite, displayName } from './clients';
@@ -250,10 +250,23 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_search_types',
-		description: 'Google traffic split by search type (web, image, video, news, discover, googleNews) for a window vs the previous window, plus the search-appearance report (rich results and similar). The overview numbers are web only; this shows the rest.',
-		schema: { ...siteArg, ...daysArg },
+		description: 'Google traffic split by search type (web, image, video, news, discover, googleNews) for a window vs the previous window, plus the search-appearance report (rich results and similar). The overview numbers are web only; this shows the rest. view=pages lists the pages behind one type (`type`, default discover) with their change, to pin a Discover rise or drop on the articles behind it.',
+		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['summary', 'pages'] }, type: { type: 'string', enum: [...SEARCH_TYPES] }, limit: { type: 'integer' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
+			if (a.view === 'pages') {
+				const t = (SEARCH_TYPES as readonly string[]).includes(String(a.type)) ? (String(a.type) as SearchType) : 'discover';
+				const tp = typePagesFor(site.id, days(a));
+				const one = tp.types[t];
+				if (!tp.pulledOn) return { type: t, note: 'Pages per search type are read once a day for types with traffic; they appear after the next sync.' };
+				if (!one) return { type: t, endingOn: tp.pulledOn, pages: [], note: `No ${t} traffic stored for this window.` };
+				return {
+					type: t,
+					window: { days: days(a), endingOn: tp.pulledOn },
+					note: one.hasPrev ? 'change is against the equally long window before; null for a page with no clicks then.' : 'Google no longer keeps the whole previous window, so there are no change figures.',
+					pages: one.rows.slice(0, limit(a, 50)).map((r) => ({ page: r.page, clicks: r.clicks, previousClicks: r.prevClicks, change: r.clicksDelta == null ? null : r2(r.clicksDelta * 100) + '%', impressions: r.impressions, ctr: r2(r.ctr * 100) + '%', ...(t === 'discover' ? {} : { position: r2(r.position) }) }))
+				};
+			}
 			const p = periodFor(site, days(a));
 			const now = typeBreakdown(site.id, p.start, p.end);
 			const prev = typeBreakdown(site.id, p.prevStart, p.prevEnd);

@@ -143,6 +143,46 @@ export async function pullAppearance(client: GscClient, siteId: number, siteUrl:
 	return n;
 }
 
+/** Pages kept per search type and window: the long tail past this is a click or two each. */
+export const TYPE_PAGE_LIMIT = 1000;
+
+/**
+ * Which pages earn the traffic in the non-web search types (Discover above all, where one article can make a month), per stored window
+ * and the window before it, so a rise or drop can be pinned on the articles behind it. Only for types the property has traffic in.
+ * Once a day, like search appearance. A type Google refuses is skipped and tried again on the next sync. Never throws.
+ */
+export async function pullTypePages(client: GscClient, siteId: number, siteUrl: string, today: string): Promise<{ types: string[]; failed: string[] }> {
+	const d = db();
+	if (d.prepare('SELECT 1 FROM sites WHERE id = ? AND type_pages_on = ?').get(siteId, today)) return { types: [], failed: [] };
+	const horizon = retentionHorizon(today);
+	const withTraffic = SEARCH_TYPES.filter((t) => d.prepare('SELECT 1 FROM site_daily_type WHERE site_id = ? AND search_type = ? AND (clicks > 0 OR impressions > 0) LIMIT 1').get(siteId, t));
+	const ins = d.prepare('INSERT OR REPLACE INTO site_type_pages (site_id, search_type, days, which, page, clicks, impressions, position, pulled_on) VALUES (?,?,?,?,?,?,?,?,?)');
+	const failed: string[] = [];
+	for (const type of withTraffic) {
+		const windows: { days: number; which: 'now' | 'prev'; rows: SearchRow[] }[] = [];
+		try {
+			for (const days of PERIODS) {
+				let start = addDays(today, -(days - 1));
+				if (start < horizon) start = horizon;
+				const prevStart = addDays(today, -(2 * days - 1));
+				const wantPrev = start === addDays(today, -(days - 1)) && prevStart >= horizon;
+				const body = (s: string, e: string) => ({ startDate: s, endDate: e, dimensions: ['page'], rowLimit: TYPE_PAGE_LIMIT, dataState: 'all' as const, type });
+				windows.push({ days, which: 'now', rows: await client.query(siteUrl, body(start, today)) });
+				if (wantPrev) windows.push({ days, which: 'prev', rows: await client.query(siteUrl, body(prevStart, addDays(start, -1))) });
+			}
+		} catch {
+			failed.push(type);
+			continue;
+		}
+		d.transaction(() => {
+			d.prepare('DELETE FROM site_type_pages WHERE site_id = ? AND search_type = ?').run(siteId, type);
+			for (const w of windows) for (const r of w.rows) if (r.keys[0]) ins.run(siteId, type, w.days, w.which, r.keys[0], r.clicks, r.impressions, r.position ?? 0, today);
+		})();
+	}
+	if (!failed.length) d.prepare('UPDATE sites SET type_pages_on = ? WHERE id = ?').run(today, siteId);
+	return { types: withTraffic.filter((t) => !failed.includes(t)), failed };
+}
+
 /** Search Console keeps hourly data this many days back. */
 export const HOURLY_DAYS = 10;
 /** Per-page hourly rows are asked for over this many days only: enough for "the last 24 hours", small enough to stay cheap. */
@@ -228,6 +268,7 @@ export async function syncSite(siteId: number, opts: SyncOptions = {}): Promise<
 			// Only mark the one-off history pull done when no type failed, so a transient error retries next time.
 			if (first && !t.failed.length) d.prepare('UPDATE sites SET types_synced_at = ? WHERE id = ?').run(Date.now(), siteId);
 			await pullAppearance(client, siteId, site.site_url, today);
+			await pullTypePages(client, siteId, site.site_url, today);
 		} catch {
 			/* ignored on purpose */
 		}
