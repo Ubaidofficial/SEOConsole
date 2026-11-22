@@ -28,10 +28,10 @@
 <form method="POST" use:enhance={() => async ({ update }) => { await update({ reset: false }); }}>
 <div class="mb-2 flex flex-wrap items-center gap-2 text-xs">
 	<span class="text-muted-foreground">With the ticked URLs:</span>
-	<button class="btn !h-8 text-xs" formaction="?/submitSelected" disabled={!picked.length} title="Send them to IndexNow, Bing and (for job and livestream pages) Google's Indexing API">Submit for indexing</button>
-	<button class="btn !h-8 text-xs" formaction="?/addToRequests" disabled={!picked.length} title="Put them on the Request indexing list, where you press Search Console's button">Add to the Request list</button>
-	<button class="btn !h-8 text-xs" type="button" onclick={() => (picked = [...notIndexed])} disabled={!notIndexed.length}>Tick the not-indexed ({notIndexed.length})</button>
-	<button class="btn !h-8 text-xs" type="button" onclick={() => (picked = picked.length ? [] : [...allShown])}>{picked.length ? 'Untick all' : 'Tick all'}</button>
+	<button class="btn btn-sm" formaction="?/submitSelected" disabled={!picked.length} title="Send them to IndexNow, Bing and (for job and livestream pages) Google's Indexing API">Submit for indexing</button>
+	<button class="btn btn-sm" formaction="?/addToRequests" disabled={!picked.length} title="Put them on the Request indexing list, where you press Search Console's button">Add to the Request list</button>
+	<button class="btn btn-sm" type="button" onclick={() => (picked = [...notIndexed])} disabled={!notIndexed.length}>Tick the not-indexed ({notIndexed.length})</button>
+	<button class="btn btn-sm" type="button" onclick={() => (picked = picked.length ? [] : [...allShown])}>{picked.length ? 'Untick all' : 'Tick all'}</button>
 </div>
 <div class="overflow-x-auto rounded-xl border bg-card shadow-xs">
 	<table class="w-full">

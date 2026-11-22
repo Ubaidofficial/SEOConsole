@@ -68,7 +68,7 @@
 		<div class="mb-1 flex flex-wrap items-center gap-2">
 			<h2 class="font-medium">OpenSEO site audit</h2>
 			{#if o.url}<a class="text-xs underline" href={o.url} target="_blank" rel="noreferrer noopener">Open in OpenSEO</a>{/if}
-			<form method="POST" action="?/oseoAudit" use:enhance={submit('oseo')} class="ml-auto"><button class="btn !h-8 text-xs" disabled={busy === 'oseo'}>{busy === 'oseo' ? 'Reading…' : 'Read again'}</button></form>
+			<form method="POST" action="?/oseoAudit" use:enhance={submit('oseo')} class="ml-auto"><button class="btn btn-sm" disabled={busy === 'oseo'}>{busy === 'oseo' ? 'Reading…' : 'Read again'}</button></form>
 		</div>
 		<p class="mb-2 text-xs text-muted-foreground">The latest audit of <span class="pii">{o.project ?? 'the linked project'}</span>, read once a day (free: it runs no audit), with the issues on pages that earn clicks listed first. Run a new audit in OpenSEO.</p>
 		{#if !o.snap}<p class="text-xs text-muted-foreground">Not read yet.</p>

@@ -18,7 +18,7 @@
 		{#each data.groups as g (g.key)}
 			<section class="card p-4">
 				<div class="flex flex-wrap items-center gap-2"><h2 class="font-medium">{g.title}</h2><span class="chip">{fmtInt(g.total)} found</span><span class="chip">low effort</span>
-					<a class="btn !h-7 ml-auto text-xs" href="{base}/{g.tab}?days={data.days}">All of them in {tabLabel[g.tab] ?? g.tab} →</a></div>
+					<a class="btn btn-xs ml-auto" href="{base}/{g.tab}?days={data.days}">All of them in {tabLabel[g.tab] ?? g.tab} →</a></div>
 				<p class="mt-1 text-sm"><b>What to do:</b> {g.how}</p>
 				<details class="mt-1 text-xs text-muted-foreground"><summary class="cursor-pointer select-none">Why this works</summary><p class="mt-1 leading-relaxed">{g.why}</p></details>
 				<div class="mt-3 overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="th">What</th><th class="th">Details</th><th class="th text-right">≈ extra clicks</th></tr></thead><tbody>

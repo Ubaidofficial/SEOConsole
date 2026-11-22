@@ -42,8 +42,8 @@
 				{:else}{progress.total - progress.done} step{progress.total - progress.done === 1 ? '' : 's'} left{progress.minutesLeft ? `, about ${progress.minutesLeft} minutes` : ''}. Each one ticks itself off when it is done.{/if}
 			</p>
 		</div>
-		{#if progress.complete}<button type="button" class="btn !h-8 text-xs" aria-expanded={reviewing} onclick={() => (reviewing = !reviewing)}>{reviewing ? 'Close' : 'Review steps'}</button>{/if}
-		<form method="POST" action="?/hideOnboarding" use:enhance><button class="btn !h-8 text-xs" title="Hide the guide. “Set-up guide” at the bottom of the dashboard brings it back.">Hide</button></form>
+		{#if progress.complete}<button type="button" class="btn btn-sm" aria-expanded={reviewing} onclick={() => (reviewing = !reviewing)}>{reviewing ? 'Close' : 'Review steps'}</button>{/if}
+		<form method="POST" action="?/hideOnboarding" use:enhance><button class="btn btn-sm" title="Hide the guide. “Set-up guide” at the bottom of the dashboard brings it back.">Hide</button></form>
 	</header>
 
 	{#if progress.complete && !reviewing}

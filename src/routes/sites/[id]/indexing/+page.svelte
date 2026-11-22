@@ -103,14 +103,14 @@
 	<form method="POST" action="?/sitemapAuto" use:enhance class="mb-2 flex flex-wrap items-center gap-2 text-sm">
 		<input type="hidden" name="on" value={data.sitemapAuto ? '0' : '1'} />
 		<span class="chip {data.sitemapAuto ? 'chip-on' : ''}">Auto resubmit: {data.sitemapAuto ? 'on' : 'off'}</span>
-		<button class="btn !h-8 text-xs {data.sitemapAuto ? '' : 'btn-primary'}">{data.sitemapAuto ? 'Switch off' : 'Resubmit when pages change'}</button>
+		<button class="btn btn-sm {data.sitemapAuto ? '' : 'btn-primary'}">{data.sitemapAuto ? 'Switch off' : 'Resubmit when pages change'}</button>
 		<span class="text-xs text-muted-foreground">After a sitemap read finds new or changed pages, submit the sitemaps to Search Console again (once a day at most). Google decides when it reads them, so this is a nudge, not a guarantee.</span>
 	</form>
 	{#if data.bingLinked}
 		<form method="POST" action="?/bingAuto" use:enhance class="mb-2 flex flex-wrap items-center gap-2 text-sm">
 			<input type="hidden" name="on" value={data.bingAuto ? '0' : '1'} />
 			<span class="chip {data.bingAuto ? 'chip-on' : ''}">Send to Bing: {data.bingAuto ? 'on' : 'off'}</span>
-			<button class="btn !h-8 text-xs {data.bingAuto ? '' : 'btn-primary'}">{data.bingAuto ? 'Switch off' : 'Send new pages to Bing'}</button>
+			<button class="btn btn-sm {data.bingAuto ? '' : 'btn-primary'}">{data.bingAuto ? 'Switch off' : 'Send new pages to Bing'}</button>
 			<span class="text-xs text-muted-foreground">Sends the new and changed pages to Bing's URL submission, within its daily allowance. No key file needed; skipped while IndexNow auto-submit is on.</span>
 		</form>
 	{/if}

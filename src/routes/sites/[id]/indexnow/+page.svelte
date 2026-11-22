@@ -42,12 +42,12 @@
 
 {#if s.hasKey}
 	<section class="card mb-4 p-4">
-		<div class="mb-2 flex items-center gap-3"><h2 class="font-medium">2 · Verify the key file on each host</h2><form method="POST" action="?/verifyAll" use:enhance={run} class="ml-auto"><button class="btn !h-8 text-xs" disabled={busy}>Check all</button></form></div>
+		<div class="mb-2 flex items-center gap-3"><h2 class="font-medium">2 · Verify the key file on each host</h2><form method="POST" action="?/verifyAll" use:enhance={run} class="ml-auto"><button class="btn btn-sm" disabled={busy}>Check all</button></form></div>
 		<div class="overflow-x-auto"><table class="w-full text-sm"><tbody>
 			{#each s.hosts as h (h.host)}
 				<tr><td class="td pii">{h.host}</td>
 					<td class="td pii min-w-48 text-xs {h.ok ? 'text-good' : 'text-muted-foreground'}">{h.ok ? '✓ verified' : h.verifiedAt ? '✕ ' + h.message : 'not checked yet'}</td>
-					<td class="td w-px"><form method="POST" action="?/verify" use:enhance={run}><input type="hidden" name="host" value={h.host} /><button class="btn !h-8 text-xs" disabled={busy}>Check</button></form></td></tr>
+					<td class="td w-px"><form method="POST" action="?/verify" use:enhance={run}><input type="hidden" name="host" value={h.host} /><button class="btn btn-sm" disabled={busy}>Check</button></form></td></tr>
 			{:else}<tr><td class="td text-muted-foreground">No hosts known yet: read the sitemaps on the Indexing tab.</td></tr>{/each}
 		</tbody></table></div>
 		<p class="mt-2 text-xs text-muted-foreground">Each host (for example <code>example.com</code> and <code>www.example.com</code>) needs the file on itself. Only verified hosts can be submitted.</p>
@@ -62,15 +62,15 @@
 				{#if !verified}<span class="text-xs text-warn">Verify at least one host first.</span>{/if}</div>
 		</form>
 		<div class="flex flex-wrap gap-2">
-			<form method="POST" action="?/presetRecent" use:enhance={run}><button class="btn !h-8 text-xs" disabled={busy || !verified || !data.presets.recent} title="Sitemap URLs whose date is within the last 7 days">Sitemap URLs from the last 7 days ({data.presets.recent})</button></form>
-			<form method="POST" action="?/presetRemoved" use:enhance={run}><button class="btn !h-8 text-xs" disabled={busy || !verified || !data.presets.removed} title="Pages the indexing monitor saw return 404">Pages that now 404 ({data.presets.removed})</button></form>
+			<form method="POST" action="?/presetRecent" use:enhance={run}><button class="btn btn-sm" disabled={busy || !verified || !data.presets.recent} title="Sitemap URLs whose date is within the last 7 days">Sitemap URLs from the last 7 days ({data.presets.recent})</button></form>
+			<form method="POST" action="?/presetRemoved" use:enhance={run}><button class="btn btn-sm" disabled={busy || !verified || !data.presets.removed} title="Pages the indexing monitor saw return 404">Pages that now 404 ({data.presets.removed})</button></form>
 		</div>
 		<Explainer lead="Safeguards keep this from spamming the engines.">
 	<p>Safeguards, because the protocol warns against spam: a URL is not resent within 24 hours (unless you force it), at most {s.dailyCap.toLocaleString('en-US')} URLs a day per site (<code>INDEXNOW_MAX_PER_DAY</code>), and nothing is sent for an hour after an engine says “too many requests”. Sent in the last 24 hours: <b>{s.usedToday.toLocaleString('en-US')}</b>.{#if s.backoffUntil} <b class="text-warn">Paused until {new Date(s.backoffUntil).toLocaleTimeString()}.</b>{/if}</p>
 </Explainer>
 		<form method="POST" action="?/auto" use:enhance class="mt-3 flex items-center gap-3 border-t pt-3" style="border-color:var(--border)">
 			<input type="hidden" name="on" value={s.auto ? '0' : '1'} />
-			<button class="btn !h-8 text-xs {s.auto ? '' : 'btn-primary'}">{s.auto ? 'Turn automatic submission off' : 'Turn automatic submission on'}</button>
+			<button class="btn btn-sm {s.auto ? '' : 'btn-primary'}">{s.auto ? 'Turn automatic submission off' : 'Turn automatic submission on'}</button>
 			<span class="text-xs text-muted-foreground">{s.auto ? 'On: after each sitemap read, new URLs and URLs whose date moved forward are sent.' : 'Off. When on, new and changed sitemap URLs are sent after each sitemap read (the first read only records a starting point). If a site stamps every URL with its build time, only genuinely new URLs are sent.'}</span>
 		</form>
 	</section>

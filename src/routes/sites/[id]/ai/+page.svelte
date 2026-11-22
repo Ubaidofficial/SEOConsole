@@ -71,7 +71,7 @@
 		<article class="card p-3 text-sm">
 			<div class="flex items-start gap-2">
 				<span class="pii min-w-0 flex-1 font-medium">{p.prompt}</span>
-				<form method="POST" action="?/deletePrompt" use:enhance><input type="hidden" name="id" value={p.id} /><button class="btn !h-7 !px-2" title="Remove this prompt and its answers" aria-label="Remove prompt"><Trash2 class="size-3.5" /></button></form>
+				<form method="POST" action="?/deletePrompt" use:enhance><input type="hidden" name="id" value={p.id} /><button class="btn btn-xs" title="Remove this prompt and its answers" aria-label="Remove prompt"><Trash2 class="size-3.5" /></button></form>
 			</div>
 			<div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
 				{#each p.answers as a (a.engine)}

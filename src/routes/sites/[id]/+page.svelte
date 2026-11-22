@@ -60,8 +60,8 @@
 			<p class="text-sm text-muted-foreground">The most valuable things to do on this site now, picked from {data.plan.total} open findings. Tick one off when it is done.</p>
 		</div>
 		<div class="ml-auto flex gap-2 text-sm">
-			<a class="btn !h-8 text-xs" href="/sites/{page.params.id}/quickwins">All quick wins</a>
-			<a class="btn !h-8 text-xs" href="/sites/{page.params.id}/actions">All {data.plan.total} findings →</a>
+			<a class="btn btn-sm" href="/sites/{page.params.id}/quickwins">All quick wins</a>
+			<a class="btn btn-sm" href="/sites/{page.params.id}/actions">All {data.plan.total} findings →</a>
 		</div>
 	</div>
 	{#if data.plan.blocking.length + data.plan.quick.length + data.plan.bigger.length === 0}
@@ -153,8 +153,8 @@
 
 	<section>
 		<div class="mb-2 flex items-center gap-2"><h2 class="text-base font-semibold tracking-tight">Change log</h2>
-				<form method="POST" action="?/changelogAuto" use:enhance class="ml-auto"><input type="hidden" name="on" value={data.changelogAuto ? '0' : '1'} /><button class="text-xs text-muted-foreground underline underline-offset-2" title="robots.txt changes, new Tag Manager versions, and pages appearing in or leaving the sitemaps are logged here by the app ('detected'). Delete any you do not want: a deleted one does not come back.">Detected changes: {data.changelogAuto ? 'on' : 'off'}</button></form>
-				<details class="group" bind:open={logOpen}><summary class="btn !h-8 cursor-pointer list-none text-xs [&::-webkit-details-marker]:hidden"><Plus class="size-3.5" />Log a change</summary></details></div>
+				<form method="POST" action="?/changelogAuto" use:enhance class="ml-auto"><input type="hidden" name="on" value={data.changelogAuto ? '0' : '1'} /><button class="btn btn-xs {data.changelogAuto ? '' : 'btn-ghost'}" aria-pressed={data.changelogAuto} title="robots.txt changes, new Tag Manager versions, and pages appearing in or leaving the sitemaps are logged here by the app ('detected'). Delete any you do not want: a deleted one does not come back.">Detected changes: {data.changelogAuto ? 'on' : 'off'}</button></form>
+				<details class="group" bind:open={logOpen}><summary class="btn btn-sm cursor-pointer list-none [&::-webkit-details-marker]:hidden"><Plus class="size-3.5" />Log a change</summary></details></div>
 				{#if logOpen}
 				<form method="POST" action="?/addNote" use:enhance={addNote} class="mb-3 grid gap-3 rounded-xl border bg-card p-4 shadow-xs">
 			<div class="grid grid-cols-2 gap-3">
@@ -200,7 +200,7 @@
 							<a class="ml-auto underline" href="/sites/{page.params.id}/tests">details</a>
 						</div>
 					{:else if a.page_prefix}
-						<form method="POST" action="?/makeTest" use:enhance class="mt-2"><input type="hidden" name="id" value={a.id} /><button class="btn !h-7 text-xs">Test this change properly</button></form>
+						<form method="POST" action="?/makeTest" use:enhance class="mt-2"><input type="hidden" name="id" value={a.id} /><button class="btn btn-xs">Test this change properly</button></form>
 					{/if}
 					{#if a.result.tooEarly}
 						<div class="mt-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">Too early to judge: {a.result.afterDays} day(s) of data since the change (7+ needed).</div>

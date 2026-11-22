@@ -38,7 +38,7 @@
 	<form method="POST" action="?/auto" use:enhance class="mt-2 flex flex-wrap items-center gap-2 text-sm">
 		<input type="hidden" name="on" value={data.auto ? '0' : '1'} />
 		<span class="chip {data.auto ? 'chip-on' : ''}">{data.auto ? 'Daily list: on' : 'Daily list: off'}</span>
-		<button class="btn !h-8 text-xs {data.auto ? '' : 'btn-primary'}">{data.auto ? 'Switch off' : 'Build it every morning'}</button>
+		<button class="btn btn-sm {data.auto ? '' : 'btn-primary'}">{data.auto ? 'Switch off' : 'Build it every morning'}</button>
 		<span class="text-xs text-muted-foreground">Builds the list for you each day (it spends URL Inspection quota){data.webhookSet ? ' and posts to your webhook when pages are ready' : '; set DIGEST_WEBHOOK_URL to also get a message'}. It never presses the button for you.</span>
 	</form>
 	<p class="mt-2 text-sm">
@@ -62,11 +62,11 @@
 		<div class="rounded border p-4" style="border-color:var(--border)">
 			<div class="mb-2 flex items-center gap-2 text-xs"><span class="chip chip-on tnum">{Math.max(1, total - q.pending.length + 1)} of {total}</span><span class="chip">{TIER[it.tier]}</span>
 				{#if it.state}<span class="chip {it.state === 'indexed' ? 'text-good' : it.state === 'not_indexed' ? 'text-warn' : ''}">Google: {stateText[it.state]}</span>{/if}
-				<button class="ml-auto text-xs underline" type="button" onclick={() => (focus = false)}>Show the whole list</button></div>
+				<button class="btn btn-ghost btn-xs ml-auto" type="button" onclick={() => (focus = false)}>Show the whole list</button></div>
 			<div class="pii break-all text-base font-medium">{it.url}</div>
 			<p class="mt-1 text-xs text-muted-foreground">{it.reason}</p>
 			<ol class="mt-3 list-decimal space-y-2 pl-5 text-sm">
-				<li>{#if it.link}<a class="btn btn-primary !h-8 text-xs" href={it.link} target="_blank" rel="noreferrer noopener">Open in Search Console ↗</a>{:else}<a class="btn !h-8 text-xs" href="https://search.google.com/search-console" target="_blank" rel="noreferrer noopener">Open Search Console ↗</a> <button class="btn !h-8 text-xs" type="button" onclick={() => copy(it.url)}>Copy URL</button> <span class="text-xs text-muted-foreground">then paste it into the inspection bar</span>{/if}</li>
+				<li>{#if it.link}<a class="btn btn-sm btn-primary" href={it.link} target="_blank" rel="noreferrer noopener">Open in Search Console ↗</a>{:else}<a class="btn btn-sm" href="https://search.google.com/search-console" target="_blank" rel="noreferrer noopener">Open Search Console ↗</a> <button class="btn btn-sm" type="button" onclick={() => copy(it.url)}>Copy URL</button> <span class="text-xs text-muted-foreground">then paste it into the inspection bar</span>{/if}</li>
 				<li>Press <b>Request indexing</b> there (Google may run a live test first).</li>
 				<li>Come back and press <b>Done, next</b>. Only press it after you really requested it: it starts the day 1, 3 and 5 checks.</li>
 			</ol>
@@ -84,11 +84,11 @@
 					<div class="pii mt-1 break-all text-sm font-medium">{it.url}</div>
 					<p class="mt-0.5 text-xs text-muted-foreground">{it.reason}</p>
 					<div class="mt-2 flex flex-wrap items-center gap-2">
-						{#if it.link}<a class="btn btn-primary !h-8 text-xs" href={it.link} target="_blank" rel="noreferrer noopener">Open in Search Console ↗</a>
-						{:else}<a class="btn !h-8 text-xs" href="https://search.google.com/search-console" target="_blank" rel="noreferrer noopener" title="Paste the URL into the inspection bar at the top">Open Search Console ↗</a>{/if}
-						<button class="btn !h-8 text-xs" type="button" onclick={() => copy(it.url)}>Copy URL</button>
-						<form method="POST" action="?/requested" use:enhance={run}><input type="hidden" name="url" value={it.url} /><button class="btn !h-8 text-xs" disabled={busy} title="After you pressed Request Indexing there">I requested it</button></form>
-						<form method="POST" action="?/dismiss" use:enhance={run}><input type="hidden" name="url" value={it.url} /><button class="btn !h-8 text-xs" disabled={busy} title="Hide it for 30 days">Skip</button></form>
+						{#if it.link}<a class="btn btn-sm btn-primary" href={it.link} target="_blank" rel="noreferrer noopener">Open in Search Console ↗</a>
+						{:else}<a class="btn btn-sm" href="https://search.google.com/search-console" target="_blank" rel="noreferrer noopener" title="Paste the URL into the inspection bar at the top">Open Search Console ↗</a>{/if}
+						<button class="btn btn-sm" type="button" onclick={() => copy(it.url)}>Copy URL</button>
+						<form method="POST" action="?/requested" use:enhance={run}><input type="hidden" name="url" value={it.url} /><button class="btn btn-sm" disabled={busy} title="After you pressed Request Indexing there">I requested it</button></form>
+						<form method="POST" action="?/dismiss" use:enhance={run}><input type="hidden" name="url" value={it.url} /><button class="btn btn-sm" disabled={busy} title="Hide it for 30 days">Skip</button></form>
 					</div>
 				</li>
 			{/each}

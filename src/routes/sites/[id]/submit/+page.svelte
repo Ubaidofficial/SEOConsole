@@ -50,9 +50,9 @@
 	<form method="POST" action="?/submit" use:enhance={run}>
 		<textarea class="input h-28 w-full" name="urls" bind:value={urls} aria-label="Full URLs of this site" placeholder="Full URLs of this site, one per line (up to {data.maxUrls})"></textarea>
 		<div class="mt-2 flex flex-wrap gap-2">
-			<button class="btn !h-8 text-xs" formaction="?/preset" name="preset" value="new" formnovalidate disabled={busy || !data.presets.new} title="Sitemap URLs whose date is in the last 7 days">New pages ({data.presets.new})</button>
-			<button class="btn !h-8 text-xs" formaction="?/preset" name="preset" value="never_shown" formnovalidate disabled={busy || !data.presets.never_shown} title="In a sitemap but never shown in search in 90 days: where indexing problems hide">Never shown ({data.presets.never_shown})</button>
-			<button class="btn !h-8 text-xs" formaction="?/preset" name="preset" value="removed" formnovalidate disabled={busy || !data.presets.removed} title="Pages the indexing monitor saw return 404">Removed pages ({data.presets.removed})</button>
+			<button class="btn btn-sm" formaction="?/preset" name="preset" value="new" formnovalidate disabled={busy || !data.presets.new} title="Sitemap URLs whose date is in the last 7 days">New pages ({data.presets.new})</button>
+			<button class="btn btn-sm" formaction="?/preset" name="preset" value="never_shown" formnovalidate disabled={busy || !data.presets.never_shown} title="In a sitemap but never shown in search in 90 days: where indexing problems hide">Never shown ({data.presets.never_shown})</button>
+			<button class="btn btn-sm" formaction="?/preset" name="preset" value="removed" formnovalidate disabled={busy || !data.presets.removed} title="Pages the indexing monitor saw return 404">Removed pages ({data.presets.removed})</button>
 		</div>
 
 		<h2 class="mt-4 mb-2 font-medium">2 · Where to send them</h2>
@@ -108,7 +108,7 @@
 <section class="card mb-4 p-4">
 	<div class="mb-2 flex items-center gap-3">
 		<h2 class="font-medium">Limits and queue</h2>
-		{#if q.bing.linked}<form method="POST" action="?/refreshQuota" use:enhance={run} class="ml-auto"><button class="btn !h-8 text-xs" disabled={busy} title="Ask Bing now how many URLs it still takes (read-only)">Refresh Bing's figure</button></form>{/if}
+		{#if q.bing.linked}<form method="POST" action="?/refreshQuota" use:enhance={run} class="ml-auto"><button class="btn btn-sm" disabled={busy} title="Ask Bing now how many URLs it still takes (read-only)">Refresh Bing's figure</button></form>{/if}
 	</div>
 	<div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
 		<div><div class="text-xs text-muted-foreground">IndexNow, last 24 h</div><div class="tnum font-medium">{q.indexnow.used24h.toLocaleString('en-US')} of {q.indexnow.cap.toLocaleString('en-US')}</div>
@@ -127,7 +127,7 @@
 		{#if q.queue.total}
 			<span><b>{q.queue.total.toLocaleString('en-US')}</b> URL{q.queue.total === 1 ? '' : 's'} waiting to be sent{#each Object.entries(q.queue.byChannel) as [ch, n]}{#if n} · {LABEL[ch]} {n}{/if}{/each}.
 				{#if q.queue.releasableNow}{q.queue.releasableNow} may go at the next run (every 15 minutes).{:else if q.queue.nextReleaseAt}Next release {until(q.queue.nextReleaseAt)}.{/if}</span>
-			<form method="POST" action="?/clearQueue" use:enhance={run} class="ml-auto"><button class="btn !h-8 text-xs" disabled={busy || data.readOnly}>Clear the queue</button></form>
+			<form method="POST" action="?/clearQueue" use:enhance={run} class="ml-auto"><button class="btn btn-sm" disabled={busy || data.readOnly}>Clear the queue</button></form>
 		{:else}<span class="text-muted-foreground">Nothing is waiting in the queue.</span>{/if}
 	</div>
 	<Explainer lead="Over-limit or spread-out URLs wait here and go automatically.">
@@ -156,8 +156,8 @@
 <section class="card p-4">
 	<div class="mb-2 flex items-center gap-3">
 		<h2 class="font-medium">What happened to submitted URLs</h2>
-		<a class="btn !h-8 text-xs ml-auto" href="submit/export" download title="The table below as a spreadsheet">Download CSV</a>
-		<form method="POST" action="?/check" use:enhance={run}><button class="btn !h-8 text-xs" disabled={busy || data.readOnly} title="Re-inspect the watch list now (spends URL Inspection quota)">Check now</button></form>
+		<a class="btn btn-sm ml-auto" href="submit/export" download title="The table below as a spreadsheet">Download CSV</a>
+		<form method="POST" action="?/check" use:enhance={run}><button class="btn btn-sm" disabled={busy || data.readOnly} title="Re-inspect the watch list now (spends URL Inspection quota)">Check now</button></form>
 	</div>
 	{#if stillNot}<div class="mb-2 text-sm text-warn"><p><b>{stillNot}</b> URL{stillNot === 1 ? '' : 's'} still not indexed after {data.recheckDays[data.recheckDays.length - 1]} days. The coverage text below says why.</p>
 		<details class="mt-1 text-xs text-muted-foreground"><summary class="cursor-pointer select-none">What do these mean?</summary><p class="mt-1 max-w-2xl">“Crawled – currently not indexed” usually means Google saw the page and did not think it worth keeping yet: improve the content and link to it from other pages. “Discovered – currently not indexed” means it knows the address but has not crawled it.</p></details></div>{/if}

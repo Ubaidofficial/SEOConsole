@@ -30,7 +30,7 @@
 		{#if data.serp && data.serp.keywords.length}
 			<form method="POST" action="?/serp" use:enhance={run('serp')} class="mt-2 flex flex-wrap items-center gap-2 text-xs">
 				<label class="flex items-center gap-1.5">Searches <input class="input w-20" type="number" name="n" min="1" max={Math.min(data.serpMax, data.serp.available)} bind:value={n} /></label>
-				<button class="btn btn-primary !h-8 text-xs" disabled={busy === 'serp'}>{busy === 'serp' ? 'Looking up…' : `Look up ${serpN} results pages, up to about ${serpN * data.serp.perKeyword} credits`}</button>
+				<button class="btn btn-sm btn-primary" disabled={busy === 'serp'}>{busy === 'serp' ? 'Looking up…' : `Look up ${serpN} results pages, up to about ${serpN * data.serp.perKeyword} credits`}</button>
 			</form>
 			<details class="mt-1 text-xs text-muted-foreground"><summary class="cursor-pointer">Which searches</summary><p class="pii mt-1">{data.serp.keywords.map((k) => k.keyword).join(' · ')}</p></details>
 		{:else}<p class="mt-2 text-xs text-muted-foreground">No search qualifies yet (top 15 with at least 50 impressions).</p>{/if}
@@ -49,7 +49,7 @@
 		<div class="flex flex-wrap items-center gap-2"><h2 class="font-medium">Who beats you, and what you are missing</h2>{#if s.gap}<span class="chip">checked {ago(s.gap.fetchedAt)}</span>{/if}</div>
 		<p class="mt-1 text-sm text-muted-foreground">Finds the sites that rank for your searches, skips big platforms, studies the three most visible, and lists keywords they rank for that you have no search for or trail on.</p>
 		{#if data.gap && data.gap.keywords.length}
-			<form method="POST" action="?/gap" use:enhance={run('gap')} class="mt-2"><button class="btn btn-primary !h-8 text-xs" disabled={busy === 'gap'}>{busy === 'gap' ? 'Comparing…' : `Compare on ${data.gap.keywords.length} searches (${data.gap.calls} OpenSEO calls, price not stated)`}</button></form>
+			<form method="POST" action="?/gap" use:enhance={run('gap')} class="mt-2"><button class="btn btn-sm btn-primary" disabled={busy === 'gap'}>{busy === 'gap' ? 'Comparing…' : `Compare on ${data.gap.keywords.length} searches (${data.gap.calls} OpenSEO calls, price not stated)`}</button></form>
 			<p class="mt-1 text-xs text-muted-foreground">{data.gap.note}</p>
 		{:else}<p class="mt-2 text-xs text-muted-foreground">No searches at positions 4 to 40 with enough impressions yet.</p>{/if}
 		{#if s.gap}
@@ -69,7 +69,7 @@
 		<div class="flex flex-wrap items-center gap-2"><h2 class="font-medium">Backlinks: what you have, and links to dead pages</h2>{#if s.backlinks}<span class="chip">checked {ago(s.backlinks.fetchedAt)}</span>{/if}</div>
 		<p class="mt-1 text-sm text-muted-foreground">Reads your link profile and lists links from other sites to pages of yours that no longer work, with the closest live page to redirect each to. Spam-scored links are never recommended.</p>
 		{#if data.backlinks}
-			<form method="POST" action="?/backlinks" use:enhance={run('backlinks')} class="mt-2"><button class="btn btn-primary !h-8 text-xs" disabled={busy === 'backlinks'}>{busy === 'backlinks' ? 'Reading…' : `Read ${data.backlinks.target}'s backlinks, about ${data.backlinks.credits} credits`}</button></form>
+			<form method="POST" action="?/backlinks" use:enhance={run('backlinks')} class="mt-2"><button class="btn btn-sm btn-primary" disabled={busy === 'backlinks'}>{busy === 'backlinks' ? 'Reading…' : `Read ${data.backlinks.target}'s backlinks, about ${data.backlinks.credits} credits`}</button></form>
 		{/if}
 		{#if s.backlinks}
 			<p class="pii mt-3 text-sm">{s.backlinks.profile.headline}</p>

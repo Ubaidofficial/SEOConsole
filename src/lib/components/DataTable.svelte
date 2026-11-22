@@ -179,8 +179,8 @@
 </div>
 {#if pages > 1}
 	<div class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-		<button class="btn !h-8 !px-2" disabled={page === 0} onclick={() => page--} aria-label="Previous page"><ChevronLeft class="size-4" /></button>
+		<button class="btn btn-sm !px-2" disabled={page === 0} onclick={() => page--} aria-label="Previous page"><ChevronLeft class="size-4" /></button>
 		<span class="tnum">Page {page + 1} of {pages} · {fmtInt(sorted.length)} rows</span>
-		<button class="btn !h-8 !px-2" disabled={page >= pages - 1} onclick={() => page++} aria-label="Next page"><ChevronRight class="size-4" /></button>
+		<button class="btn btn-sm !px-2" disabled={page >= pages - 1} onclick={() => page++} aria-label="Next page"><ChevronRight class="size-4" /></button>
 	</div>
 {/if}

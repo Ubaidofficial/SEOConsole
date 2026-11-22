@@ -50,7 +50,7 @@
 			<option value="all">All kinds</option>
 			{#each types as t}<option value={t}>{TYPE_LABEL[t]} ({count((a) => a.type === t)})</option>{/each}
 		</select>
-		{#if site !== 'all' || type !== 'all' || only !== 'all'}<button class="text-xs underline" onclick={() => ((site = 'all'), (type = 'all'), (only = 'all'))}>Clear filters</button>{/if}
+		{#if site !== 'all' || type !== 'all' || only !== 'all'}<button class="btn btn-ghost btn-xs" onclick={() => ((site = 'all'), (type = 'all'), (only = 'all'))}>Clear filters</button>{/if}
 	</div>
 	<p class="mb-3 text-sm"><b>{shown.length}</b> of <b>{rows.length}</b> shown {#if blocking && only !== 'blocking'}· <b class="text-bad">{blocking} blocking</b>{/if}</p>
 	{#if rows.length === 0}

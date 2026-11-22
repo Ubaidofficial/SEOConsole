@@ -73,7 +73,7 @@
 
 {#if data.openseo}
 	<form method="POST" action="?/oseoVolumes" use:enhance={() => { fetching = true; return async ({ update }) => { await update(); fetching = false; }; }} class="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-		<button class="btn !h-8 text-xs" disabled={fetching || !data.openseo.pending}>{fetching ? 'Asking OpenSEO…' : data.openseo.known ? 'Fetch volume for new searches' : 'Show search volume (OpenSEO)'}</button>
+		<button class="btn btn-sm" disabled={fetching || !data.openseo.pending}>{fetching ? 'Asking OpenSEO…' : data.openseo.known ? 'Fetch volume for new searches' : 'Show search volume (OpenSEO)'}</button>
 		<span>{data.openseo.known ? `${data.openseo.known.toLocaleString('en-US')} searches have a volume, fetched ${ago(data.openseo.fetchedAt ?? 0)}.` : 'Monthly searches and difficulty for your top searches, from your OpenSEO project.'} {data.openseo.pending ? `Next fetch: up to ${data.openseo.pending} searches, which uses OpenSEO credits.` : 'All current searches are covered.'}</span>
 	</form>
 	{#if form?.ok}<p class="mb-2 text-xs text-good">{form.ok}</p>{/if}{#if form?.error}<p class="mb-2 text-xs text-bad">{form.error}</p>{/if}
