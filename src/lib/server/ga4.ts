@@ -214,6 +214,88 @@ export async function dailyByDimension(accountId: number, property: string, dim:
 	throw new Error(`GA4 returned more than ${MAX_ROWS.toLocaleString('en-US')} ${dim} rows for ${startDate} to ${endDate}.`);
 }
 
+export interface Ga4PageViewDay { date: string; page: string; views: number }
+
+/**
+ * Page views by day and page path, every channel: GA4's "Views by page" over time, so any period can be summed. Paths that differ
+ * only by query string are merged. Paged like dailyByDimension; above `maxRows` the oldest days are dropped and `truncated` is set.
+ */
+export async function pageViewsDaily(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}, maxRows = 500_000): Promise<{ rows: Ga4PageViewDay[]; truncated: boolean }> {
+	const LIMIT = 100_000;
+	const merged = new Map<string, Ga4PageViewDay>();
+	let fetched = 0;
+	for (let offset = 0; ; offset += LIMIT) {
+		const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+			tok(accountId),
+			`${DATA}/${property}:runReport`,
+			{
+				method: 'POST',
+				body: JSON.stringify({
+					dateRanges: [{ startDate, endDate }],
+					dimensions: [{ name: 'date' }, { name: 'pagePath' }],
+					metrics: [{ name: 'screenPageViews' }],
+					// Newest days first, so a cut at the row limit loses the oldest days, not the ones people look at.
+					orderBys: [{ dimension: { dimensionName: 'date' }, desc: true }, { metric: { metricName: 'screenPageViews' }, desc: true }],
+					limit: LIMIT,
+					offset
+				})
+			},
+			http
+		);
+		const rows = r.rows ?? [];
+		for (const row of rows) {
+			const date = ymd(row.dimensionValues[0].value);
+			const page = landingPath(row.dimensionValues[1].value || '/');
+			const k = `${date} ${page}`;
+			const cur = merged.get(k) ?? { date, page, views: 0 };
+			cur.views += Number(row.metricValues[0].value);
+			merged.set(k, cur);
+		}
+		fetched += rows.length;
+		if (rows.length < LIMIT) return { rows: [...merged.values()], truncated: false };
+		if (fetched >= maxRows) return { rows: [...merged.values()], truncated: true };
+	}
+}
+
+/** The title GA4 recorded most often for each page path over a window (the "Page title" in GA4's pages report). */
+export async function pageTitles(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}): Promise<{ page: string; title: string }[]> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				dateRanges: [{ startDate, endDate }],
+				dimensions: [{ name: 'pagePath' }, { name: 'pageTitle' }],
+				metrics: [{ name: 'screenPageViews' }],
+				orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+				limit: 25_000
+			})
+		},
+		http
+	);
+	const best = new Map<string, string>();
+	// Rows come busiest first, so the first title seen for a path is the one GA4 recorded most.
+	for (const row of r.rows ?? []) {
+		const page = landingPath(row.dimensionValues[0].value || '/');
+		const title = (row.dimensionValues[1].value ?? '').trim();
+		if (title && title !== '(not set)' && !best.has(page)) best.set(page, title.slice(0, 300));
+	}
+	return [...best].map(([page, title]) => ({ page, title }));
+}
+
+/** Unique active and new users over one whole window, GA4's own "Active users" / "New users" (not a sum of days). */
+export async function usersTotal(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}): Promise<{ activeUsers: number; newUsers: number }> {
+	const r = await googleJson<{ rows?: { metricValues: { value: string }[] }[] }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{ method: 'POST', body: JSON.stringify({ dateRanges: [{ startDate, endDate }], metrics: [{ name: 'activeUsers' }, { name: 'newUsers' }] }) },
+		http
+	);
+	const m = r.rows?.[0]?.metricValues ?? [];
+	return { activeUsers: Number(m[0]?.value ?? 0), newUsers: Number(m[1]?.value ?? 0) };
+}
+
 export interface Ga4EventDay { date: string; event: string; keyEvents: number; eventCount: number }
 
 /**

@@ -619,6 +619,29 @@ CREATE TABLE IF NOT EXISTS bing_links (             -- Bing's inbound-link count
 	error TEXT,                         -- why the last read failed; the previous payload is kept
 	error_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS ga4_page_views (          -- GA4 page views by day and page path, every channel (GA4's "Views by page")
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	date TEXT NOT NULL,
+	page TEXT NOT NULL,                 -- page path, no query string
+	views INTEGER NOT NULL,
+	PRIMARY KEY (site_id, date, page)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS ga4_page_titles (         -- the title GA4 saw most for each page path over the last 28 days
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	page TEXT NOT NULL,
+	title TEXT NOT NULL,
+	PRIMARY KEY (site_id, page)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS ga4_users (               -- unique users over whole windows (GA4's Active users / New users), one row per window length
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	days INTEGER NOT NULL,              -- 1, 3, 7, 28, 90, 180 or 480
+	start_date TEXT NOT NULL,
+	end_date TEXT NOT NULL,
+	active_users INTEGER NOT NULL,
+	new_users INTEGER NOT NULL,
+	pulled_on TEXT NOT NULL,
+	PRIMARY KEY (site_id, days)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS annotation_auto (         -- change-log entries the app wrote itself; the key outlives a deleted entry so it never comes back
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	key TEXT NOT NULL,                  -- robots:<id> | gtm:<container>:<version> | sitemap-added:<day> | sitemap-removed:<day>
@@ -822,6 +845,8 @@ function migrate(db: Database.Database) {
 	// Build the Request tab's list by itself once a day (and tell the webhook). Off unless the owner switched it on for the site.
 	// Resubmit the site's sitemaps by itself when a sitemap read finds new or changed pages. Off unless the owner switched it on.
 	if (!cols('sites').includes('sitemap_auto')) db.exec('ALTER TABLE sites ADD COLUMN sitemap_auto INTEGER NOT NULL DEFAULT 0');
+	if (!cols('sites').includes('ga4_views_error')) db.exec('ALTER TABLE sites ADD COLUMN ga4_views_error TEXT');
+	if (!cols('sites').includes('ga4_views_truncated')) db.exec('ALTER TABLE sites ADD COLUMN ga4_views_truncated INTEGER NOT NULL DEFAULT 0');
 	if (!cols('sites').includes('changelog_auto')) db.exec('ALTER TABLE sites ADD COLUMN changelog_auto INTEGER NOT NULL DEFAULT 1');
 	if (!cols('sites').includes('bing_submit_auto')) db.exec('ALTER TABLE sites ADD COLUMN bing_submit_auto INTEGER NOT NULL DEFAULT 0');
 	if (!cols('sites').includes('request_auto')) db.exec('ALTER TABLE sites ADD COLUMN request_auto INTEGER NOT NULL DEFAULT 0');

@@ -62,7 +62,7 @@
 	{@render kpi('Google impressions', fmtInt(g.impressions), g.impressionsDelta, `CTR ${fmtPct(g.ctr)} · position ${fmtPos(g.position)}`)}
 	{#if b}{@render kpi('Bing clicks', fmtInt(b.clicks), b.clicksDelta, `Bing · ${range(b.window)}`, `bing?days=${data.days}`)}{:else}{@render kpi('Bing clicks', '–', undefined, data.dash.linked.bing ? 'Bing: not synced yet' : 'Bing: not linked')}{/if}
 	{#if a?.synced}
-		{@render kpi('Sessions (all channels)', fmtInt(a.sessions), a.sessionsDelta, `GA4 · ${range(a.window)}`, `analytics?days=${data.days}`)}
+		{@render kpi('Sessions (all channels)', fmtInt(a.sessions), a.sessionsDelta, a.users ? `${fmtInt(a.users.activeUsers)} users (${fmtInt(a.users.newUsers)} new) · GA4 · ${range(a.window)}` : `GA4 · ${range(a.window)}`, `analytics?days=${data.days}`)}
 		{@render kpi('Key events', fmtInt(a.keyEvents), a.keyEventsDelta, `GA4 · engaged ${fmtPct(a.engagementRate)}`)}
 	{:else}
 		{@render kpi('Sessions (all channels)', '–', undefined, a ? 'GA4: first sync running' : 'GA4: not linked')}

@@ -10,6 +10,7 @@ import { linksFor } from '$lib/server/links';
 import { openSeoProjectUrl } from '$lib/server/connect';
 import { queueFor } from '$lib/server/actions';
 import { authorityOf } from '$lib/server/authority';
+import { cardTraffic, ga4UsersFor } from '$lib/server/traffic';
 
 export const load: LayoutServerLoad = ({ params, url }) => {
 	const site = getSite(Number(params.id));
@@ -23,6 +24,10 @@ export const load: LayoutServerLoad = ({ params, url }) => {
 	const comparable = historyCoversPrevious(site, period.prevStart);
 	const solid = comparable && prev.impressions >= 100 && now.impressions >= 100;
 	const links = linksFor(site.id);
+	// GA4 (every channel) and Bing beside the Search Console totals, each over its own newest window, as on the dashboard cards.
+	const traffic = cardTraffic(site, { end: period.end, daily: [] }, days, { ga4: links.ga4, bing: links.bing });
+	const delta = (t: { value: number; prev: number; comparable: boolean } | null) => (t && t.comparable ? pctChangeMin(t.value, t.prev, 10) : null);
+	const users = links.ga4 ? ga4UsersFor(site.id, days) : null;
 	// The count on the Actions tab; it is cached, so this is a lookup after the first computation following a sync.
 	let actionBadge = { open: 0, blocking: 0 };
 	try {
@@ -66,7 +71,9 @@ export const load: LayoutServerLoad = ({ params, url }) => {
 			clicksDelta: comparable ? pctChangeMin(now.clicks, prev.clicks, 10) : null,
 			impressionsDelta: comparable ? pctChangeMin(now.impressions, prev.impressions, 100) : null,
 			ctrDelta: solid ? pctChangeMin(ctrOf(now), ctrOf(prev), 1e-9) : null,
-			positionDelta: comparable ? positionShift(now, prev) : null
+			positionDelta: comparable ? positionShift(now, prev) : null,
+			ga4: traffic.ga4 && { sessions: traffic.ga4.value, delta: delta(traffic.ga4), comparable: traffic.ga4.comparable, window: traffic.ga4.window, users: users?.activeUsers ?? null, newUsers: users?.newUsers ?? null },
+			bing: traffic.bing && { clicks: traffic.bing.value, delta: delta(traffic.bing), comparable: traffic.bing.comparable, window: traffic.bing.window }
 		}
 	};
 };

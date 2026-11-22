@@ -54,8 +54,13 @@
 		// on a phone the tab row scrolls sideways: bring the open tab into view
 		queueMicrotask(() => document.querySelector('nav[aria-label="Site sections"] [aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
 	});
-	const kpis = $derived([
-		{ l: 'Clicks', v: fmtInt(data.kpis.clicks), d: data.kpis.clicksDelta, inv: false },
+	type Kpi = { l: string; v: string; d: number | null; inv: boolean; pos?: boolean; color?: string; sub?: string; title?: string; why?: string };
+	const kpis = $derived<Kpi[]>([
+		{ l: data.kpis.ga4 || data.kpis.bing ? 'Google clicks' : 'Clicks', v: fmtInt(data.kpis.clicks), d: data.kpis.clicksDelta, inv: false, color: 'var(--src-gsc)' },
+		...(data.kpis.ga4
+			? [{ l: 'Sessions · GA4', v: fmtInt(data.kpis.ga4.sessions), d: data.kpis.ga4.delta, inv: false, color: 'var(--src-ga4)', sub: data.kpis.ga4.users != null ? `${fmtInt(data.kpis.ga4.users)} users · ${fmtInt(data.kpis.ga4.newUsers ?? 0)} new` : undefined, title: `Every GA4 session, any channel, ${data.kpis.ga4.window.start} to ${data.kpis.ga4.window.end}. Users are GA4's unique active users over the period (shown for the preset periods). Organic Search sessions already include most Google clicks, so do not add the two.`, why: data.kpis.ga4.comparable ? 'Fewer than 10 sessions in the previous period' : 'Stored GA4 history does not reach the previous period' }]
+			: []),
+		...(data.kpis.bing ? [{ l: 'Bing clicks', v: fmtInt(data.kpis.bing.clicks), d: data.kpis.bing.delta, inv: false, color: 'var(--src-bing)', title: `Bing clicks, ${data.kpis.bing.window.start} to ${data.kpis.bing.window.end}`, why: data.kpis.bing.comparable ? 'Fewer than 10 clicks in the previous period' : 'Stored Bing history does not reach the previous period' }] : []),
 		{ l: 'Impressions', v: fmtInt(data.kpis.impressions), d: data.kpis.impressionsDelta, inv: false },
 		{ l: 'CTR', v: fmtPct(data.kpis.ctr), d: data.kpis.ctrDelta, inv: false },
 		{ l: 'Avg position', v: fmtPos(data.kpis.position), d: data.kpis.positionDelta, inv: true, pos: true }
@@ -86,12 +91,13 @@
 
 <!-- The totals live on Overview only: every other tab is a table that already has these columns. -->
 {#if isActive('')}
-<div class="stagger mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+<div class="stagger mb-3 grid grid-cols-2 gap-3 {kpis.length === 6 ? 'md:grid-cols-3 xl:grid-cols-6' : kpis.length === 5 ? 'md:grid-cols-3 xl:grid-cols-5' : 'md:grid-cols-4'}">
 	{#each kpis as k}
-		<div class="card px-3 py-2">
-			<div class="text-xs text-muted-foreground">{k.l}</div>
+		<div class="card px-3 py-2" title={k.title}>
+			<div class="flex items-center gap-1.5 text-xs text-muted-foreground">{#if k.color}<span class="size-2 shrink-0 rounded-full" style="background:{k.color}" aria-hidden="true"></span>{/if}{k.l}</div>
 			<div class="tnum text-xl font-semibold">{k.v}</div>
-			<Delta value={k.d} invert={k.inv} mode={k.pos ? 'pos' : 'pct'} why={data.kpis.comparable ? 'Too little data for a reliable comparison' : 'Previous period still downloading'} />{#if k.d != null && k.pos}<span class="ml-1 text-xs text-muted-foreground">places</span>{/if}
+			<Delta value={k.d} invert={k.inv} mode={k.pos ? 'pos' : 'pct'} why={k.why ?? (data.kpis.comparable ? 'Too little data for a reliable comparison' : 'Previous period still downloading')} />{#if k.d != null && k.pos}<span class="ml-1 text-xs text-muted-foreground">places</span>{/if}
+			{#if k.sub}<div class="tnum text-[11px] text-muted-foreground">{k.sub}</div>{/if}
 		</div>
 	{/each}
 </div>

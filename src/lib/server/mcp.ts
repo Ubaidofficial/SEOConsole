@@ -289,7 +289,7 @@ const TOOLS: Tool[] = [
 					ga4: { linked: r.ga4.linked, hasData: r.ga4.hasData, comparable: r.ga4.comparable },
 					ai: { linked: r.ai.linked, status: r.ai.status, hasData: r.ai.hasData, comparable: r.ai.comparable },
 					clarity: { linked: r.clarity.linked, hasData: r.clarity.hasData, snapshotDay: r.clarity.day, covers: 'last 24 hours only' },
-					allTraffic: { linked: r.all.linked, hasData: r.all.hasData, comparable: r.all.comparable, window: r.all.window, covers: 'GA4 sessions from every channel; pulled for 7, 28, 90, 180 and 480-day periods only' }
+					allTraffic: { linked: r.all.linked, hasData: r.all.hasData, comparable: r.all.comparable, window: r.all.window, covers: 'GA4 sessions from every channel; pulled for 7, 28, 90, 180 and 480-day periods only', views: r.views }
 				},
 				rows: rows.map((x) => ({
 					path: x.path,
@@ -297,7 +297,7 @@ const TOOLS: Tool[] = [
 					bing: x.bClicks == null ? null : { clicks: x.bClicks, clicksChange: pct(x.bClicksD), impressions: x.bImpr, impressionsChange: pct(x.bImprD), position: x.bPos == null ? null : r2(x.bPos) },
 					ga4: x.aSessions == null ? null : { sessions: x.aSessions, sessionsChange: pct(x.aSessionsD), engagedShare: x.aEngaged == null ? null : r2(x.aEngaged * 100) + '%', keyEvents: x.aKeyEvents, keyEventsChange: pct(x.aKeyEventsD) },
 					ai: x.aiSessions == null ? null : { sessions: x.aiSessions, sessionsChange: pct(x.aiSessionsD), engagedShare: x.aiEngaged == null ? null : r2(x.aiEngaged * 100) + '%', keyEvents: x.aiKeyEvents, topAssistant: x.aiTop, byAssistant: x.aiBy },
-					allTraffic: x.tSessions == null ? null : { sessions: x.tSessions, sessionsChange: pct(x.tSessionsD), topChannel: x.tTop },
+					allTraffic: x.tSessions == null && x.tViews == null ? null : { views: x.tViews, viewsChange: pct(x.tViewsD), title: x.title, sessions: x.tSessions, sessionsChange: pct(x.tSessionsD), topChannel: x.tTop },
 					clarity: x.cSessions == null && x.cRage == null && x.cDead == null ? null : { sessions: x.cSessions, sessionsWithRageClicks: x.cRage, sessionsWithDeadClicks: x.cDead }
 				}))
 			};

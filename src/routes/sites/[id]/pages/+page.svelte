@@ -22,9 +22,16 @@
 	const C = { group: 'Clarity · last 24 h', groupColor: '#7c3aed' };
 	const cols = $derived([
 		{ key: 'path', label: 'Page', type: 'link' as const, href: (r: { url: string }) => r.url, display: (r: { path: string }) => r.path },
+		// Views work for any period (stored by day); sessions and top channel only for the preset lengths GA4 landing pages are pulled for.
+		...(data.sources.views.hasData
+			? [
+					{ key: 'tViews', label: 'Views', type: 'int' as const, bar: true, deltaKey: 'tViewsD', title: 'GA4 page views: every view of this page from any channel, not only the visits that started on it, with the change against the previous period', ...T },
+					{ key: 'title', label: 'Page title', type: 'text' as const, title: 'The title GA4 recorded most often for this page over the last 28 days', ...T }
+				]
+			: []),
 		...(data.sources.all.hasData
 			? [
-					{ key: 'tSessions', label: 'Sessions', type: 'int' as const, bar: true, deltaKey: 'tSessionsD', title: 'Every GA4 session that landed on this page, from any channel (search, direct, social, referral, email, AI assistants…), with the change against the previous window', ...T },
+					{ key: 'tSessions', label: 'Sessions', type: 'int' as const, bar: !data.sources.views.hasData, deltaKey: 'tSessionsD', title: 'Every GA4 session that landed on this page, from any channel (search, direct, social, referral, email, AI assistants…), with the change against the previous window', ...T },
 					{ key: 'tTop', label: 'Top channel', type: 'text' as const, title: 'The GA4 channel group that sent the most sessions to this page', ...T }
 				]
 			: []),
@@ -64,10 +71,13 @@
 	const notes = $derived(
 		[
 			!data.sources.google.comparable ? 'Google: the previous period is still downloading, so no changes are shown.' : '',
-			data.sources.bing.linked && !data.sources.bing.hasData ? 'Bing is linked: its pages appear after the next Bing sync.' : data.sources.bing.hasData && !data.sources.bing.comparable ? 'Bing: stored history does not reach the previous period, so no Bing changes are shown.' : '',
-			data.sources.ga4.linked && !data.sources.ga4.hasData ? 'GA4 is linked: sessions per page appear after the next GA4 sync.' : data.sources.ga4.hasData && !data.sources.ga4.comparable ? 'GA4: the previous period is pulled with the next daily sync, so changes appear then.' : '',
-			data.sources.ai.status === 'failed' ? 'AI assistants: the last pull of the AI report from GA4 failed and will be retried, so no AI columns are shown (zeros would not be real).' : data.sources.ai.status === 'ok' && !data.sources.ai.hasData ? 'AI assistants: GA4 reported no sessions from ChatGPT, Perplexity, Gemini, Claude or Copilot in this period.' : data.sources.ai.hasData && !data.sources.ai.comparable ? 'AI assistants: no previous-period AI sessions are stored (the previous window arrives with the next daily GA4 pull, or it had none), so no AI changes are shown.' : '',
-			data.sources.all.hasData && data.sources.all.window ? `GA4 all traffic covers ${data.sources.all.window.start} to ${data.sources.all.window.end} (GA4's own newest days)${data.sources.all.comparable ? '' : '; the previous window is not stored yet, so no changes are shown'}.` : data.sources.all.linked && !data.allPeriod ? `GA4 all traffic per page is pulled for ${data.periods.join(', ')}-day periods only; pick one of those to see it.` : '',
+			data.sources.bing.linked && !data.sources.bing.hasData ? (data.sources.bing.synced ? 'Bing: no page data for this period.' : 'Bing is linked: its pages appear after the first Bing sync.') : data.sources.bing.hasData && !data.sources.bing.comparable ? 'Bing: stored history does not reach the previous period, so no Bing changes are shown.' : '',
+			// Per-page GA4 sessions exist only for the preset lengths; another length is "not pulled", not "none" (the note below says so).
+			data.sources.ga4.linked && !data.sources.ga4.hasData && !data.allPeriod ? '' : data.sources.ga4.linked && !data.sources.ga4.hasData ? (data.sources.ga4.synced ? 'GA4 Google organic: no landing sessions from Google organic search in this period.' : 'GA4 is linked: sessions per page appear after the first GA4 sync.') : data.sources.ga4.hasData && !data.sources.ga4.comparable ? 'GA4: the previous period is pulled with the next daily sync, so changes appear then.' : '',
+			// AI-assistant pages are pulled with the same preset windows, so another length is "not pulled", not "no AI sessions".
+			!data.allPeriod ? '' : data.sources.ai.status === 'failed' ? 'AI assistants: the last pull of the AI report from GA4 failed and will be retried, so no AI columns are shown (zeros would not be real).' : data.sources.ai.status === 'ok' && !data.sources.ai.hasData ? 'AI assistants: GA4 reported no sessions from ChatGPT, Perplexity, Gemini, Claude or Copilot in this period.' : data.sources.ai.hasData && !data.sources.ai.comparable ? 'AI assistants: no previous-period AI sessions are stored (the previous window arrives with the next daily GA4 pull, or it had none), so no AI changes are shown.' : '',
+			data.sources.views.hasData && data.sources.views.window ? `GA4 views cover ${data.sources.views.window.start} to ${data.sources.views.window.end} (GA4's newest complete days)${data.sources.views.comparable ? '' : '; the previous period is not stored yet, so no view changes are shown'}${data.sources.views.truncated ? '. The first download hit GA4\'s row limit, so the oldest days are missing' : ''}.` : '',
+			data.sources.all.hasData && data.sources.all.window ? `GA4 all traffic covers ${data.sources.all.window.start} to ${data.sources.all.window.end} (GA4's own newest days)${data.sources.all.comparable ? '' : '; the previous window is not stored yet, so no changes are shown'}.` : data.sources.all.linked && !data.allPeriod ? `GA4 sessions per page (all traffic, Google organic and AI assistants) are pulled for ${data.periods.join(', ')}-day periods only; pick one of those to see them. Views work for any period.` : '',
 			data.sources.clarity.hasData ? `Clarity covers only the last 24 hours (snapshot of ${data.sources.clarity.day}), not the selected period.` : ''
 		].filter(Boolean)
 	);
@@ -75,11 +85,11 @@
 
 <div class="mb-3 flex"><a class="btn ml-auto" href="/sites/{page.params.id}/export?dim=page&days={page.url.searchParams.get('days') ?? 28}">Export CSV</a></div>
 <Explainer lead="Every source side by side, joined on the page. Arrows show the change against the previous period; a dash means no data.">
-	<p>Every source side by side, joined on the page's path (so www, http and https variants count as one page). Arrows show the change against the previous period; a dash means that source has nothing for the page. The first group, GA4 all traffic, counts every GA4 session that landed on the page from any channel, so it is the closest thing here to total visits. The second GA4 group counts Google-organic sessions only: sessions and clicks are different measurements, so expect them close, not equal. The AI group counts GA4 sessions whose referrer is an AI assistant; an assistant that sends no referrer shows up as Direct and is not counted, so treat it as a floor. It does not include citations or bot crawls.</p>
+	<p>Every source side by side, joined on the page's path (so www, http and https variants count as one page). Arrows show the change against the previous period; a dash means that source has nothing for the page. The first group, GA4 all traffic, shows page views (every view of the page from any channel, for any period) with the page's title in GA4, and, for the 7, 28, 90, 180 and 480-day periods, the sessions that landed on the page and the channel that sent most of them. The second GA4 group counts Google-organic sessions only: sessions and clicks are different measurements, so expect them close, not equal. The AI group counts GA4 sessions whose referrer is an AI assistant; an assistant that sends no referrer shows up as Direct and is not counted, so treat it as a floor. It does not include citations or bot crawls.</p>
 </Explainer>
 {#each notes as n}<p class="mb-1 text-xs text-muted-foreground">{n}</p>{/each}
 <div class="mt-2"></div>
-<DataTable rows={data.rows} {cols} sortKey="gClicks" onRowClick={toggle} empty="No page data yet." />
+<DataTable rows={data.rows} {cols} sortKey={data.sources.views.hasData ? 'tViews' : 'gClicks'} onRowClick={toggle} empty="No page data yet." />
 {#if open}
 	<div class="card mt-3 p-4">
 		<div class="pii mb-2 truncate font-medium">{open}</div>
