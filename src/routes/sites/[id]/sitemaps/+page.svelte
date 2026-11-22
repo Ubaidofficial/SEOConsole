@@ -20,7 +20,7 @@
 	<div class="mb-4 rounded-xl border border-[color:var(--warn)]/40 bg-card p-4 text-sm shadow-xs">
 		<p class="mb-2"><b>Search Console has no sitemap for this site, but {data.found.feeds.length === 1 ? 'one was' : `${data.found.feeds.length} were`} found {data.found.from === 'robots' ? 'in robots.txt' : 'at a usual address'}.</b> The daily read already uses {data.found.feeds.length === 1 ? 'it' : 'them'} for sitemap coverage; submitting tells Google about {data.found.feeds.length === 1 ? 'it' : 'them'} too. (With <i>Resubmit sitemaps when pages change</i> on, this happens on its own.)</p>
 		{#each data.found.feeds as f}
-			<form method="POST" action="?/submit" use:enhance class="flex flex-wrap items-center gap-2 py-1"><input type="hidden" name="feed" value={f} /><a class="pii truncate hover:underline" href={f} target="_blank" rel="noreferrer noopener">{f}</a><button class="btn btn-primary !h-8 text-xs"><Send class="size-3.5" />Submit</button></form>
+			<form method="POST" action="?/submit" use:enhance class="flex flex-wrap items-center gap-2 py-1"><input type="hidden" name="feed" value={f} /><a class="pii truncate hover:underline" href={f} target="_blank" rel="noreferrer noopener">{f}</a><button class="btn btn-sm btn-primary"><Send class="size-3.5" />Submit</button></form>
 		{/each}
 	</div>
 {:else if !data.sitemaps.length && data.found && !data.found.feeds.length}
@@ -80,7 +80,7 @@
 			<span class="chip {bad ? 'border-[color:var(--bad)] text-bad' : 'text-good'}">{bad ? 'needs fixing' : 'nothing blocked'}</span>
 		{/if}
 		<form method="POST" action="?/robotsCheck" use:enhance={() => { robotsBusy = true; return async ({ update }) => { await update(); robotsBusy = false; }; }} class="ml-auto">
-			<button class="btn !h-8 text-xs" disabled={robotsBusy}>{#if robotsBusy}<LoaderCircle class="size-4 animate-spin" />Reading…{:else}Check now{/if}</button>
+			<button class="btn btn-sm" disabled={robotsBusy}>{#if robotsBusy}<LoaderCircle class="size-4 animate-spin" />Reading…{:else}Check now{/if}</button>
 		</form>
 	</div>
 	<Explainer lead="Read once a day; pages that earn clicks are tested against the rules Googlebot obeys.">
@@ -145,7 +145,7 @@
 	{/if}
 	<div class="mt-3 border-t pt-3" style="border-color:var(--border)">
 		<form method="POST" action="?/lastmodCompare" use:enhance class="flex flex-wrap items-center gap-3">
-			<button class="btn !h-8 text-xs" disabled={!r.synced || r.withDate === 0} title="Fetches up to {data.lastmod.sample} of your pages and reads the Last-Modified header each sends">Compare with the pages' own dates</button>
+			<button class="btn btn-sm" disabled={!r.synced || r.withDate === 0} title="Fetches up to {data.lastmod.sample} of your pages and reads the Last-Modified header each sends">Compare with the pages' own dates</button>
 			<span class="text-xs text-muted-foreground">Fetches up to {data.lastmod.sample} pages from your site (only your own host). Many sites send no such header; then it says it cannot tell.</span>
 		</form>
 		{#if data.lastmod.live}

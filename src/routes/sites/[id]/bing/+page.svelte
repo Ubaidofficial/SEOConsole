@@ -37,7 +37,7 @@
 		<div class="mb-2 flex flex-wrap items-center gap-2">
 			<h2 class="font-medium">Inbound links Bing knows about</h2>
 			<form method="POST" action="?/refreshLinks" class="ml-auto" use:enhance={() => { busy = true; return async ({ update }) => { await update(); busy = false; }; }}>
-				<button class="btn !h-8 text-xs" disabled={busy || data.readOnly}>{busy ? 'Fetching…' : 'Refresh now'}</button>
+				<button class="btn btn-sm" disabled={busy || data.readOnly}>{busy ? 'Fetching…' : 'Refresh now'}</button>
 			</form>
 		</div>
 		{#if form?.error}<p class="mb-2 text-sm text-red-600" role="alert">{form.error}</p>{/if}

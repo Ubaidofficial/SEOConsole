@@ -93,7 +93,7 @@
 									</td>
 									<td class="td pii align-top text-xs">{s.query}<div class="text-[11px] text-muted-foreground">position {s.position.toFixed(1)} · ≈ {fmtInt(Math.round(s.prize))} clicks</div></td>
 									<td class="td align-top text-right">
-										<form method="POST" action="?/done" use:enhance><input type="hidden" name="key" value={s.key} /><button class="btn !h-7 !px-2.5 text-xs" title="Hide it: the link is in place (the next crawl will see it too)">Done</button></form>
+										<form method="POST" action="?/done" use:enhance><input type="hidden" name="key" value={s.key} /><button class="btn btn-xs !px-2.5" title="Hide it: the link is in place (the next crawl will see it too)">Done</button></form>
 									</td>
 								</tr>
 							{/each}

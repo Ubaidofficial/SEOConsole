@@ -51,7 +51,7 @@
 	<form method="GET" class="mt-4 text-xs">
 		<label class="mb-1 block font-medium" for="kw">Score a list of candidate keywords against what already wins (one per line)</label>
 		<textarea id="kw" name="kw" rows="4" class="input w-full max-w-xl" placeholder="elon musk book recommendations&#10;best fiction books">{n.kw}</textarea>
-		<div class="mt-1"><button class="btn !h-8 text-xs">Score them</button></div>
+		<div class="mt-1"><button class="btn btn-sm">Score them</button></div>
 	</form>
 	{#if n.candidates.length}
 		<table class="mt-3 w-full text-sm"><thead><tr><th class="th">Keyword</th><th class="th">Fit</th><th class="th text-right">Score</th><th class="th">Note</th></tr></thead><tbody>
@@ -63,7 +63,7 @@
 <section class="card mb-4 p-4" id="links">
 	<div class="flex flex-wrap items-center gap-2">
 		<h2 class="font-medium">Links: broken or detoured</h2>
-		<form method="POST" action="?/verifyLinks" use:enhance class="ml-auto"><button class="btn !h-8 text-xs" disabled={!l.uncheckedTotal} title="Fetches up to {data.verifyMax} link targets from your own site">Check {Math.min(l.uncheckedTotal, data.verifyMax)} unchecked link targets</button></form>
+		<form method="POST" action="?/verifyLinks" use:enhance class="ml-auto"><button class="btn btn-sm" disabled={!l.uncheckedTotal} title="Fetches up to {data.verifyMax} link targets from your own site">Check {Math.min(l.uncheckedTotal, data.verifyMax)} unchecked link targets</button></form>
 	</div>
 	<p class="pii mt-1 text-sm">{l.headline}</p>
 	{#if !l.pagesCrawled}<p class="mt-1 text-xs text-muted-foreground">The crawl is on the <a class="underline" href="links">Internal links</a> tab.</p>{/if}

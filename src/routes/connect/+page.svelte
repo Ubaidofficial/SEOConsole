@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Explainer from '$lib/components/Explainer.svelte';
+	import { Check, Pencil, Plus } from '@lucide/svelte';
 	import SiteSetup from '$lib/components/SiteSetup.svelte';
 	import { privacy } from '$lib/privacy.svelte';
 	import { enhance } from '$app/forms';
@@ -72,11 +73,11 @@
 				<div class="flex flex-wrap items-center gap-2">
 					<form method="POST" action="?/automationApply" use:enhance={submit('apply-' + w.key)}>
 						<input type="hidden" name="key" value={w.key} /><input type="hidden" name="on" value="1" />
-						<button class="btn !h-8 text-xs" disabled={!w.available || w.on === data.automation.total || busy === 'apply-' + w.key} title={w.available ? 'Switch it on for every site shown on the dashboard' : 'Needs write access to Search Console'}>Turn on for all</button>
+						<button class="btn btn-sm" disabled={!w.available || w.on === data.automation.total || busy === 'apply-' + w.key} title={w.available ? 'Switch it on for every site shown on the dashboard' : 'Needs write access to Search Console'}>Turn on for all</button>
 					</form>
 					<form method="POST" action="?/automationApply" use:enhance={submit('apply-off-' + w.key)}>
 						<input type="hidden" name="key" value={w.key} /><input type="hidden" name="on" value="0" />
-						<button class="btn !h-8 text-xs" disabled={w.on === 0 || busy === 'apply-off-' + w.key}>Turn off for all</button>
+						<button class="btn btn-sm" disabled={w.on === 0 || busy === 'apply-off-' + w.key}>Turn off for all</button>
 					</form>
 					<form method="POST" action="?/automationDefault" use:enhance={submit('def-' + w.key)}>
 						<input type="hidden" name="key" value={w.key} /><input type="hidden" name="on" value={w.newSites ? '0' : '1'} />
@@ -90,7 +91,9 @@
 
 <!-- Matrix: status at a glance; the controls only show while editing -->
 <section class="mb-6">
-	<div class="mb-2 flex items-center gap-2"><h2 class="font-medium">Connections by site</h2><button type="button" class="btn !h-7 ml-auto text-xs" onclick={() => (editing = !editing)}>{editing ? 'Done editing' : 'Edit links'}</button></div>
+	<div class="mb-2 flex flex-wrap items-center gap-2"><h2 class="font-medium">Connections by site</h2>
+		<span class="text-xs text-muted-foreground">{editing ? 'Unlink (✕) or refresh a source, then press Done.' : 'Press + Link in an empty cell to connect a source by hand; Edit links to unlink or refresh.'}</span>
+		{#if !data.readOnly}<button type="button" class="btn btn-sm ml-auto {editing ? 'btn-primary' : ''}" aria-pressed={editing} onclick={() => (editing = !editing)}>{#if editing}<Check class="size-3.5" />Done editing{:else}<Pencil class="size-3.5" />Edit links{/if}</button>{/if}</div>
 	<div class="card overflow-x-auto">
 		<table class="w-full">
 			<thead><tr><th class="th">Site</th><th class="th"><img src="/logos/search-console.svg" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />Google</th><th class="th"><img src="/logos/bing.svg" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />Bing</th><th class="th"><img src="/logos/ga4.svg" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />GA4</th><th class="th"><img src="/logos/tag-manager.svg" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />GTM</th><th class="th"><img src="/logos/clarity.png" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />Clarity</th><th class="th">OpenSEO</th></tr></thead>
@@ -110,17 +113,22 @@
 										{#if editing}<form method="POST" action="?/unlink" use:enhance><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} /><button class="text-muted-foreground hover:text-[color:var(--bad)]" title="Unlink" aria-label="Unlink {k}">✕</button></form>{/if}
 									</div>
 									<div class="text-[11px] text-muted-foreground">{k === 'openseo' ? 'linked by domain' : l.status === 'running' || l.status === 'queued' ? '⟳ ' + l.status : l.status === 'error' ? l.message : 'synced ' + ago(l.lastSync)}
-										{#if editing && k !== 'openseo'}<form method="POST" action="?/resync" use:enhance class="inline"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} /> <button class="underline">refresh</button></form>{/if}</div>
+										{#if editing && k !== 'openseo'}<form method="POST" action="?/resync" use:enhance class="inline"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} /> <button class="btn btn-ghost btn-xs !h-6 align-middle">refresh</button></form>{/if}</div>
 								{:else if (k === 'ga4' || k === 'gtm') && r.candidates[k].length && !data.readOnly}
 									<!-- Several matched equally well: a choice, shown without "Edit links" because it is waiting on a decision. -->
 									<form method="POST" action="?/pick" use:enhance class="flex flex-col gap-1"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} />
 										<span class="text-[11px] text-warn">{r.candidates[k].length} matches, pick one</span>
-										<span class="flex gap-1"><select class="input pii w-40 !py-0.5 text-xs" name="externalId" aria-label="Choose the {k === 'ga4' ? 'GA4 property' : 'Tag Manager container'} for {r.name}">{#each r.candidates[k] as c}<option value={c.id}>{c.label}</option>{/each}</select><button class="btn !py-0.5">Link</button></span></form>
-								{:else if editing && (k === 'bing' || k === 'ga4' || k === 'gtm')}
-									<details><summary class="cursor-pointer text-muted-foreground">link…</summary>
-										<form method="POST" action="?/manual" use:enhance class="mt-1 flex gap-1"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} />
-											<input class="input w-40 !py-0.5 text-xs" name="externalId" aria-label={k === 'bing' ? 'Bing site address' : k === 'gtm' ? 'Tag Manager container ID' : 'GA4 property'} placeholder={k === 'bing' ? 'https://www.site.com/' : k === 'gtm' ? 'GTM-ABC1234' : 'properties/123456'} /><button class="btn !py-0.5">Link</button></form></details>
-								{:else if r.skipped.includes(k)}<span class="text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone. Link it by hand (Edit links) to undo.">– unlinked</span>
+										<span class="flex gap-1"><select class="input pii w-40 !py-0.5 text-xs" name="externalId" aria-label="Choose the {k === 'ga4' ? 'GA4 property' : 'Tag Manager container'} for {r.name}">{#each r.candidates[k] as c}<option value={c.id}>{c.label}</option>{/each}</select><button class="btn btn-xs">Link</button></span></form>
+								{:else if !data.readOnly && (k === 'bing' || k === 'ga4' || k === 'gtm')}
+									<!-- Always offered in an empty cell (no edit mode needed): linking by hand is the usual fix when automatic matching cannot. -->
+									<details class="group/link">
+										<summary class="btn btn-xs inline-flex cursor-pointer list-none gap-1 [&::-webkit-details-marker]:hidden"><Plus class="size-3.5" />Link {k === 'ga4' ? 'GA4' : k === 'gtm' ? 'container' : 'Bing'}</summary>
+										<form method="POST" action="?/manual" use:enhance class="mt-1.5 flex flex-col gap-1"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} />
+											<span class="flex gap-1"><input class="input w-44 !py-0.5 text-xs" name="externalId" aria-label={k === 'bing' ? 'Bing site address' : k === 'gtm' ? 'Tag Manager container ID' : 'GA4 property'} placeholder={k === 'bing' ? 'https://www.site.com/' : k === 'gtm' ? 'GTM-ABC1234' : 'properties/123456'} /><button class="btn btn-xs btn-primary">Link</button></span>
+											<span class="text-[11px] text-muted-foreground">{k === 'ga4' ? 'GA4 → Admin → Property details → Property ID, as properties/<ID>' : k === 'gtm' ? 'The GTM-… ID at the top of Tag Manager' : 'The site address exactly as Bing Webmaster lists it'}</span></form>
+									</details>
+									{#if r.skipped.includes(k)}<div class="mt-1 text-[11px] text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone. Linking it by hand undoes that.">unlinked on purpose</div>{/if}
+								{:else if r.skipped.includes(k)}<span class="text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone.">– unlinked</span>
 								{:else}<span class="text-muted-foreground">–</span>{/if}
 							</td>
 						{/each}

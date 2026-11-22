@@ -186,15 +186,30 @@
 	.card {
 		@apply rounded-xl border bg-card text-card-foreground shadow-xs;
 	}
+	/*
+	 * Buttons, one system for every page, in the brand's graphite (the logo's chrome): primary is filled graphite, secondary a
+	 * clearly outlined surface (not white on white), ghost for small row actions, danger outlined in red. Sizes: default (36 px),
+	 * btn-sm (32 px) and btn-xs (28 px) instead of per-page height overrides. Colours come from the theme tokens, so the dim
+	 * theme follows on its own.
+	 */
 	.btn {
-		@apply inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3.5 text-[13px] font-medium whitespace-nowrap shadow-xs transition-colors outline-none;
-		@apply hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50;
+		@apply inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border border-foreground/20 bg-card px-3.5 text-[13px] font-medium whitespace-nowrap text-foreground shadow-xs transition-colors outline-none;
+		@apply hover:border-foreground/35 hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50;
 	}
 	.btn-primary {
-		@apply border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground;
+		@apply border-primary bg-primary font-semibold text-primary-foreground shadow-sm hover:border-primary hover:bg-primary/88 hover:text-primary-foreground;
+	}
+	.btn-ghost {
+		@apply border-transparent bg-transparent text-muted-foreground shadow-none hover:border-transparent hover:bg-accent hover:text-foreground;
 	}
 	.btn-danger {
-		@apply text-destructive hover:bg-destructive/10 hover:text-destructive;
+		@apply border-destructive/45 text-destructive hover:border-destructive/70 hover:bg-destructive/10 hover:text-destructive;
+	}
+	.btn-sm {
+		@apply h-8 gap-1.5 px-3 text-xs;
+	}
+	.btn-xs {
+		@apply h-7 gap-1 rounded-md px-2 text-xs;
 	}
 	.input {
 		@apply h-9 rounded-md border border-input bg-transparent px-3 py-1 text-[13px] shadow-xs transition-[color,box-shadow] outline-none dark:bg-input/30;

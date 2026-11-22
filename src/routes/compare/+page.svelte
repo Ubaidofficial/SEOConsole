@@ -19,7 +19,7 @@
 						<div><dt class="inline font-medium">Their price: </dt><dd class="inline text-muted-foreground">{t.price}</dd></div>
 						<div><dt class="inline font-medium text-good">Where SEOConsole is ahead: </dt><dd class="inline text-muted-foreground">{t.weWin}</dd></div>
 						<div><dt class="inline font-medium text-warn">Where {t.name} is ahead: </dt><dd class="inline text-muted-foreground">{t.theyWin}</dd></div>
-						<div class="pt-1"><a class="btn !h-8 text-xs" href="/compare/{t.slug}">Full comparison →</a></div>
+						<div class="pt-1"><a class="btn btn-sm" href="/compare/{t.slug}">Full comparison →</a></div>
 					</dl>
 					<a href="/compare/{t.slug}" class="block"><img class="w-full rounded border" src={t.shot.src} alt={t.shot.alt} loading="lazy" /></a>
 				</div>

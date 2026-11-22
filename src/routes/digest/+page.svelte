@@ -26,7 +26,7 @@
 	<p class="mb-2 text-xs text-muted-foreground">Week ending {d.weekEnd} · made {ago(data.shown!.createdAt)}{data.shown!.delivery === 'sent' ? ' · sent to the webhook' : data.shown!.delivery === 'failed' ? ` · sending failed: ${data.shown!.message}` : ''}</p>
 	<section class="card mb-4 p-4">
 		<ul class="pii space-y-1.5 text-sm">{#each d.headline as h}<li>• {h}</li>{/each}</ul>
-		{#if data.webhook.configured}<form method="POST" action="?/send" use:enhance class="mt-3"><input type="hidden" name="id" value={data.shown!.id} /><button class="btn !h-8 text-xs">Send this digest to the webhook</button></form>{/if}
+		{#if data.webhook.configured}<form method="POST" action="?/send" use:enhance class="mt-3"><input type="hidden" name="id" value={data.shown!.id} /><button class="btn btn-sm">Send this digest to the webhook</button></form>{/if}
 	</section>
 
 	{#if d.top.length}
@@ -68,7 +68,7 @@
 <section id="monthly" class="mt-8 scroll-mt-20">
 	<div class="mb-1 flex flex-wrap items-center gap-3">
 		<h2 class="text-base font-semibold">Monthly report</h2>
-		<form method="POST" action="?/monthly" use:enhance class="ml-auto"><button class="btn !h-8 text-xs">Make last month's report</button></form>
+		<form method="POST" action="?/monthly" use:enhance class="ml-auto"><button class="btn btn-sm">Make last month's report</button></form>
 	</div>
 	<Explainer lead="Last calendar month in plain sentences, ready to forward.">
 		<p>Made on the 4th of each month (Search Console data lags by about two days), stored here and sent to the same webhook as the digest; <code>DIGEST_MONTHLY=0</code> turns it off. Months differ in length, so changes are compared per day, against the month before and the same month last year once that is stored, and are called real only when they are bigger than normal variation.</p>
@@ -79,7 +79,7 @@
 		<div class="card p-4 text-sm">
 			<ul class="pii space-y-1.5">{#each m.headline as h}<li>• {h}</li>{/each}</ul>
 			{#if m.sites.length}<ul class="pii mt-3 space-y-1.5 border-t pt-3 text-xs" style="border-color:var(--border)">{#each m.sites as s (s.siteId)}<li>{monthSentence(s, m.month)}</li>{/each}</ul>{/if}
-			{#if data.webhook.configured}<form method="POST" action="?/sendMonthly" use:enhance class="mt-3"><input type="hidden" name="id" value={data.monthly.shown.id} /><button class="btn !h-8 text-xs">Send this report to the webhook</button></form>{/if}
+			{#if data.webhook.configured}<form method="POST" action="?/sendMonthly" use:enhance class="mt-3"><input type="hidden" name="id" value={data.monthly.shown.id} /><button class="btn btn-sm">Send this report to the webhook</button></form>{/if}
 		</div>
 		{#if data.monthly.history.length > 1}<p class="mt-2 text-xs text-muted-foreground">Earlier: {#each data.monthly.history.slice(1) as h (h.id)}<a class="mr-3 hover:underline" href="?month={h.id}#monthly">{h.label}</a>{/each}</p>{/if}
 	{:else}
@@ -89,7 +89,7 @@
 
 <div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
 	<section>
-		<div class="mb-1 flex items-center gap-2"><h2 class="font-medium">Alerts</h2><form method="POST" action="?/check" use:enhance class="ml-auto"><button class="btn !h-8 text-xs">Check now</button></form></div>
+		<div class="mb-1 flex items-center gap-2"><h2 class="font-medium">Alerts</h2><form method="POST" action="?/check" use:enhance class="ml-auto"><button class="btn btn-sm">Check now</button></form></div>
 		<div class="card p-3 text-sm">
 			{#each data.urgent as a (a.id)}
 				<div class="border-b py-2 last:border-b-0" style="border-color:var(--border)"><div class="text-[11px] text-muted-foreground">{ago(a.createdAt)} · {a.delivery === 'sent' ? 'sent' : a.delivery === 'failed' ? 'sending failed' : 'in-app only'}</div>

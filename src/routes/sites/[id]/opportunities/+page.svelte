@@ -127,7 +127,7 @@
 		{#if data.openseo.candidates}
 			<form method="POST" action="?/oseoPreview" use:enhance class="flex flex-wrap items-center gap-2 text-xs">
 				<label class="flex items-center gap-1.5">Top <input class="input w-20" type="number" name="n" min="1" max={data.openseo.max} value="25" /> searches</label>
-				<button class="btn !h-8 text-xs">Preview</button>
+				<button class="btn btn-sm">Preview</button>
 			</form>
 		{:else}<p class="text-xs text-muted-foreground">No striking-distance searches left to send.</p>{/if}
 		{#if form?.plan}
@@ -139,7 +139,7 @@
 				<form method="POST" action="?/oseoTrack" use:enhance>
 					<input type="hidden" name="keywords" value={p.keywords.join('\n')} />
 					{#if p.estimate?.scheduled}<input type="hidden" name="credits" value={p.estimate.scheduled.costCredits} />{/if}
-					<button class="btn btn-primary !h-8 text-xs">Send {p.keywords.length} searches{p.estimate?.scheduled ? `, up to ${p.estimate.scheduled.costCredits} credits per check` : ''}</button>
+					<button class="btn btn-sm btn-primary">Send {p.keywords.length} searches{p.estimate?.scheduled ? `, up to ${p.estimate.scheduled.costCredits} credits per check` : ''}</button>
 				</form>
 			</div>
 		{/if}
