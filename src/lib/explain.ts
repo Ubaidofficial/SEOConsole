@@ -126,18 +126,16 @@ export const syncModeLabel = (mode: string) => SYNC_MODE_LABEL[mode] ?? mode;
 export const SYNC_RUNS_EXPLAIN = 'Every run re-pulls the newest few days, because Google revises recent figures. Until your history is complete (up to the 16 months Google keeps), a run also pulls one more chunk of 45 days further back, so a new site shows a string of "Sync + backfill" rows within the first minutes. Days is how many days were pulled in that run.';
 
 /**
- * The tab row has two parts. First the work tabs, always on show: the plan, the findings people act on, the two tables they look things up
- * in, and indexing. Then the sources: "All sources" (every source on one screen) and each source tab that is connected for this site, with
- * its logo, so what is linked is one click away and what is not stays out of the way. Everything else sits under "More" (grouped as below),
- * where a source that is not connected says so. A tab opened from More still shows in the row while it is open.
+ * The tab row has two parts. First the work tabs: the plan, the findings people act on, the two tables they look things up in, and
+ * indexing. Then every source, each with its logo: "All sources" (all of them on one screen), GA4, Bing, Tag Manager, Clarity and AI
+ * answers. A connected source shows a green dot; one that is not shows a hollow dot and opens on its Connect prompt. Everything else sits
+ * under "More" (grouped as below). A tab opened from More still shows in the row while it is open.
  */
 export const SITE_PRIMARY_TABS = ['', '/actions', '/quickwins', '/queries', '/pages', '/indexing'] as const;
-/** Source tabs in row order. "All sources" is always shown; the others only once their source is linked (see SOURCE_LINK). */
-export const SITE_SOURCE_TABS = ['/dashboard', '/analytics', '/bing', '/tags', '/clarity'] as const;
-/** Which link makes a source tab "connected". */
-export const SOURCE_LINK: Record<string, 'ga4' | 'bing' | 'gtm' | 'clarity'> = { '/analytics': 'ga4', '/bing': 'bing', '/tags': 'gtm', '/clarity': 'clarity' };
-/** The source tabs to show in the row for a site, given what is linked. */
-export const sourceTabsFor = (linked: Partial<Record<'ga4' | 'bing' | 'gtm' | 'clarity', boolean>>) => SITE_SOURCE_TABS.filter((t) => !SOURCE_LINK[t] || !!linked[SOURCE_LINK[t]]);
+/** Source tabs in row order, all always shown. */
+export const SITE_SOURCE_TABS = ['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai'] as const;
+/** What makes a source tab "connected" (All sources has no link of its own). AI answers is connected once an AI provider key is set up. */
+export const SOURCE_LINK: Record<string, 'ga4' | 'bing' | 'gtm' | 'clarity' | 'ai'> = { '/analytics': 'ga4', '/bing': 'bing', '/tags': 'gtm', '/clarity': 'clarity', '/ai': 'ai' };
 
 /** How the site tabs are grouped under More: a caption and the tab paths under it. Every tab appears in exactly one group (a test checks it). */
 export const SITE_TAB_GROUPS = [

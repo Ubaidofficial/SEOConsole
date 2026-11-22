@@ -5,7 +5,7 @@
 	import { toast } from 'svelte-sonner';
 	import { ChevronDown, RefreshCw, Sparkles } from '@lucide/svelte';
 	import PeriodPicker from '$lib/components/PeriodPicker.svelte';
-	import { SITE_PRIMARY_TABS, SITE_TABS, SITE_TAB_GROUPS, SOURCE_LINK, sourceTabsFor } from '$lib/explain';
+	import { SITE_PRIMARY_TABS, SITE_SOURCE_TABS, SITE_TABS, SITE_TAB_GROUPS, SOURCE_LINK } from '$lib/explain';
 	const tabOf = (t: string) => SITE_TABS.find(([p]) => p === t)!;
 	import Delta from '$lib/components/Delta.svelte';
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
@@ -31,10 +31,10 @@
 	const base = $derived(`/sites/${data.site.id}`);
 	const isActive = (t: string) => (t === '' ? page.url.pathname === base : page.url.pathname.startsWith(base + t));
 	/** A tab from under More that is open right now is shown in the row too, so you can always see where you are. */
-	const sourceTabs = $derived(sourceTabsFor(data.linked) as string[]);
-	const inRow = $derived([...(SITE_PRIMARY_TABS as readonly string[]), ...sourceTabs]);
+	const sourceTabs = SITE_SOURCE_TABS as readonly string[];
+	const inRow = [...(SITE_PRIMARY_TABS as readonly string[]), ...sourceTabs];
 	const activeExtra = $derived(SITE_TABS.map(([t]) => t as string).find((t) => t !== '' && isActive(t) && !inRow.includes(t)) ?? null);
-	/** A source tab whose source is not linked for this site: shown under More with a Connect marker instead of in the row. */
+	/** A source tab whose source is not connected for this site: a hollow dot, and the tab opens on its Connect prompt. */
 	const unlinked = (t: string) => !!SOURCE_LINK[t] && !data.linked[SOURCE_LINK[t]];
 	/**
 	 * Sync is a plain endpoint (POST, then a redirect back), not a form action, so `use:enhance` cannot read its answer (it expects a form
@@ -109,7 +109,7 @@
 
 <!-- A short row of the tabs people use most; the rest are one click away under More, grouped, each with a line on what it is for. -->
 {#snippet tabLogo(t: string)}{#if SRC_LOGO[t]}<img src="/logos/{SRC_LOGO[t]}" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />{/if}{/snippet}
-{#snippet tabBadges(t: string)}{#if t === '/actions' && data.actionBadge.open}<span class="ml-1.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.actionBadge.blocking ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.actionBadge.open} open{data.actionBadge.blocking ? ', ' + data.actionBadge.blocking + ' blocking' : ''}">{data.actionBadge.open}</span>{/if}{#if (t === '/bing' && data.linked.bing) || (t === '/analytics' && data.linked.ga4) || (t === '/tags' && data.linked.gtm) || (t === '/clarity' && data.linked.clarity)}<span class="ml-1 text-good" title="connected">●</span>{/if}{/snippet}
+{#snippet tabBadges(t: string)}{#if t === '/actions' && data.actionBadge.open}<span class="ml-1.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.actionBadge.blocking ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.actionBadge.open} open{data.actionBadge.blocking ? ', ' + data.actionBadge.blocking + ' blocking' : ''}">{data.actionBadge.open}</span>{/if}{#if SOURCE_LINK[t]}{#if unlinked(t)}<span class="ml-1 text-muted-foreground" title="Not connected: open the tab to connect it">○</span>{:else}<span class="ml-1 text-good" title="connected">●</span>{/if}{/if}{/snippet}
 {#snippet tab(t: string)}
 	{@const [, label, about] = tabOf(t)}
 	<a href="{base}{t}?days={data.days}" title={about} aria-current={isActive(t) ? 'page' : undefined} class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors duration-150 {isActive(t) ? 'border-[color:var(--link)] font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}">{@render tabLogo(t)}{label}{@render tabBadges(t)}</a>
@@ -133,7 +133,7 @@
 						<ul class="space-y-0.5">
 							{#each rest as t}
 								{@const [, label, about] = tabOf(t)}
-								<li><a href="{base}{t}?days={data.days}" class="block rounded-md px-2 py-1.5 hover:bg-muted {isActive(t) ? 'bg-muted' : ''}"><span class="text-[13px] font-medium">{@render tabLogo(t)}{label}{@render tabBadges(t)}{#if unlinked(t)}<span class="ml-1.5 rounded-full border px-1.5 text-[10px] font-normal text-muted-foreground">Connect</span>{/if}</span><span class="block text-xs leading-snug text-muted-foreground">{about}</span></a></li>
+								<li><a href="{base}{t}?days={data.days}" class="block rounded-md px-2 py-1.5 hover:bg-muted {isActive(t) ? 'bg-muted' : ''}"><span class="text-[13px] font-medium">{@render tabLogo(t)}{label}{@render tabBadges(t)}</span><span class="block text-xs leading-snug text-muted-foreground">{about}</span></a></li>
 							{/each}
 						</ul>
 					</div>
