@@ -79,7 +79,7 @@ describe('what the server offers', () => {
 		}
 		// only the two tools of the delete level are marked destructive (see submission.test.ts)
 		expect(list.filter((t) => t.annotations.destructiveHint).map((t) => t.name).sort()).toEqual(['cancel_indexing_queue', 'delete_sitemap']);
-		expect(list).toHaveLength(72);
+		expect(list).toHaveLength(73);
 	});
 	it('the server instructions say changes need the owner\'s permission and nothing can delete', async () => {
 		const i = (await rpc(reader, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).json.result.instructions as string;

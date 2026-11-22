@@ -12,6 +12,8 @@ import { auditTracking, duplicateGoogleTags, type TrackingTag } from '../src/lib
 import { trackingHealth } from '../src/lib/server/tracking';
 import { getSite } from '../src/lib/server/clients';
 import { linksFor } from '../src/lib/server/links';
+import { createApiKey } from '../src/lib/server/apikeys';
+import { handleMcp } from '../src/lib/server/mcp';
 
 const t = (id: string, name: string, type: string, firing: string[], measurementId: string | null, paused = false): TrackingTag => ({ id, name, type, firing, measurementId, paused });
 
@@ -127,9 +129,23 @@ describe('pausing duplicates through Tag Manager', () => {
 		expect(changed.calls).toEqual(['workspace', 'get 5']);
 	});
 
-	it('demo: the planted duplicate is flagged, the one-click fix pauses it, and the warning goes away', async () => {
+	it('demo, through the connector: a read-only key is refused, preview changes nothing, publish pauses the duplicate and the warning goes away', async () => {
 		expect(trackingHealth(getSite(id)!, 28).findings.some((f) => f.id === 'gtm-duplicate-google-tag')).toBe(true);
-		const res = await pauseDuplicateTagsViaGtm(id, 'publish');
+		const call = async (key: string, args: object) => {
+			const res = await handleMcp(new Request('http://x/api/mcp', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'fix_duplicate_google_tag', arguments: { site: String(id), ...args } } }) }));
+			const out = (await res.json()).result;
+			return { isError: !!out.isError, text: out.content[0].text as string };
+		};
+		const reader = createApiKey('r', null).key;
+		expect((await call(reader, { mode: 'publish' })).isError).toBe(true);
+		const writer = createApiKey('w', null, null, 'submit').key;
+		const preview = JSON.parse((await call(writer, {})).text);
+		expect(preview).toMatchObject({ ok: true, canPublish: true });
+		expect(preview.groups[0].pause.map((t: { name: string }) => t.name)).toEqual(['GA4 Configuration (old)']);
+		expect(demoGtmLive(container)!.tags.find((x) => x.name === 'GA4 Configuration (old)')!.paused).toBe(false);
+		const out = await call(writer, { mode: 'publish' });
+		expect(out.isError, out.text).toBe(false);
+		const res = JSON.parse(out.text);
 		expect(res).toMatchObject({ ok: true, published: true, paused: ['GA4 Configuration (old)'] });
 		expect(demoGtmLive(container)!.tags.find((x) => x.name === 'GA4 Configuration (old)')!.paused).toBe(true);
 		await syncGtm(id);
