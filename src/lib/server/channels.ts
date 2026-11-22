@@ -2,7 +2,7 @@ import { db } from './db';
 import { config } from './config';
 import { RealBingClient, type BingClient, type BingLinksClient } from './bing';
 import { bingLinksDue, syncBingLinks } from './binglinks';
-import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGa4KeyEvents, demoGa4LandingAll, demoGa4PageViews, demoGa4PageTitles, demoGa4UsersTotal, demoGtmContainers, demoGtmLive } from './demo-channels';
+import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGa4KeyEvents, demoGa4LandingAll, demoGa4PageViews, demoGa4PageTitles, demoGa4UsersTotal, demoGa4Values, demoGa4SearchTerms, demoGtmContainers, demoGtmLive } from './demo-channels';
 import { callsLeft, CLARITY_FRESH_MS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
 import * as ga4 from './ga4';
 import * as gtm from './gtm';
@@ -11,6 +11,7 @@ import { getIntegration, integrationSecret, linksFor, markLink } from './links';
 import { getSite } from './clients';
 import { logGtmVersion } from './autolog';
 import { PERIODS } from '../periods';
+import { pullGa4Values } from './ga4values';
 
 // ── factories (real vs demo) ─────────────────────────────────────────────────
 export function bingClientFor(integrationId: number): BingClient {
@@ -49,6 +50,10 @@ export interface Ga4Source {
 	pageTitles?(property: string, start: string, end: string): Promise<{ page: string; title: string }[]>;
 	/** Unique active and new users over one whole window. Optional so a test double can leave it out. */
 	usersTotal?(property: string, start: string, end: string): Promise<{ activeUsers: number; newUsers: number }>;
+	/** Engagement time, revenue and transactions over a whole window by channel, landing page or campaign. Optional so a test double can leave it out. */
+	values?(property: string, kind: ga4.Ga4ValueKind, start: string, end: string): Promise<{ rows: ga4.Ga4ValueRow[]; currency: string | null; truncated: boolean }>;
+	/** What visitors typed into the site's own search over a whole window. Optional so a test double can leave it out. */
+	searchTerms?(property: string, start: string, end: string): Promise<ga4.Ga4SearchTerm[]>;
 }
 
 export function ga4SourceFor(accountId: number): Ga4Source {
@@ -72,7 +77,9 @@ export function ga4SourceFor(accountId: number): Ga4Source {
 			landingAll: (property, s, e) => demoGa4LandingAll(property, s, e),
 			pageViews: (property, s, e) => demoGa4PageViews(property, s, e),
 			pageTitles: (property, s, e) => demoGa4PageTitles(property, s, e),
-			usersTotal: async (property, s, e) => demoGa4UsersTotal(property, s, e)
+			usersTotal: async (property, s, e) => demoGa4UsersTotal(property, s, e),
+			values: async (property, kind, s, e) => demoGa4Values(property, kind, s, e),
+			searchTerms: async (property, s, e) => demoGa4SearchTerms(property, s, e)
 		};
 	}
 	return {
@@ -91,7 +98,9 @@ export function ga4SourceFor(accountId: number): Ga4Source {
 		landingAll: (p, s, e) => ga4.landingAllChannels(accountId, p, s, e),
 		pageViews: (p, s, e) => ga4.pageViewsDaily(accountId, p, s, e),
 		pageTitles: (p, s, e) => ga4.pageTitles(accountId, p, s, e),
-		usersTotal: (p, s, e) => ga4.usersTotal(accountId, p, s, e)
+		usersTotal: (p, s, e) => ga4.usersTotal(accountId, p, s, e),
+		values: (p, kind, s, e) => ga4.valueReport(accountId, p, kind, s, e),
+		searchTerms: (p, s, e) => ga4.siteSearchTerms(accountId, p, s, e)
 	};
 }
 
@@ -355,6 +364,7 @@ export async function syncGa4(siteId: number, source?: Ga4Source, today = pacifi
 		await pullGa4Sources(siteId, link.external_id, src, today);
 		await pullGa4Dims(siteId, link.external_id, src, today);
 		await pullGa4PageViews(siteId, link.external_id, src, today);
+		await pullGa4Values(siteId, link.external_id, src, today);
 		markLink(siteId, 'ga4', 'idle', periods.ok ? null : 'Daily data synced; user and landing-page reports could not be fetched (will retry).', true);
 		return { rows: rows.length };
 	} catch (e) {

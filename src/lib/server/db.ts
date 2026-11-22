@@ -642,6 +642,36 @@ CREATE TABLE IF NOT EXISTS ga4_users (               -- unique users over whole 
 	pulled_on TEXT NOT NULL,
 	PRIMARY KEY (site_id, days)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS ga4_values (              -- sessions with engagement time and revenue over whole windows, by channel, landing page or campaign
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	days INTEGER NOT NULL,              -- window length (one of PERIODS)
+	kind TEXT NOT NULL,                 -- channel | landing | campaign
+	key TEXT NOT NULL,                  -- channel group, landing path (no query string) or campaign name
+	sessions INTEGER NOT NULL,
+	engaged_sessions INTEGER NOT NULL,
+	key_events REAL NOT NULL,
+	engagement_sec REAL NOT NULL,       -- GA4 userEngagementDuration, seconds, summed over the sessions
+	revenue REAL NOT NULL,              -- GA4 totalRevenue, in ga4_value_windows.currency
+	transactions INTEGER NOT NULL,
+	PRIMARY KEY (site_id, days, kind, key)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS ga4_value_windows (       -- which value windows were fetched, and in what currency
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	days INTEGER NOT NULL,
+	start_date TEXT NOT NULL,
+	end_date TEXT NOT NULL,
+	currency TEXT,                      -- ISO 4217 code GA4 reported, e.g. USD; NULL when GA4 did not say
+	truncated TEXT NOT NULL DEFAULT '', -- comma-separated kinds that hit their row limit
+	PRIMARY KEY (site_id, days)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS ga4_search_terms (        -- what visitors typed into the site's own search (GA4 view_search_results), per window
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	days INTEGER NOT NULL,
+	term TEXT NOT NULL,                 -- lower-cased and trimmed
+	searches INTEGER NOT NULL,
+	users INTEGER NOT NULL,
+	PRIMARY KEY (site_id, days, term)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS annotation_auto (         -- change-log entries the app wrote itself; the key outlives a deleted entry so it never comes back
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	key TEXT NOT NULL,                  -- robots:<id> | gtm:<container>:<version> | sitemap-added:<day> | sitemap-removed:<day>
@@ -850,6 +880,9 @@ function migrate(db: Database.Database) {
 	if (!cols('sites').includes('changelog_auto')) db.exec('ALTER TABLE sites ADD COLUMN changelog_auto INTEGER NOT NULL DEFAULT 1');
 	if (!cols('sites').includes('bing_submit_auto')) db.exec('ALTER TABLE sites ADD COLUMN bing_submit_auto INTEGER NOT NULL DEFAULT 0');
 	if (!cols('sites').includes('request_auto')) db.exec('ALTER TABLE sites ADD COLUMN request_auto INTEGER NOT NULL DEFAULT 0');
+	// GA4 engagement time, revenue, campaigns and site search: day of the last successful pull, and the last failure (cleared on success).
+	if (!cols('sites').includes('ga4_values_on')) db.exec('ALTER TABLE sites ADD COLUMN ga4_values_on TEXT');
+	if (!cols('sites').includes('ga4_values_error')) db.exec('ALTER TABLE sites ADD COLUMN ga4_values_error TEXT');
 	if (!cols('ai_runs').includes('via')) db.exec('ALTER TABLE ai_runs ADD COLUMN via TEXT');
 	if (!cols('ai_runs').includes('cost')) db.exec('ALTER TABLE ai_runs ADD COLUMN cost REAL');
 	// The Google identity (the stable "sub") a team member signs in with, once they have used or linked "Sign in with Google".

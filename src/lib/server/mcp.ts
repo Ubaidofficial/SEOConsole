@@ -22,6 +22,7 @@ import { gtmSnapshot, trackingHealth } from './tracking';
 import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
 import { realtimeFor } from './realtime';
+import { ga4ValuesReport, type ValueRow } from './ga4values';
 import { noKeyEventsText } from '../keyeventtext';
 import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
 import { evaluateTestCached, listTests } from './seotests';
@@ -147,6 +148,24 @@ function ga4PagesOrEvents(site: Site, n: number, a: Record<string, unknown>) {
 		...(l.truncated ? { note: 'GA4 returned its row limit; very small pages may be missing.' } : {}),
 		pages: l.rows.slice(0, 50).map((r) => ({ page: r.page, sessions: r.sessions, previousSessions: r.prevSessions, change: r.sessionsDelta == null ? null : r2(r.sessionsDelta * 100) + '%', mainChannel: r.topChannel, fromOrganic: r2(r.organicShare * 100) + '%', engagementRate: r2(r.engagementRate * 100) + '%', keyEvents: r.keyEvents, channels: r.channels.slice(0, 4) }))
 	};
+}
+
+/** get_ga4_summary view=value, campaigns or site_search: engagement time, revenue and what visitors searched for, per stored window. */
+function ga4Values(site: Site, n: number, a: Record<string, unknown>) {
+	const v = ga4ValuesReport(site, n, { search: typeof a.search === 'string' ? a.search : undefined });
+	if (!v.linked) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
+	if (v.status === 'pending') return { connected: true, note: 'Engagement time, revenue, campaigns and site search appear after the next GA4 sync.' };
+	if (v.status === 'failed') return { connected: true, error: `GA4 could not return engagement time and revenue on the last sync; it will be retried. ${v.error}` };
+	if (v.status === 'no-window') return { connected: true, error: `Engagement time, revenue, campaigns and site search are stored for windows of ${v.periods.join(', ')} days; pass one of those as days.` };
+	const row = (r: ValueRow, label: string) => ({ [label]: r.key, sessions: r.sessions, engagementRate: r2(r.engagementRate * 100) + '%', avgEngagementSeconds: r.avgEngagementSec, keyEvents: r.keyEvents, keyEventRate: r2(r.keyEventRate * 100) + '%', ...(v.hasRevenue ? { revenue: r.revenue, transactions: r.transactions, revenuePerSession: r.revenuePerSession } : {}) });
+	const head = { window: v.window, currency: v.currency, ...(v.staleError ? { warning: `The last refresh failed, so this is from ${v.window.end}: ${v.staleError}` } : {}), ...(v.hasRevenue ? {} : { revenueNote: 'No revenue recorded in this window (no purchase events with a value), so revenue fields are left out.' }) };
+	const lim = limit(a, 50);
+	if (a.view === 'site_search')
+		return v.searchTerms.length
+			? { ...head, note: 'Terms typed into the site\'s own search box (GA4 view_search_results), lower-cased.', terms: v.searchTerms.slice(0, lim) }
+			: { ...head, terms: [], note: 'No site searches recorded. GA4 counts them when enhanced measurement site search is on and the results page keeps the term in its address (?q=, ?s=).' };
+	if (a.view === 'campaigns') return { ...head, note: 'By utm_campaign; untagged traffic shows as (organic), (direct), (referral).', ...(v.truncated.includes('campaign') ? { truncated: true } : {}), campaigns: v.campaigns.slice(0, lim).map((r) => row(r, 'campaign')) };
+	return { ...head, note: 'avgEngagementSeconds is GA4 average engagement time per session.', totals: v.totals, channels: v.channels.map((r) => row(r, 'channel')), landingPages: v.landing.slice(0, lim).map((r) => row(r, 'page')) };
 }
 
 /** get_ga4_summary view=sources: sessions by GA4 source / medium, optionally only those matching `search`. */
@@ -400,13 +419,14 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_ga4_summary',
-		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events), realtime (last 30 min); `search` filters.',
-		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources', 'pages', 'events', 'realtime'] }, search: { type: 'string' } },
+		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events), value (engagement time and revenue by channel and landing page), campaigns (utm_campaign), site_search (terms typed into the site search), realtime (active users and events, last 30 min); `search` filters.',
+		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources', 'pages', 'events', 'value', 'campaigns', 'site_search', 'realtime'] }, search: { type: 'string' }, limit: { type: 'integer' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			if (!linksFor(site.id).ga4) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
 			if (a.view === 'sources') return ga4Sources(site, days(a), a);
 			if (a.view === 'pages' || a.view === 'events') return ga4PagesOrEvents(site, days(a), a);
+			if (a.view === 'value' || a.view === 'campaigns' || a.view === 'site_search') return ga4Values(site, days(a), a);
 			if (a.view === 'realtime') return realtimeFor(site.id, { search: typeof a.search === 'string' ? a.search : undefined });
 			const p = periodFor(site, days(a));
 			const d = db();

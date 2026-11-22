@@ -1,5 +1,5 @@
 import type { BingClient, BingDay, BingLinksClient, BingSite, BingTermRow } from './bing';
-import type { Ga4Day, Ga4Dim, Ga4DimDay, Ga4EventDay, Ga4LandingChannel, Ga4Property, Ga4SourceRow } from './ga4';
+import type { Ga4Day, Ga4Dim, Ga4DimDay, Ga4EventDay, Ga4LandingChannel, Ga4Property, Ga4SearchTerm, Ga4SourceRow, Ga4ValueKind, Ga4ValueRow } from './ga4';
 import type { ClarityMetric } from './clarity';
 import type { GtmContainer, GtmLive } from './gtm';
 import { DEMO_ACCOUNTS, DEMO_HISTORY_DAYS, DemoClient, demoSearches, h01, plantedQuery } from './demo';
@@ -290,6 +290,69 @@ export async function demoGa4LandingAll(property: string, startDate: string, end
 		if (referral) rows.push({ page: l.page, channel: 'Referral', sessions: referral, engagedSessions: Math.round(referral * 0.6), keyEvents: Math.round(referral * 0.03 * 10) / 10 });
 	});
 	return { rows, truncated: false };
+}
+
+/** Average engagement seconds per session and revenue per session for each demo channel: email and organic convert, social skims. */
+const DEMO_VALUE: Record<string, [number, number]> = { 'Organic Search': [74, 1.9], Direct: [96, 2.6], Referral: [58, 1.1], 'Organic Social': [31, 0.4], Email: [112, 4.2] };
+/** How each demo channel's sessions split into campaigns (GA4 names the unpaid ones in brackets). */
+const DEMO_CAMPAIGNS: Record<string, [string, number][]> = {
+	'Organic Search': [['(organic)', 1]],
+	Direct: [['(direct)', 1]],
+	Referral: [['(referral)', 0.8], ['partner_spring', 0.2]],
+	'Organic Social': [['(referral)', 0.55], ['social_launch', 0.45]],
+	Email: [['newsletter_weekly', 0.7], ['winback_nov', 0.3]]
+};
+const valueRow = (key: string, sessions: number, engaged: number, keyEvents: number, sec: number, revPerSession: number, seed: string): Ga4ValueRow => {
+	const wobble = 0.8 + h01(seed) * 0.4;
+	const revenue = Math.round(sessions * revPerSession * wobble * 100) / 100;
+	return { key, sessions, engagedSessions: engaged, keyEvents, engagementSec: Math.round(sessions * sec * wobble), revenue, transactions: Math.round(revenue / 48) };
+};
+
+/** Engagement time, revenue and transactions by channel, landing page or campaign, consistent with the demo sessions. */
+export async function demoGa4Values(property: string, kind: Ga4ValueKind, startDate: string, endDate: string): Promise<{ rows: Ga4ValueRow[]; currency: string | null; truncated: boolean }> {
+	const byChannel = new Map<string, { sessions: number; engaged: number; keyEvents: number }>();
+	for (const r of demoGa4Daily(property, startDate, endDate)) {
+		const cur = byChannel.get(r.channel) ?? { sessions: 0, engaged: 0, keyEvents: 0 };
+		cur.sessions += r.sessions;
+		cur.engaged += r.engagedSessions;
+		cur.keyEvents += r.keyEvents;
+		byChannel.set(r.channel, cur);
+	}
+	const rows: Ga4ValueRow[] = [];
+	if (kind === 'channel') {
+		for (const [ch, t] of byChannel) rows.push(valueRow(ch, t.sessions, t.engaged, Math.round(t.keyEvents * 10) / 10, DEMO_VALUE[ch]?.[0] ?? 60, DEMO_VALUE[ch]?.[1] ?? 1, property + ch));
+	} else if (kind === 'campaign') {
+		const merged = new Map<string, Ga4ValueRow>();
+		for (const [ch, t] of byChannel)
+			for (const [name, share] of DEMO_CAMPAIGNS[ch] ?? [['(not set)', 1]]) {
+				const r = valueRow(name, Math.round(t.sessions * share), Math.round(t.engaged * share), Math.round(t.keyEvents * share * 10) / 10, DEMO_VALUE[ch]?.[0] ?? 60, DEMO_VALUE[ch]?.[1] ?? 1, property + name);
+				const cur = merged.get(name);
+				if (!cur) merged.set(name, r);
+				else for (const k of ['sessions', 'engagedSessions', 'keyEvents', 'engagementSec', 'revenue', 'transactions'] as const) cur[k] += r[k];
+			}
+		rows.push(...[...merged.values()].filter((r) => r.sessions > 0));
+	} else {
+		const byPage = new Map<string, Ga4ValueRow>();
+		for (const l of (await demoGa4LandingAll(property, startDate, endDate)).rows) {
+			const r = valueRow(l.page, l.sessions, l.engagedSessions, l.keyEvents, 40 + h01(l.page) * 110, h01(l.page + 'rev') < 0.4 ? 0 : 0.5 + h01(l.page + 'r') * 4, property + l.page + l.channel);
+			const cur = byPage.get(l.page);
+			if (!cur) byPage.set(l.page, r);
+			else for (const k of ['sessions', 'engagedSessions', 'keyEvents', 'engagementSec', 'revenue', 'transactions'] as const) cur[k] += r[k];
+		}
+		rows.push(...byPage.values());
+	}
+	return { rows: rows.sort((a, b) => b.sessions - a.sessions), currency: 'USD', truncated: false };
+}
+
+/** What demo visitors typed into the site search: the site's topic words, scaled to the window. */
+export function demoGa4SearchTerms(property: string, startDate: string, endDate: string): Ga4SearchTerm[] {
+	const sessions = demoGa4Daily(property, startDate, endDate).reduce((a, r) => a + r.sessions, 0);
+	const terms = ['shipping', 'returns', 'gift card', 'size guide', 'discount code', 'care guide', 'wholesale', 'track order', 'reviews', 'warranty'];
+	return terms
+		.map((term, i) => ({ term, searches: Math.round((sessions * 0.02 * (0.4 + h01(property + term))) / (i + 1)), users: 0 }))
+		.map((t) => ({ ...t, users: Math.round(t.searches * 0.8) }))
+		.filter((t) => t.searches > 0)
+		.sort((a, b) => b.searches - a.searches);
 }
 
 /** A fetch stand-in so the real budget/sync code path runs against synthetic Clarity data. */

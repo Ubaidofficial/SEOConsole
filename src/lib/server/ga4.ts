@@ -511,3 +511,86 @@ export async function aiAssistantDaily(accountId: number, property: string, star
 	}
 	return [...merged.values()];
 }
+
+/** What a value report is broken down by: GA4 dimension per kind. */
+export const VALUE_DIMS = { channel: 'sessionDefaultChannelGroup', landing: 'landingPagePlusQueryString', campaign: 'sessionCampaignName' } as const;
+export type Ga4ValueKind = keyof typeof VALUE_DIMS;
+/**
+ * Sessions with what they were worth: engagement time (seconds, GA4 userEngagementDuration), revenue (totalRevenue: purchases,
+ * subscriptions and ad revenue, in the property's currency) and transactions. A property without e-commerce returns 0 revenue.
+ */
+export interface Ga4ValueRow { key: string; sessions: number; engagedSessions: number; keyEvents: number; engagementSec: number; revenue: number; transactions: number }
+/** How many rows a value report keeps, per kind (largest by sessions first). */
+export const VALUE_ROW_LIMIT: Record<Ga4ValueKind, number> = { channel: 100, landing: 5000, campaign: 1000 };
+
+/** Sessions, engagement time, revenue and transactions over a whole window, by channel group, landing page or campaign. */
+export async function valueReport(accountId: number, property: string, kind: Ga4ValueKind, startDate: string, endDate: string, http: HttpOptions = {}): Promise<{ rows: Ga4ValueRow[]; currency: string | null; truncated: boolean }> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[]; metadata?: { currencyCode?: string } }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				dateRanges: [{ startDate, endDate }],
+				dimensions: [{ name: VALUE_DIMS[kind] }],
+				metrics: ['sessions', 'engagedSessions', 'keyEvents', 'userEngagementDuration', 'totalRevenue', 'transactions'].map((name) => ({ name })),
+				orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+				limit: VALUE_ROW_LIMIT[kind]
+			})
+		},
+		http
+	);
+	const merged = new Map<string, Ga4ValueRow>();
+	for (const row of r.rows ?? []) {
+		// Landing pages that differ only by query string are one page, as everywhere else in the app.
+		const raw = row.dimensionValues[0].value;
+		const key = kind === 'landing' ? landingPath(raw) : raw || '(not set)';
+		const m = row.metricValues.map((v) => Number(v.value) || 0);
+		const cur = merged.get(key) ?? { key, sessions: 0, engagedSessions: 0, keyEvents: 0, engagementSec: 0, revenue: 0, transactions: 0 };
+		cur.sessions += m[0];
+		cur.engagedSessions += m[1];
+		cur.keyEvents += m[2];
+		cur.engagementSec += m[3];
+		cur.revenue += m[4];
+		cur.transactions += m[5];
+		merged.set(key, cur);
+	}
+	return { rows: [...merged.values()], currency: r.metadata?.currencyCode || null, truncated: (r.rows?.length ?? 0) >= VALUE_ROW_LIMIT[kind] };
+}
+
+export interface Ga4SearchTerm { term: string; searches: number; users: number }
+export const SEARCH_TERM_LIMIT = 500;
+
+/**
+ * What visitors typed into the site's own search box over a window: GA4's searchTerm on view_search_results events, which enhanced
+ * measurement records when a results page carries the term in its address (?q=, ?s=, ?search= and similar). [] when site search is not tracked.
+ */
+export async function siteSearchTerms(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}): Promise<Ga4SearchTerm[]> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				dateRanges: [{ startDate, endDate }],
+				dimensions: [{ name: 'searchTerm' }],
+				metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }],
+				dimensionFilter: { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'view_search_results' } } },
+				orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+				limit: SEARCH_TERM_LIMIT
+			})
+		},
+		http
+	);
+	const merged = new Map<string, Ga4SearchTerm>();
+	for (const row of r.rows ?? []) {
+		const term = row.dimensionValues[0].value.trim().toLowerCase();
+		if (!term || term === '(not set)') continue;
+		const cur = merged.get(term) ?? { term, searches: 0, users: 0 };
+		cur.searches += Number(row.metricValues[0].value) || 0;
+		// Users of differently cased spellings can overlap; the larger count is the honest floor.
+		cur.users = Math.max(cur.users, Number(row.metricValues[1].value) || 0);
+		merged.set(term, cur);
+	}
+	return [...merged.values()].sort((a, b) => b.searches - a.searches);
+}
