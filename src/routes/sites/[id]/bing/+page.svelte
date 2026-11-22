@@ -7,6 +7,15 @@
 	import { fmtInt, fmtPct, ago } from '$lib/format';
 	let { data, form } = $props();
 	let busy = $state(false);
+	let pqBusy = $state(false);
+	let pqPage = $state('');
+	let pqForm: HTMLFormElement | undefined = $state();
+	const pq = $derived(form && 'pageQueries' in form ? form.pageQueries : null);
+	const showQueries = (r: { term: string }) => {
+		pqPage = r.term;
+		queueMicrotask(() => pqForm?.requestSubmit());
+	};
+	const CODE_LABEL: Record<string, string> = { '2xx': 'OK (2xx)', '301': 'Moved (301)', '302': 'Temporary (302)', '4xx': 'Not found (4xx)', '5xx': 'Server error (5xx)', other: 'Other' };
 	const path = (u: string) => { try { const x = new URL(u); return x.pathname + x.search || '/'; } catch { return u; } };
 	const KIND = { gone: 'Page not found', error: 'Server error' } as const;
 	const cols = (l: string, link = false) => [
@@ -31,8 +40,66 @@
 	<p class="mb-3 text-xs text-muted-foreground">Daily totals come from Bing's traffic endpoint (updated daily; includes web, chat, news, images, videos from 24 Mar 2023). Query and page tables use Bing's detail endpoints, which Microsoft documents as <b>updated weekly</b>, so they lag the totals and are aggregated from weekly rows.</p>
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<section><h2 class="mb-2 font-medium">Top queries</h2><DataTable rows={data.queries} cols={cols('Query')} sortKey="clicks" pageSize={15} /></section>
-		<section><h2 class="mb-2 font-medium">Top pages</h2><DataTable rows={data.pages} cols={cols('Page', true)} sortKey="clicks" pageSize={15} /></section>
+		<section>
+			<h2 class="mb-2 font-medium">Top pages</h2>
+			<DataTable rows={data.pages} cols={cols('Page', true)} sortKey="clicks" pageSize={15} onRowClick={showQueries} />
+			<p class="mt-1 text-xs text-muted-foreground">Click a row to see the searches that showed that page.</p>
+		</section>
 	</div>
+	<form method="POST" action="?/pageQueries" bind:this={pqForm} class="hidden" use:enhance={() => { pqBusy = true; return async ({ update }) => { await update({ reset: false }); pqBusy = false; }; }}>
+		<input type="hidden" name="page" value={pqPage} />
+	</form>
+	{#if pqBusy || pq || (form && 'pqError' in form)}
+		<section class="mt-6" aria-live="polite">
+			<h2 class="mb-1 font-medium">Searches for <span class="pii">{path(pq?.page ?? pqPage)}</span></h2>
+			{#if pqBusy}
+				<p class="text-xs text-muted-foreground">Asking Bing…</p>
+			{:else if form && 'pqError' in form}
+				<p class="text-xs text-warn" role="alert">{form.pqError}</p>
+			{:else if pq && !pq.queries.length}
+				<p class="text-xs text-muted-foreground">Bing lists no searches for this page in this period{pq.weeksInBing ? '' : ', or at all'}. Bing updates this weekly.</p>
+			{:else if pq}
+				<p class="mb-2 text-xs text-muted-foreground">Read live from Bing, summed over this period's weekly rows.</p>
+				<DataTable rows={pq.queries} cols={[{ key: 'query', label: 'Query', type: 'text', pii: true }, { key: 'clicks', label: 'Clicks', type: 'int', bar: true }, { key: 'impressions', label: 'Impressions', type: 'int' }, { key: 'ctr', label: 'CTR', type: 'pct' }, { key: 'position', label: 'Avg position', type: 'pos' }]} sortKey="clicks" pageSize={15} />
+			{/if}
+		</section>
+	{/if}
+	<section class="mt-6" id="crawl">
+		<h2 class="mb-1 font-medium">How Bing crawls the site</h2>
+		{#if !data.crawl}
+			<p class="card p-4 text-sm text-muted-foreground">Read on the next Bing sync.</p>
+		{:else}
+			{@const c = data.crawl}
+			{#if c.crawlError}<p class="mb-2 text-xs text-warn">Bing's crawl statistics could not be read on the last sync: {c.crawlError}</p>{/if}
+			{#if c.totals}
+				{@const t = c.totals}
+				<div class="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+					<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Pages in Bing's index</div><div class="tnum text-xl font-semibold">{fmtInt(t.inIndex)}</div>{#if t.inIndexBefore != null && t.inIndex != null}<div class="text-xs text-muted-foreground">{t.inIndex - t.inIndexBefore >= 0 ? '+' : ''}{fmtInt(t.inIndex - t.inIndexBefore)} in this period</div>{/if}</div>
+					<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Pages crawled</div><div class="tnum text-xl font-semibold">{fmtInt(t.crawled)}</div></div>
+					<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Crawl errors</div><div class="tnum text-xl font-semibold {t.crawlErrors ? 'text-bad' : ''}">{fmtInt(t.crawlErrors)}</div></div>
+					<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Blocked by robots.txt</div><div class="tnum text-xl font-semibold">{fmtInt(t.blockedByRobots)}</div></div>
+				</div>
+				<div class="card mb-3 p-4"><Chart data={c.days.map((x) => ({ date: x.date, clicks: x.crawled, impressions: x.errors, position: 0 }))} hide={['position']} labels={{ clicks: 'Pages crawled', impressions: 'Crawl errors' }} /></div>
+				<p class="mb-2 text-xs text-muted-foreground">
+					Status codes Bing got: {Object.entries(t.codes).filter(([, v]) => v > 0).map(([k, v]) => `${CODE_LABEL[k]} ${fmtInt(v)}`).join(' · ') || 'none recorded'}{t.dnsFailures || t.timeouts ? ` · DNS failures ${fmtInt(t.dnsFailures)} · timeouts ${fmtInt(t.timeouts)}` : ''}{t.malware ? ` · malware flagged ${fmtInt(t.malware)}` : ''}. Bing keeps about six months.
+				</p>
+			{:else}
+				<p class="mb-3 text-sm text-muted-foreground">Bing has no crawl statistics for this period.</p>
+			{/if}
+			<h3 class="mt-4 mb-1 text-sm font-medium">Sitemaps Bing knows</h3>
+			{#if c.feedsError}<p class="mb-2 text-xs text-warn">Bing's sitemap list could not be read on the last sync: {c.feedsError}</p>{/if}
+			{#if c.feeds.length}
+				<div class="card overflow-x-auto"><table class="w-full text-sm">
+					<thead><tr class="text-left text-xs text-muted-foreground"><th class="p-2">Sitemap</th><th class="p-2">Status</th><th class="p-2 text-right">URLs</th><th class="p-2">Last read by Bing</th><th class="p-2">Submitted</th></tr></thead>
+					<tbody>{#each c.feeds as f (f.url)}
+						<tr class="border-t"><td class="pii max-w-[20rem] truncate p-2" title={f.url}>{path(f.url)}</td><td class="p-2 {/fail|error/i.test(f.status) ? 'text-bad' : ''}">{f.status || '–'}</td><td class="tnum p-2 text-right">{fmtInt(f.urlCount)}</td><td class="p-2">{f.lastCrawled ?? 'never'}</td><td class="p-2">{f.submitted ?? '–'}</td></tr>
+					{/each}</tbody>
+				</table></div>
+			{:else if !c.feedsError}
+				<p class="card p-3 text-sm text-muted-foreground">Bing lists no sitemaps for this site. Submit one in Bing Webmaster Tools under Sitemaps.</p>
+			{/if}
+		{/if}
+	</section>
 	<section class="mt-6" id="links">
 		<div class="mb-2 flex flex-wrap items-center gap-2">
 			<h2 class="font-medium">Inbound links Bing knows about</h2>

@@ -1,4 +1,4 @@
-import type { BingClient, BingDay, BingLinksClient, BingSite, BingTermRow } from './bing';
+import type { BingClient, BingCrawlClient, BingCrawlDay, BingDay, BingFeed, BingLinksClient, BingSite, BingTermRow } from './bing';
 import type { Ga4Day, Ga4Dim, Ga4DimDay, Ga4EventDay, Ga4LandingChannel, Ga4Property, Ga4SearchTerm, Ga4SourceRow, Ga4ValueKind, Ga4ValueRow } from './ga4';
 import type { ClarityMetric } from './clarity';
 import type { GtmContainer, GtmLive } from './gtm';
@@ -28,7 +28,7 @@ const dayFactor = (date: string, end: string, seed: string) => {
 	return (dow === 0 || dow === 6 ? 0.72 : 1.05) * (0.85 + h01(seed, date) * 0.3) * (age === 17 ? 0.5 : 1);
 };
 
-export class DemoBing implements BingClient, BingLinksClient {
+export class DemoBing implements BingClient, BingLinksClient, BingCrawlClient {
 	/** Demo: Bing "accepts" every submission and keeps a small daily allowance so the quota message can be seen. */
 	async submitUrlBatch(): Promise<void> {}
 	async urlSubmissionQuota(): Promise<{ daily: number | null; monthly: number | null }> {
@@ -84,6 +84,33 @@ export class DemoBing implements BingClient, BingLinksClient {
 			});
 		}
 		return out;
+	}
+	/** Demo: six months of crawling, a slowly growing index, and a burst of 5xx errors two weeks ago so the chart has something to show. */
+	async crawlStats(siteUrl: string): Promise<BingCrawlDay[]> {
+		const s = siteOf(siteUrl);
+		const end = lastDay();
+		return eachDay(addDays(end, -180), end).map((date, i, all) => {
+			const crawled = Math.round(140 * s.scale * (0.6 + h01(s.brand, date, 'crawl') * 0.8));
+			const burst = i > all.length - 16 && i < all.length - 11;
+			const code5xx = burst ? Math.round(crawled * 0.2) : h01(date, 'e') < 0.1 ? 1 : 0;
+			const code4xx = Math.round(crawled * 0.03);
+			return { date, crawled, crawlErrors: code5xx + code4xx, inIndex: Math.round(900 * s.scale * (0.9 + (i / all.length) * 0.15)), inLinks: Math.round(400 * s.scale), code2xx: crawled - code4xx - code5xx - 2, code301: 2, code302: 0, code4xx, code5xx, otherCodes: 0, blockedByRobots: 3, malware: 0, dnsFailures: 0, timeouts: burst ? 2 : 0 };
+		});
+	}
+	async feeds(siteUrl: string): Promise<BingFeed[]> {
+		const s = siteOf(siteUrl);
+		const o = s.siteUrl.startsWith('sc-domain:') ? `https://${s.siteUrl.slice(10)}/` : s.siteUrl;
+		const end = lastDay();
+		return [
+			{ url: `${o}sitemap.xml`, type: 'Sitemap index', status: 'Success', urlCount: Math.round(300 * s.scale), submitted: addDays(end, -200), lastCrawled: addDays(end, -2), fileSize: 2048, compressed: false },
+			{ url: `${o}old-sitemap.xml`, type: 'Sitemap', status: 'Failed', urlCount: 0, submitted: addDays(end, -400), lastCrawled: addDays(end, -30), fileSize: null, compressed: false }
+		];
+	}
+	/** Demo: the searches behind one page, two of the site's queries weighted by the page. */
+	async pageQueryStats(siteUrl: string, page: string): Promise<BingTermRow[]> {
+		const s = siteOf(siteUrl);
+		const words = [`best ${s.topic}`, `${s.topic} guide`, `${s.topic} reviews`, `${s.brand} ${page.split('/').filter(Boolean).pop() ?? ''}`.trim()].filter((w, i) => h01(page, w) < 0.8 || i === 0);
+		return this.terms(siteUrl, words);
 	}
 	async queryStats(siteUrl: string) {
 		const s = siteOf(siteUrl);

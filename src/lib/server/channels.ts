@@ -1,6 +1,7 @@
 import { db } from './db';
 import { config } from './config';
-import { RealBingClient, type BingClient, type BingLinksClient } from './bing';
+import { RealBingClient, type BingClient, type BingCrawlClient, type BingLinksClient } from './bing';
+import { syncBingExtras } from './bingcrawl';
 import { bingLinksDue, syncBingLinks } from './binglinks';
 import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGa4KeyEvents, demoGa4LandingAll, demoGa4PageViews, demoGa4PageTitles, demoGa4UsersTotal, demoGa4Values, demoGa4SearchTerms, demoGtmContainers, demoGtmLive } from './demo-channels';
 import { callsLeft, CLARITY_FRESH_MS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
@@ -131,6 +132,8 @@ export async function syncBing(siteId: number, client?: BingClient) {
 		markLink(siteId, 'bing', 'idle', null, true);
 		// Inbound links and crawl issues: weekly, extra data, so a failure is recorded inside syncBingLinks and never fails this sync.
 		if (bingLinksDue(siteId)) await syncBingLinks(siteId, c as Partial<BingLinksClient>);
+		// Crawl statistics and sitemaps: daily data, also extra, also never fails this sync.
+		await syncBingExtras(siteId, link.external_id, c as Partial<BingCrawlClient>);
 		return { days: daily.length, queries: queries.length, pages: pages.length };
 	} catch (e) {
 		markLink(siteId, 'bing', 'error', e instanceof Error ? e.message : String(e));

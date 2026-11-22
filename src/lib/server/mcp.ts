@@ -23,6 +23,9 @@ import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
 import { realtimeFor } from './realtime';
 import { hourlyReport } from './hourly';
+import { bingCrawlReport, bingPageQueries } from './bingcrawl';
+import { bingClientFor } from './channels';
+import type { BingCrawlClient } from './bing';
 import { ga4ValuesReport, type ValueRow } from './ga4values';
 import { noKeyEventsText } from '../keyeventtext';
 import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
@@ -438,11 +441,26 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_bing_performance',
-		description: 'Bing Webmaster data for a site: daily clicks/impressions plus top queries and pages (weekly buckets); view=links gives inbound links and failing pages that still have links.',
-		schema: { ...siteArg, ...daysArg, limit: { type: 'integer' }, view: { type: 'string', enum: ['performance', 'links'] } },
-		run: (a, sites) => {
+		description: 'Bing Webmaster data for a site: daily clicks/impressions plus top queries and pages (weekly buckets); view=links gives inbound links and failing pages that still have links; view=crawl gives pages crawled, crawl errors, pages in Bing\'s index, status codes and the sitemaps Bing knows; view=page_queries (with `page`, a full URL) reads live the searches that showed that page.',
+		schema: { ...siteArg, ...daysArg, limit: { type: 'integer' }, view: { type: 'string', enum: ['performance', 'links', 'crawl', 'page_queries'] }, page: { type: 'string', description: 'full page URL, for view=page_queries' } },
+		run: async (a, sites) => {
 			const site = resolveSite(sites, a.site);
-			if (!linksFor(site.id).bing) return { connected: false, hint: 'Connect Bing Webmaster for this site on the Connect page.' };
+			const bingLink = linksFor(site.id).bing;
+			if (!bingLink) return { connected: false, hint: 'Connect Bing Webmaster for this site on the Connect page.' };
+			if (a.view === 'crawl') {
+				const p = periodFor(site, days(a));
+				const c = bingCrawlReport(site.id, p.start, p.end);
+				if (!c) return { fetched: false, hint: 'Crawl statistics are read on every Bing sync; they appear after the next one.' };
+				return { period: { start: p.start, end: p.end }, fetchedAt: isoOrNull(c.fetchedAt), ...(c.crawlError ? { crawlError: c.crawlError } : {}), ...(c.feedsError ? { sitemapsError: c.feedsError } : {}), note: 'Bing keeps about six months of crawl statistics.', totals: c.totals, daily: c.days.slice(-limit(a, 60)), sitemaps: c.feeds };
+			}
+			if (a.view === 'page_queries') {
+				const page = String(a.page ?? '').trim();
+				if (!/^https?:\/\//i.test(page)) throw new Error('`page` must be a full URL, e.g. one from topPages.');
+				if (!bingLink.integration_id) return { connected: false, hint: 'Reconnect Bing Webmaster on the Connect page.' };
+				const p = periodFor(site, days(a));
+				const r = await bingPageQueries(bingClientFor(bingLink.integration_id) as Partial<BingCrawlClient>, bingLink.external_id, page, p.start, p.end);
+				return { period: { start: p.start, end: p.end }, page: r.page, note: 'Read live from Bing (updated weekly), summed over the period.', queries: r.queries.slice(0, limit(a, 50)).map((q) => ({ ...q, ctr: r2(q.ctr * 100) + '%', position: q.position == null ? null : r2(q.position) })) };
+			}
 			if (a.view === 'links') {
 				const b = bingLinksFor(site);
 				return b?.report ? { fetchedAt: new Date(b.fetchedAt!).toISOString(), note: 'Bing\'s view only: small sites often have few links in it.', ...b.report } : { fetched: false, error: b?.error ?? null, hint: 'Read weekly after the Bing sync; open the Bing tab and press Refresh now.' };

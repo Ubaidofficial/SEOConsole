@@ -2,12 +2,14 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { getSite } from '$lib/server/clients';
-import { brandTerms, periodFor, summary } from '$lib/server/queries';
+import { brandTerms, periodFor, siteEnd, summary } from '$lib/server/queries';
+import { daysParam } from '$lib/server/params';
 import { linksFor } from '$lib/server/links';
 import { config } from '$lib/server/config';
 import { bingClientFor } from '$lib/server/channels';
 import { bingLinksFor, logBingLinks, syncBingLinks } from '$lib/server/binglinks';
-import type { BingLinksClient } from '$lib/server/bing';
+import type { BingCrawlClient, BingLinksClient } from '$lib/server/bing';
+import { bingCrawlReport, bingPageQueries } from '$lib/server/bingcrawl';
 import { isBranded, pctChange } from '$lib/analytics';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
@@ -35,6 +37,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		queries: terms('query'),
 		pages: terms('page'),
 		linksData: bingLinksFor(site),
+		crawl: bingCrawlReport(site.id, p.start, p.end),
 		readOnly: config.readOnly
 	};
 };
@@ -43,6 +46,21 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 const REFRESH_COOLDOWN_MS = 10 * 60_000;
 
 export const actions: Actions = {
+	/** The searches that showed one page on Bing, read live for the chosen period (nothing stored, nothing changed). */
+	pageQueries: async ({ params, request, url }) => {
+		const site = getSite(Number(params.id))!;
+		const link = linksFor(site.id).bing;
+		if (!link?.integration_id) return fail(400, { pqError: 'Bing is not linked to this site.' });
+		const page = String((await request.formData()).get('page') ?? '').trim();
+		if (!/^https?:\/\//i.test(page) || page.length > 2000) return fail(400, { pqError: 'Pick a page from the table.' });
+		const days = daysParam(url, siteEnd(site));
+		const p = periodFor(site, days);
+		try {
+			return { pageQueries: await bingPageQueries(bingClientFor(link.integration_id) as Partial<BingCrawlClient>, link.external_id, page, p.start, p.end) };
+		} catch (e) {
+			return fail(502, { pqError: e instanceof Error ? e.message : String(e), page });
+		}
+	},
 	refreshLinks: async ({ params }) => {
 		if (config.readOnly) return fail(403, { error: 'Read-only mode: nothing was fetched.' });
 		const site = getSite(Number(params.id))!;

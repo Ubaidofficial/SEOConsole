@@ -693,6 +693,24 @@ CREATE TABLE IF NOT EXISTS site_type_pages (         -- pages in the non-web sea
 	pulled_on TEXT NOT NULL,
 	PRIMARY KEY (site_id, search_type, days, which, page)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS bing_crawl (              -- Bing's crawl statistics by day (GetCrawlStats: last six months), replaced on each Bing sync
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	date TEXT NOT NULL,
+	crawled INTEGER NOT NULL, crawl_errors INTEGER NOT NULL, in_index INTEGER NOT NULL, in_links INTEGER NOT NULL,
+	code2xx INTEGER NOT NULL, code301 INTEGER NOT NULL, code302 INTEGER NOT NULL, code4xx INTEGER NOT NULL, code5xx INTEGER NOT NULL, other_codes INTEGER NOT NULL,
+	blocked_robots INTEGER NOT NULL, malware INTEGER NOT NULL, dns_failures INTEGER NOT NULL, timeouts INTEGER NOT NULL,
+	PRIMARY KEY (site_id, date)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS bing_feeds (              -- sitemaps and feeds Bing knows for the site (GetFeeds), replaced on each Bing sync
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	url TEXT NOT NULL,
+	type TEXT NOT NULL,
+	status TEXT NOT NULL,
+	url_count INTEGER,
+	submitted TEXT,
+	last_crawled TEXT,
+	PRIMARY KEY (site_id, url)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS annotation_auto (         -- change-log entries the app wrote itself; the key outlives a deleted entry so it never comes back
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	key TEXT NOT NULL,                  -- robots:<id> | gtm:<container>:<version> | sitemap-added:<day> | sitemap-removed:<day>
@@ -908,6 +926,10 @@ function migrate(db: Database.Database) {
 	if (!cols('sites').includes('hourly_at')) db.exec('ALTER TABLE sites ADD COLUMN hourly_at INTEGER');
 	if (!cols('sites').includes('hourly_pages')) db.exec('ALTER TABLE sites ADD COLUMN hourly_pages INTEGER NOT NULL DEFAULT 0');
 	if (!cols('sites').includes('type_pages_on')) db.exec('ALTER TABLE sites ADD COLUMN type_pages_on TEXT');
+	// Bing crawl statistics and sitemaps: when last read (ms) and the last failure of each (cleared on success).
+	if (!cols('sites').includes('bing_extras_at')) db.exec('ALTER TABLE sites ADD COLUMN bing_extras_at INTEGER');
+	if (!cols('sites').includes('bing_crawl_error')) db.exec('ALTER TABLE sites ADD COLUMN bing_crawl_error TEXT');
+	if (!cols('sites').includes('bing_feeds_error')) db.exec('ALTER TABLE sites ADD COLUMN bing_feeds_error TEXT');
 	if (!cols('ai_runs').includes('via')) db.exec('ALTER TABLE ai_runs ADD COLUMN via TEXT');
 	if (!cols('ai_runs').includes('cost')) db.exec('ALTER TABLE ai_runs ADD COLUMN cost REAL');
 	// The Google identity (the stable "sub") a team member signs in with, once they have used or linked "Sign in with Google".
