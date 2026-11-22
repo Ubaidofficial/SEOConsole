@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { openDb } from '../src/lib/server/db';
 import { upsertGoogleAccount } from '../src/lib/server/accounts';
 import { summarizeVersion } from '../src/lib/server/gtm';
+import { auditTracking } from '../src/lib/tracking';
 import { checkLiveScript } from '../src/lib/server/gtmlive';
 import { realtimeEvents } from '../src/lib/server/ga4';
 import { discoverEvents, findEvents, scriptUrls } from '../src/lib/server/datalayer';
@@ -23,6 +24,31 @@ describe('consolidated containers', () => {
 			['dest_ga', 'G-71YY5G1HY9', null],
 			['gaawe', 'G-71YY5G1HY9', null]
 		]);
+	});
+});
+
+describe('two Google tags for one measurement ID in a consolidated container', () => {
+	// shaped like the live version reported on a real site: built-in triggers are not in the version's trigger list, only their IDs on the tags
+	const live = summarizeVersion({
+		containerVersionId: '7',
+		name: 'v7',
+		tag: [
+			{ tagId: '3', name: 'Google Analytics (added by SEOConsole)', type: 'dest_ga', parameter: [{ type: 'template', key: 'destinationId', value: 'G-71YY5G1HY9' }], firingTriggerId: ['2147479553'] },
+			{ tagId: '12', name: 'Google Analytics G-71YY5G1HY9', type: 'dest_ga', parameter: [{ type: 'template', key: 'destinationId', value: 'G-71YY5G1HY9' }], firingTriggerId: ['2147479573'] },
+			{ tagId: '10', name: 'GA4 event - job_alert_signup (added by SEOConsole)', type: 'gaawe', parameter: [{ type: 'template', key: 'eventName', value: 'job_alert_signup' }, { type: 'template', key: 'measurementIdOverride', value: 'G-71YY5G1HY9' }], firingTriggerId: ['9'] }
+		],
+		trigger: [{ triggerId: '9', name: 'Event - job_alert_signup', type: 'customEvent' }]
+	} as never);
+
+	it('names the built-in triggers the tags fire on', () => {
+		expect(live.tags.map((t) => t.firing)).toEqual([['All Pages'], ['Initialization - All Pages'], ['Event - job_alert_signup']]);
+	});
+
+	it('the audit warns about the two destination tags (not the event tag) instead of reporting all clear', () => {
+		const f = auditTracking({ gtm: { publicId: 'GTM-PV6WJZ8J', published: true, tags: live.tags }, ga4: { measurementIds: ['G-71YY5G1HY9'] }, traffic: { days: 28, gscClicks: 1000, ga4OrganicSessions: 900 } });
+		expect(f.map((x) => x.id)).toEqual(['gtm-duplicate-google-tag']);
+		expect(f[0].detail).toContain('“Google Analytics (added by SEOConsole)” (Google Analytics destination, fires on All Pages) and “Google Analytics G-71YY5G1HY9” (Google Analytics destination, fires on Initialization - All Pages) are both unpaused');
+		expect(f[0].detail).not.toContain('job_alert_signup');
 	});
 });
 

@@ -6,7 +6,7 @@ import { enqueueLinkSync } from './jobs';
 import { ga4SourceFor, gtmSourceFor, type Ga4Source } from './channels';
 import { ga4Candidates, ga4PropertiesWithUrls, hasGa4Scope, hasGtmScope, pickGtm } from './connect';
 import { GA4_TAG_TYPES, isWebContainer, type GtmSource } from './gtm';
-import { demoGtmWriter, ga4TagBody, GA4_TAG_NAME, GTM_WRITE_SCOPES, hasGtmWrite, installTagViaWorkspace, realGtmAdmin, realGtmWriter, type GtmAdmin, type GtmWriter } from './gtmwrite';
+import { demoGtmWriter, existingGoogleTag, ga4TagBody, GA4_TAG_NAME, GTM_WRITE_SCOPES, hasGtmWrite, installTagViaWorkspace, realGtmAdmin, realGtmWriter, type GtmAdmin, type GtmWriter } from './gtmwrite';
 import { ga4TosUrl, hasGa4Write, realGa4Admin, SCOPE_GA4_EDIT, type Ga4Admin, type Ga4WebStream } from './ga4write';
 import { redirectUri } from './google';
 import { hostKey, hostsMatch } from './hosts';
@@ -130,6 +130,8 @@ export interface TagStep {
 	existing: { name: string; type: string; measurementId: string | null; firing: string[]; paused: boolean }[];
 	/** An existing tag sends to a different measurement ID than the property this site is linked to. */
 	mismatch?: string;
+	/** An unpaused tag in the live container already loads the Google tag for this measurement ID: which one, as a sentence. */
+	already?: string;
 	newContainer: boolean;
 	canPublish: boolean;
 	publishBlocked?: string;
@@ -269,7 +271,10 @@ export async function planSetup(siteId: number, choices: SetupChoices = {}, o: S
 		const gacc = accountRow(gtm.accountId);
 		const live = await api.gtmRead(gtm.accountId).liveVersion(gtm.container);
 		const found = (live?.tags ?? []).filter((t) => GA4_TAG_TYPES.has(t.type)).map((t) => ({ name: t.name, type: t.type, measurementId: t.measurementId, firing: t.firing, paused: t.paused }));
-		if (found.length) {
+		// A second Google tag for the same ID can load it twice and double-count page views: name the one already doing the job and add nothing.
+		const same = existingGoogleTag(found, measurementId);
+		if (same) tag = { ...base, state: 'present', existing: same.tags, already: same.message };
+		else if (found.length) {
 			const ids = found.map((t) => t.measurementId).filter((m): m is string => !!m);
 			const mismatch = measurementId && ids.length && !ids.includes(measurementId) ? `The container sends to ${ids.join(', ')}, but this site's GA4 property uses ${measurementId}. SEOConsole does not change existing tags: fix it in Tag Manager.` : undefined;
 			tag = { ...base, state: 'present', existing: found, mismatch };
@@ -428,7 +433,7 @@ export async function runSetup(siteId: number, choices: SetupChoices, mode: 'pub
 	let published = false;
 	let reviewUrl: string | undefined;
 	if (tag.state === 'present') {
-		steps.push({ id: 'tag', status: 'skipped', text: `The live container already has ${tag.existing.map((t) => `“${t.name}”`).join(', ')}, so no tag was added.${tag.mismatch ? ` ${tag.mismatch}` : ''}` });
+		steps.push({ id: 'tag', status: 'skipped', text: tag.already ?? `The live container already has ${tag.existing.map((t) => `“${t.name}”`).join(', ')}, so no tag was added.${tag.mismatch ? ` ${tag.mismatch}` : ''}` });
 	} else {
 		const demo = isDemoAccount(gtmAccountId);
 		const r = await installTagViaWorkspace(

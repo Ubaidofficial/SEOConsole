@@ -5,7 +5,8 @@ import { linksFor } from './links';
 import { gtmSourceFor } from './channels';
 import { claritySnippet, parseClarityId } from '../clarityinstall';
 import { DEMO_PASTED_TAG, demoInstalled, demoRepaired } from './demo-channels';
-import { GA_ID_KEYS, isBadTagIdValue, type GtmSource } from './gtm';
+import { GA_ID_KEYS, isBadTagIdValue, type GtmSource, type GtmTag } from './gtm';
+import { describeGoogleTag, GOOGLE_TAG_TYPES } from '../tracking';
 
 /**
  * Writing to Tag Manager: adding Microsoft Clarity (this file's plan/install pair), and, for "Set up GA4 & Tag Manager" (setup.ts), creating
@@ -111,6 +112,19 @@ export function demoGtmWriter(): GtmTagEditor {
 }
 
 export const GA4_TAG_NAME = 'Google tag (added by SEOConsole)';
+
+/**
+ * Before adding a Google tag for `measurementId`: the unpaused tags in the live container that already load the Google tag for that ID
+ * (a Google tag, GA4 configuration or Google Analytics destination tag), and a sentence naming them. A second one can load the tag twice
+ * and double-count page views, so the install adds nothing when `tags` is not empty.
+ */
+export function existingGoogleTag(live: Pick<GtmTag, 'name' | 'type' | 'paused' | 'firing' | 'measurementId'>[], measurementId: string | null): { tags: typeof live; message: string } | null {
+	if (!measurementId) return null;
+	const id = measurementId.toUpperCase();
+	const tags = live.filter((t) => !t.paused && GOOGLE_TAG_TYPES.has(t.type) && t.measurementId?.toUpperCase() === id);
+	if (!tags.length) return null;
+	return { tags, message: `${tags.map(describeGoogleTag).join(' and ')} already load${tags.length > 1 ? '' : 's'} ${id} from the live container, so no second Google tag is added.` };
+}
 
 /** Tag Manager accounts, and creating a web container in one. Tag Manager API v2 has no accounts.create, so an account cannot be made here. */
 export interface GtmAdmin {

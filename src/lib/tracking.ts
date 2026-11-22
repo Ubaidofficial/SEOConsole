@@ -39,7 +39,39 @@ export interface TrackingInput {
 	clarity?: ClarityInstallInput | null;
 }
 
-const GA4_TYPES = new Set(['googtag', 'gaawc', 'gaawe']);
+// dest_ga is the "Google Analytics destination" tag Tag Manager's Google tag consolidation puts in place of a Google tag (see GA4_TAG_TYPES in server/gtm.ts).
+const GA4_TYPES = new Set(['googtag', 'gaawc', 'gaawe', 'dest_ga']);
+/**
+ * Tag types that load the Google tag for their ID on the page (a Google tag, a GA4 configuration tag, a Google Analytics destination tag).
+ * GA4 event tags (gaawe) are left out: they send events to an ID rather than set it up.
+ */
+export const GOOGLE_TAG_TYPES = new Set(['googtag', 'gaawc', 'dest_ga']);
+const GOOGLE_TAG_LABEL: Record<string, string> = { googtag: 'Google tag', gaawc: 'GA4 configuration', dest_ga: 'Google Analytics destination' };
+
+/**
+ * Tag Manager's built-in triggers are not in a container version's trigger list, so a tag that fires on one names only its ID. The IDs are
+ * from third-party code that drives the Tag Manager API (Google does not document them); 2147479553 matches ALL_PAGES_TRIGGER, which installs use.
+ */
+export const BUILTIN_TRIGGERS: Record<string, string> = { '2147479553': 'All Pages', '2147479573': 'Initialization - All Pages', '2147479572': 'Consent Initialization - All Pages' };
+/** A firing-trigger name as stored, with "trigger 2147479553" (an older snapshot, or a built-in) turned into its name. */
+export const triggerLabel = (name: string) => BUILTIN_TRIGGERS[/^trigger (\d+)$/.exec(name)?.[1] ?? ''] ?? name;
+
+/** Unpaused tags in a live container that each load the Google tag, grouped by the measurement ID they target; only IDs with two or more. */
+export function duplicateGoogleTags<T extends Pick<TrackingTag, 'type' | 'paused' | 'measurementId'>>(tags: T[]): { measurementId: string; tags: T[] }[] {
+	const by = new Map<string, T[]>();
+	for (const t of tags) {
+		if (t.paused || !GOOGLE_TAG_TYPES.has(t.type) || !t.measurementId) continue;
+		const id = t.measurementId.toUpperCase();
+		by.set(id, [...(by.get(id) ?? []), t]);
+	}
+	return [...by].filter(([, ts]) => ts.length > 1).map(([measurementId, ts]) => ({ measurementId, tags: ts }));
+}
+
+/** “Name” (Google Analytics destination, fires on All Pages): how findings and the install refusal name a Google tag. */
+export function describeGoogleTag(t: Pick<TrackingTag, 'name' | 'type' | 'firing'>): string {
+	const fires = t.firing.length ? `fires on ${t.firing.map(triggerLabel).join(' and ')}` : 'no firing trigger';
+	return `“${t.name}” (${GOOGLE_TAG_LABEL[t.type] ?? t.type}, ${fires})`;
+}
 const list = (xs: string[], n = 5) => xs.slice(0, n).join(', ') + (xs.length > n ? ` and ${xs.length - n} more` : '');
 
 /**
@@ -78,6 +110,14 @@ export function auditTracking(input: TrackingInput): Finding[] {
 			out.push({ id: 'ga4-id-unknown', severity: 'info', title: 'Could not compare measurement IDs', detail: `The container sends to ${list(ids)}; Google did not return the linked property's measurement ID, so the match could not be checked.` });
 		} else if (ga4 && !ids.length && !malformed.length) {
 			out.push({ id: 'ga4-id-hidden', severity: 'info', title: 'GA4 tag IDs could not be read', detail: 'The container has GA4 tags, but their measurement IDs are not literal values or constant variables, so the match could not be checked.' });
+		}
+
+		for (const d of duplicateGoogleTags(gtm.tags)) {
+			const named = d.tags.map(describeGoogleTag);
+			out.push({
+				id: 'gtm-duplicate-google-tag', severity: 'warning', title: `${d.tags.length} Google tags load ${d.measurementId}`,
+				detail: `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]} are ${d.tags.length === 2 ? 'both' : 'all'} unpaused in the live container and target ${d.measurementId}. Two Google tags for one ID can load it twice and may count each page_view twice. In Tag Manager, pause or delete all but one, then Submit and Publish.`
+			});
 		}
 
 		const ua = gtm.tags.filter((t) => t.type === 'ua');

@@ -240,7 +240,9 @@
 			<div class="rounded-lg border p-3">
 				<dt class="text-sm font-medium">3 · Google tag</dt>
 				<dd class="mt-1 text-xs">
-					{#if p.tag?.state === 'present'}
+					{#if p.tag?.state === 'present' && p.tag.already}
+						<span style="color:var(--good)">Already in the live container:</span> {p.tag.already}
+					{:else if p.tag?.state === 'present'}
 						<span style="color:var(--good)">Already in the live container:</span> {p.tag.existing.map((t) => `“${t.name}”${t.measurementId ? ` (${t.measurementId})` : ''}`).join(', ')}. Nothing will be added.
 						{#if p.tag.mismatch}<p class="mt-1 text-warn">{p.tag.mismatch}</p>{/if}
 					{:else if p.tag?.state === 'add'}

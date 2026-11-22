@@ -1,6 +1,7 @@
 import { GoogleApiError, googleJson, accessToken, type HttpOptions } from './google';
 import { hostKey } from './hosts';
 import { scanHtml } from '../clarityinstall';
+import { BUILTIN_TRIGGERS } from '../tracking';
 
 /**
  * Tag Manager API v2, read-only. Endpoint shapes and field names below come from my knowledge of the API and have NOT
@@ -132,7 +133,8 @@ const param = (item: RawItem, ...keys: string[]) => {
 /** Reduce a raw ContainerVersion. Variable references such as {{GA4 ID}} are resolved when the variable is a constant. */
 export function summarizeVersion(v: RawVersion): GtmLive {
 	const triggers = (v.trigger ?? []).slice(0, MAX_ITEMS);
-	const triggerName = new Map(triggers.map((t) => [t.triggerId ?? '', t.name ?? t.triggerId ?? '']));
+	// Built-in triggers (All Pages, Initialization - All Pages...) are not in the version's trigger list, so they are named from their IDs.
+	const triggerName = new Map([...Object.entries(BUILTIN_TRIGGERS), ...triggers.map((t) => [t.triggerId ?? '', t.name ?? t.triggerId ?? ''] as [string, string])]);
 	// Constant variables (type "c") hold a literal in their `value` parameter.
 	const constants = new Map<string, string>();
 	for (const x of v.variable ?? []) if (x.type === 'c' && x.name) constants.set(x.name, param(x, 'value') ?? '');

@@ -328,6 +328,28 @@ describe('planSetup and runSetup', () => {
 		expect(plan.tag?.mismatch).toMatch(/G-OLDSITE01.*G-EXIST00001/);
 	});
 
+	it('an unpaused tag already loading the same measurement ID: nothing is planned or written, and the step names that tag and its trigger', async () => {
+		const opts = (tags: Partial<GtmLive['tags'][number]>[]) => fake({
+			props: [{ property: 'properties/42', displayName: 'N', account: 'A' }],
+			urls: { 'properties/42': ['https://www.northwind-tools.example'] },
+			streams: { 'properties/42': [{ measurementId: 'G-EXIST00001', uri: 'https://www.northwind-tools.example' }] },
+			containers: [container('accounts/5/containers/6', 'GTM-EXIST11', 'northwind-tools.example')],
+			live: { 'accounts/5/containers/6': live(tags) }
+		});
+		const f = opts([{ name: 'Google Analytics G-EXIST00001', type: 'dest_ga', measurementId: 'G-EXIST00001', firing: ['Initialization - All Pages'] }]);
+		const plan = await planSetup(siteId('northwind'), {}, { api: f.api });
+		expect(plan.tag).toMatchObject({ state: 'present', existing: [{ name: 'Google Analytics G-EXIST00001' }] });
+		expect(plan.tag?.already).toBe('“Google Analytics G-EXIST00001” (Google Analytics destination, fires on Initialization - All Pages) already loads G-EXIST00001 from the live container, so no second Google tag is added.');
+		const r = await runSetup(siteId('northwind'), {}, 'publish', { api: f.api });
+		expect(r.ok).toBe(true);
+		expect(f.calls).toEqual([]);
+		expect(r.steps.find((s) => s.id === 'tag')).toMatchObject({ status: 'skipped', text: plan.tag?.already });
+		// a paused Google tag for the ID does not count as doing the job (the plan still adds nothing, as before, but does not claim it loads the ID)
+		const paused = await planSetup(siteId('northwind'), {}, { api: opts([{ name: 'Old', type: 'googtag', measurementId: 'G-EXIST00001', paused: true }]).api });
+		expect(paused.tag?.state).toBe('present');
+		expect(paused.tag?.already).toBeUndefined();
+	});
+
 	it('publishing is refused when the newest version is not the live one, and so is a container never published; review-first still works', async () => {
 		const base = {
 			props: [{ property: 'properties/42', displayName: 'N', account: 'A' }],

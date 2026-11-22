@@ -14,7 +14,8 @@ import { getSite } from '../src/lib/server/clients';
 import { createApiKey } from '../src/lib/server/apikeys';
 import { handleMcp } from '../src/lib/server/mcp';
 import { queueDepth } from '../src/lib/server/jobs';
-import { auditTracking, type TrackingInput, type TrackingTag } from '../src/lib/tracking';
+import { auditTracking, duplicateGoogleTags, triggerLabel, type TrackingInput, type TrackingTag } from '../src/lib/tracking';
+import { existingGoogleTag } from '../src/lib/server/gtmwrite';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const drain = async () => {
@@ -346,5 +347,59 @@ describe('auditTracking: malformed Tag ID', () => {
 	});
 	it('older snapshots without the new fields behave as before', () => {
 		expect(ids(base({ gtm: { publicId: 'GTM-X', published: true, tags: [tag({ type: 'googtag', measurementId: null })] } }))).toEqual(['ga4-id-hidden']);
+	});
+});
+
+describe('auditTracking: two Google tags for one measurement ID', () => {
+	const gtm = (tags: TrackingTag[]) => base({ gtm: { publicId: 'GTM-X', published: true, tags } });
+	// the shape seen on a real consolidated container: two destination tags, one on All Pages, one on Initialization - All Pages
+	const pair = [
+		tag({ name: 'Google Analytics (added by SEOConsole)', type: 'dest_ga', measurementId: 'G-GOOD1234', firing: ['All Pages'] }),
+		tag({ name: 'Google Analytics G-GOOD1234', type: 'dest_ga', measurementId: 'G-GOOD1234', firing: ['trigger 2147479573'] })
+	];
+
+	it('warns, naming both tags and their triggers, and says to keep one and publish', () => {
+		const f = auditTracking(gtm(pair)).find((x) => x.id === 'gtm-duplicate-google-tag')!;
+		expect(f).toMatchObject({ severity: 'warning', title: '2 Google tags load G-GOOD1234' });
+		expect(f.detail).toContain('“Google Analytics (added by SEOConsole)” (Google Analytics destination, fires on All Pages)');
+		// an older snapshot that stored a built-in trigger by its ID still reads as its name
+		expect(f.detail).toContain('“Google Analytics G-GOOD1234” (Google Analytics destination, fires on Initialization - All Pages)');
+		expect(f.detail).toMatch(/pause or delete all but one, then Submit and Publish/);
+		expect(f.detail).not.toMatch(/\btrigger 2147/);
+	});
+
+	it('counts Google tags, GA4 configuration and destination tags alike, and matches IDs case-insensitively', () => {
+		const tags = [tag({ name: 'A', type: 'googtag', measurementId: 'G-GOOD1234' }), tag({ name: 'B', type: 'gaawc', measurementId: 'g-good1234' }), tag({ name: 'C', type: 'dest_ga', measurementId: 'G-GOOD1234' })];
+		const f = auditTracking(gtm(tags)).find((x) => x.id === 'gtm-duplicate-google-tag')!;
+		expect(f.title).toBe('3 Google tags load G-GOOD1234');
+		expect(f.detail).toMatch(/“A”.*, “B”.* and “C”.* are all unpaused/);
+	});
+
+	it('ignores paused tags, GA4 event tags, unreadable IDs and tags for different IDs', () => {
+		const one = tag({ name: 'Google tag', type: 'googtag', measurementId: 'G-GOOD1234' });
+		expect(ids(gtm([one, tag({ name: 'Old', type: 'googtag', measurementId: 'G-GOOD1234', paused: true })]))).not.toContain('gtm-duplicate-google-tag');
+		expect(ids(gtm([one, tag({ name: 'Event', type: 'gaawe', measurementId: 'G-GOOD1234' })]))).toEqual([]);
+		expect(ids(gtm([one, tag({ name: 'Var', type: 'googtag', measurementId: null })]))).toEqual([]);
+		expect(ids(gtm([one, tag({ name: 'Other', type: 'googtag', measurementId: 'G-OTHER999' })]))).not.toContain('gtm-duplicate-google-tag');
+		expect(duplicateGoogleTags([one])).toEqual([]);
+	});
+
+	it('names the built-in triggers and leaves others alone', () => {
+		expect(['trigger 2147479553', 'trigger 2147479573', 'trigger 2147479572', 'trigger 9', 'Form submit'].map(triggerLabel)).toEqual(['All Pages', 'Initialization - All Pages', 'Consent Initialization - All Pages', 'trigger 9', 'Form submit']);
+	});
+});
+
+describe('existingGoogleTag (before the Google tag install adds one)', () => {
+	const t = (o: Partial<TrackingTag>) => ({ ...tag({ name: 'GA', type: 'dest_ga', measurementId: 'G-GOOD1234' }), ...o });
+
+	it('finds the unpaused tag already loading that ID and names it with its trigger', () => {
+		const r = existingGoogleTag([t({ name: 'Google Analytics G-GOOD1234', firing: ['Initialization - All Pages'] })], 'g-good1234')!;
+		expect(r.tags.map((x) => x.name)).toEqual(['Google Analytics G-GOOD1234']);
+		expect(r.message).toBe('“Google Analytics G-GOOD1234” (Google Analytics destination, fires on Initialization - All Pages) already loads G-GOOD1234 from the live container, so no second Google tag is added.');
+	});
+
+	it('finds nothing for a paused tag, an event tag, another ID, or when the ID is not known yet', () => {
+		expect(existingGoogleTag([t({ paused: true }), t({ type: 'gaawe' }), t({ measurementId: 'G-OTHER999' }), t({ type: 'html' })], 'G-GOOD1234')).toBeNull();
+		expect(existingGoogleTag([t({})], null)).toBeNull();
 	});
 });
