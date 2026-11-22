@@ -2,19 +2,41 @@
 	import Explainer from '$lib/components/Explainer.svelte';
 	import Chart from '$lib/components/Chart.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
-	import { ago } from '$lib/format';
+	import { ago, fmtInt } from '$lib/format';
 	import { enhance } from '$app/forms';
 	import { noKeyEventsText } from '$lib/keyeventtext';
 	let { data, form } = $props();
 	let rtBusy = $state(false);
-	const cols = [
+	const TIME_TIP = 'Average engagement time per session: how long the page was in front of the visitor. Kept for the 7d, 28d, 3m, 6m and 16m periods.';
+	// Present only once the value report has synced for this period; revenue only when some session earned any.
+	const values = $derived(data.linked && data.values.linked && data.values.status === 'ok' ? data.values : null);
+	const money = $derived(values?.hasRevenue ? [{ key: 'revenue', label: 'Revenue', title: 'GA4 total revenue: purchases, subscriptions and ad revenue.', type: 'money' as const, currency: values.currency }] : []);
+	const timeCol = $derived(values ? [{ key: 'avgTime', label: 'Avg. time', title: TIME_TIP, type: 'dur' as const }] : []);
+	const cols = $derived([
 		{ key: 'channel', label: 'Channel group', type: 'text' as const },
 		{ key: 'sessions', label: 'Sessions', type: 'int' as const },
 		{ key: 'sessionsDelta', label: 'Δ sessions', type: 'delta' as const },
 		{ key: 'engagementRate', label: 'Engaged', type: 'pct' as const },
+		...timeCol,
 		{ key: 'users', label: 'Users', title: 'Unique users over the whole period, as GA4 reports Total users. Appears after the next GA4 sync.', type: 'int' as const },
 		{ key: 'keyEvents', label: 'Key events', type: 'int' as const },
+		...money,
 		{ key: 'pageviews', label: 'Views', type: 'int' as const }
+	]);
+	const valueCols = (label: string) => [
+		{ key: 'key', label, type: 'text' as const, pii: true },
+		{ key: 'sessions', label: 'Sessions', type: 'int' as const, bar: true },
+		{ key: 'engagementRate', label: 'Engaged', type: 'pct' as const },
+		{ key: 'avgEngagementSec', label: 'Avg. time', title: TIME_TIP, type: 'dur' as const },
+		{ key: 'keyEvents', label: 'Key events', type: 'int' as const },
+		{ key: 'keyEventRate', label: 'Key event rate', title: 'Key events per session.', type: 'pct' as const },
+		...(values?.hasRevenue
+			? [
+					{ key: 'revenue', label: 'Revenue', type: 'money' as const, currency: values.currency },
+					{ key: 'transactions', label: 'Transactions', type: 'int' as const },
+					{ key: 'revenuePerSession', label: 'Per session', title: 'Revenue divided by sessions.', type: 'money' as const, currency: values.currency }
+				]
+			: [])
 	];
 </script>
 
@@ -62,15 +84,43 @@
 		<h2 class="mb-1 font-medium">Right now</h2>
 		<form method="POST" action="?/realtime" use:enhance={() => { rtBusy = true; return async ({ update }) => { await update({ reset: false }); rtBusy = false; }; }} class="mb-2 flex items-center gap-2">
 			<button class="btn text-xs" disabled={rtBusy}>{rtBusy ? 'Asking GA4…' : 'Show the last 30 minutes'}</button>
-			<span class="text-xs text-muted-foreground">GA4 Realtime, read live: the quick check that a new tag sends its event.</span>
+			<span class="text-xs text-muted-foreground">GA4 Realtime, read live: who is on the site, and whether a new tag sends its event.</span>
 		</form>
 		{#if form?.realtime}
 			{@const rt = form.realtime}
 			{#if !rt.linked}<p class="text-xs text-muted-foreground">No GA4 property is linked.</p>
 			{:else if !rt.ok}<p class="text-xs text-warn">GA4 Realtime could not be read: {rt.error}</p>
-			{:else if !rt.events.length}<p class="text-xs text-muted-foreground">No events in the last 30 minutes.</p>
 			{:else}
+				{#if rt.users}
+					{@const u = rt.users}
+					{@const top = Math.max(1, ...u.minutes.map((m) => m.users))}
+					<div class="card mb-3 p-4">
+						<div class="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+							<div><span class="tnum text-3xl font-semibold">{fmtInt(u.total)}</span> <span class="text-xs text-muted-foreground">active users, last 30 minutes</span></div>
+							{#if u.devices.length}<div class="tnum text-xs text-muted-foreground">{u.devices.map((x) => `${x.device} ${fmtInt(x.users)}`).join(' · ')}</div>{/if}
+						</div>
+						{#if u.minutes.length}
+							<div class="mt-3 flex h-12 items-end gap-px" role="img" aria-label="Active users per minute, oldest on the left">
+								{#each Array.from({ length: 30 }, (_, i) => 29 - i) as ago (ago)}
+									{@const m = u.minutes.find((x) => x.minutesAgo === ago)}
+									<div class="flex-1 rounded-t-sm" style="height:{Math.max(3, ((m?.users ?? 0) / top) * 100)}%;background:var(--chart-1);opacity:{m?.users ? 1 : 0.2}" title="{ago === 0 ? 'this minute' : `${ago} min ago`}: {m?.users ?? 0} users"></div>
+								{/each}
+							</div>
+							<div class="mt-1 flex justify-between text-[11px] text-muted-foreground"><span>30 min ago</span><span>now</span></div>
+						{/if}
+						<div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+							<DataTable rows={u.pages} cols={[{ key: 'title', label: 'Page title', type: 'text', pii: true }, { key: 'users', label: 'Active users', type: 'int', bar: true }, { key: 'views', label: 'Views', type: 'int' }]} sortKey="users" filterable={false} pageSize={8} empty="Nobody on the site right now." />
+							<DataTable rows={u.countries} cols={[{ key: 'country', label: 'Country', type: 'text' }, { key: 'users', label: 'Active users', type: 'int', bar: true }]} sortKey="users" filterable={false} pageSize={8} empty="Nobody on the site right now." />
+						</div>
+						<p class="mt-2 text-[11px] text-muted-foreground">GA4 Realtime names pages by title, not address. One visitor can count under several pages.</p>
+					</div>
+				{:else if rt.usersError}
+					<p class="mb-2 text-xs text-warn">Active users could not be read: {rt.usersError}</p>
+				{/if}
+				{#if !rt.events.length}<p class="text-xs text-muted-foreground">No events in the last 30 minutes.</p>
+				{:else}
 				<DataTable rows={rt.events} cols={[{ key: 'event', label: 'Event (last 30 min)', type: 'text' }, { key: 'count', label: 'Count', type: 'int', bar: true }]} sortKey="count" filterable={false} pageSize={10} />
+				{/if}
 				{#if rt.demo}<p class="mt-1 text-xs text-muted-foreground">Demo data.</p>{/if}
 			{/if}
 		{/if}
@@ -114,13 +164,47 @@
 						{ key: 'topChannel', label: 'Main channel', type: 'text' },
 						{ key: 'organicShare', label: 'From organic', type: 'pct' },
 						{ key: 'engagementRate', label: 'Engaged', type: 'pct' },
-						{ key: 'keyEvents', label: 'Key events', type: 'int' }
+						...timeCol,
+						{ key: 'keyEvents', label: 'Key events', type: 'int' },
+						...money
 					]}
 					sortKey="sessions"
 					pageSize={15}
 				/>
 			{/if}
 		</section>
+	{/if}
+	{#if data.values.linked}
+		<section class="mt-6">
+			<h2 class="mb-1 font-medium">Campaigns</h2>
+			{#if data.values.status === 'pending'}
+				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
+			{:else if data.values.status === 'failed'}
+				<p class="text-xs text-warn">GA4 could not return campaigns on the last sync; it will be retried. {data.values.error}</p>
+			{:else if data.values.status === 'no-window'}
+				<p class="text-xs text-muted-foreground">Campaigns, engagement time and revenue are kept for the 7d, 28d, 3m, 6m and 16m periods. Pick one of those to see them.</p>
+			{:else}
+				<Explainer lead="Sessions by utm_campaign, {data.values.window.start} to {data.values.window.end}.">
+					<p>Each campaign's sessions, how long visitors stayed and what they did. GA4 puts untagged traffic under names in brackets, such as <b>(organic)</b>, <b>(direct)</b> and <b>(referral)</b>. Tag newsletter and ad links with <code>utm_campaign</code> to see them by name.{#if data.values.truncated.includes('campaign')} Very small campaigns past GA4's row limit are not shown.{/if}</p>
+				</Explainer>
+				{#if data.values.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so this is from {data.values.window.end}: {data.values.staleError}</p>{/if}
+				{#if !data.values.hasRevenue}<p class="mb-2 text-xs text-muted-foreground">No revenue recorded in this period, so revenue columns are hidden. GA4 records revenue from purchase events with a value.</p>{/if}
+				<DataTable rows={data.values.campaigns} cols={valueCols('Campaign')} sortKey="sessions" pageSize={15} />
+			{/if}
+		</section>
+		{#if data.values.status === 'ok'}
+			<section class="mt-6">
+				<h2 class="mb-1 font-medium">Site search</h2>
+				{#if !data.values.searchTerms.length}
+					<p class="text-xs text-muted-foreground">No site searches recorded in this period. GA4 counts them when enhanced measurement's site search is on and the results page keeps the term in its address, such as <code>?q=</code> or <code>?s=</code>.</p>
+				{:else}
+					<Explainer lead="What visitors typed into your own search box, {data.values.window.start} to {data.values.window.end}.">
+						<p>Terms searched often but missing from your menu or content are pages worth adding. Terms are lower-cased, so "Shipping" and "shipping" count together.</p>
+					</Explainer>
+					<DataTable rows={data.values.searchTerms} cols={[{ key: 'term', label: 'Search term', type: 'text', pii: true }, { key: 'searches', label: 'Searches', type: 'int', bar: true }, { key: 'users', label: 'Users', type: 'int' }]} sortKey="searches" pageSize={15} />
+				{/if}
+			</section>
+		{/if}
 	{/if}
 	{#if data.ai.linked}
 		<section class="mt-6">

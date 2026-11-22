@@ -20,7 +20,8 @@ export interface QueryBody {
 	type?: 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews';
 	/** Current name of `type`. The real client sends both, so an API that only knows one still filters correctly. */
 	searchType?: 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews';
-	dataState?: 'all' | 'final';
+	/** HOURLY_ALL goes with the HOUR dimension (Search Console's hourly data, up to 10 days back, may be partial). */
+	dataState?: 'all' | 'final' | 'HOURLY_ALL';
 	aggregationType?: 'auto' | 'byPage' | 'byProperty';
 	dimensionFilterGroups?: unknown[];
 }

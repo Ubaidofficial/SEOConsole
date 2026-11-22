@@ -229,7 +229,8 @@ describe('the Agents page and the tool list', () => {
 		// Raised from 48,000 to 49,000 for track_key_event (Tag Manager + GA4 key event, about 0.9 KB): the old ceiling had a few bytes of room left.
 		// Raised from 49,000 to 50,000 for setup_google_tag (the Google tag install, until then only a button on the Connect page).
 		// Raised from 50,000 to 51,000 for get_automation and set_automation (the Connect page's automation switches, about 1.1 KB after trimming).
-		expect(text.length, `tools/list is ${text.length} bytes`).toBeLessThan(51_000);
+		// Raised from 51,000 to 52,000 for get_last_24_hours (Search Console hourly data) and the new views on the GA4, Bing, Clarity and search-type tools, after trimming.
+		expect(text.length, `tools/list is ${text.length} bytes`).toBeLessThan(52_000);
 		for (const t of tools) {
 			// get_opportunities lists every kind of finding it can return, so it is the one long definition
 			const long = t.name === 'get_opportunities';

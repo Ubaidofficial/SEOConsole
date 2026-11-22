@@ -1,6 +1,6 @@
 <script lang="ts" generics="Row extends Record<string, any>">
 	import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Inbox, Search } from '@lucide/svelte';
-	import { fmtInt, fmtPct, fmtPos, fmtSigned } from '$lib/format';
+	import { fmtDur, fmtInt, fmtMoney, fmtPct, fmtPos, fmtSigned } from '$lib/format';
 	import { privacy } from '$lib/privacy.svelte';
 	import { Tip } from '$lib/components/ui/tooltip';
 	import { COLUMN_HINT } from '$lib/explain';
@@ -8,7 +8,9 @@
 	interface Col {
 		key: string;
 		label: string;
-		type?: 'text' | 'int' | 'pct' | 'pos' | 'delta' | 'link';
+		type?: 'text' | 'int' | 'pct' | 'pos' | 'delta' | 'link' | 'dur' | 'money';
+		/** ISO 4217 code for a money column, e.g. USD. */
+		currency?: string | null;
 		href?: (row: Row) => string;
 		title?: string;
 		width?: string;
@@ -78,6 +80,8 @@
 			case 'pct': return fmtPct(v as number);
 			case 'pos': return fmtPos(v as number);
 			case 'delta': return fmtSigned(v as number | null);
+			case 'dur': return fmtDur(v as number | null);
+			case 'money': return fmtMoney(v as number | null, c.currency);
 			default: return String(v ?? '');
 		}
 	}

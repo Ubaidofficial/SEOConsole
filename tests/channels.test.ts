@@ -149,7 +149,11 @@ describe('Clarity', () => {
 			await syncClarity(1);
 			expect(10 - callsLeft(integ)).toBe(3);
 			const days = db().prepare('SELECT day, COUNT(*) n FROM clarity_snapshots WHERE site_id = 1 GROUP BY day ORDER BY day').all();
-			expect(days).toEqual([{ day: '2026-11-09', n: 3 }, { day: '2026-11-10', n: 3 }]);
+			// the third call alternates Device and Channel, so the first day holds both of them
+			expect(days).toEqual([{ day: '2026-11-09', n: 4 }, { day: '2026-11-10', n: 3 }]);
+			const dims = (day: string) => (db().prepare('SELECT dimension FROM clarity_snapshots WHERE site_id = 1 AND day = ? ORDER BY dimension').all(day) as { dimension: string }[]).map((r) => r.dimension);
+			expect(dims('2026-11-09')).toEqual(['', 'Channel', 'Device', 'URL']);
+			expect(dims('2026-11-10')).toEqual(['', 'Channel', 'URL']); // Device was read last, so Channel's turn
 		} finally {
 			vi.useRealTimers();
 		}

@@ -5,6 +5,7 @@ import { getSite } from '$lib/server/clients';
 import { dailySeries, periodFor } from '$lib/server/queries';
 import { linksFor } from '$lib/server/links';
 import { pctChange } from '$lib/analytics';
+import { ga4ValuesReport } from '$lib/server/ga4values';
 import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport } from '$lib/server/insights';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
@@ -20,16 +21,23 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 	const organic = new Map((d.prepare("SELECT date, sessions FROM ga4_daily WHERE site_id = ? AND channel = 'Organic Search' AND date BETWEEN ? AND ?").all(site.id, p.start, p.end) as { date: string; sessions: number }[]).map((r) => [r.date, r.sessions]));
 	// Unique users over the whole window (GA4's "Total users"). Daily users cannot be added across days.
 	const uniqueUsers = new Map((d.prepare('SELECT channel, users FROM ga4_period_users WHERE site_id = ? AND days = ?').all(site.id, days) as { channel: string; users: number }[]).map((r) => [r.channel, r.users]));
+	// Engagement time and revenue are whole-window reports, kept for the stored period lengths only: null for any other period.
+	const values = ga4ValuesReport(site, days);
+	const ok = values.linked && values.status === 'ok' ? values : null;
+	const valueOf = new Map((ok?.channels ?? []).map((r) => [r.key, r]));
+	const landing = landingPagesReport(site, days);
+	const pageValue = new Map((ok?.landing ?? []).map((r) => [r.key, r]));
 	return {
 		linked: true as const,
 		ai: aiTrafficReport(site, days),
 		sources: trafficSourcesReport(site, days),
-		landing: landingPagesReport(site, days),
+		landing: landing.linked && landing.status === 'ok' ? { ...landing, rows: landing.rows.map((r) => ({ ...r, avgTime: pageValue.get(r.page)?.avgEngagementSec ?? null, revenue: pageValue.get(r.page)?.revenue ?? null })) } : landing,
+		values,
 		keyEvents: keyEventsReport(site, days),
 		property: link.label ?? link.external_id,
 		status: { state: link.sync_status, message: link.sync_message, lastSync: link.last_sync_at },
 		series: dailySeries(site.id, p.start, p.end).map((g) => ({ date: g.date, clicks: organic.get(g.date) ?? 0, impressions: g.clicks, position: 0 })),
-		channels: byChannel(p.start, p.end).map((r) => ({ channel: r.channel, sessions: r.sessions, sessionsDelta: pctChange(r.sessions, prev.get(r.channel)?.sessions ?? 0), engagementRate: r.sessions ? r.engaged / r.sessions : 0, users: uniqueUsers.get(r.channel) ?? null, keyEvents: Math.round(r.keyEvents * 10) / 10, pageviews: r.pageviews }))
+		channels: byChannel(p.start, p.end).map((r) => ({ channel: r.channel, sessions: r.sessions, sessionsDelta: pctChange(r.sessions, prev.get(r.channel)?.sessions ?? 0), engagementRate: r.sessions ? r.engaged / r.sessions : 0, users: uniqueUsers.get(r.channel) ?? null, keyEvents: Math.round(r.keyEvents * 10) / 10, pageviews: r.pageviews, avgTime: valueOf.get(r.channel)?.avgEngagementSec ?? null, revenue: valueOf.get(r.channel)?.revenue ?? null }))
 	};
 };
 

@@ -7,6 +7,7 @@
 	import { ConfirmButton } from '$lib/components/ui/confirm';
 	import { fmtInt, fmtPct, fmtPos, fmtSigned } from '$lib/format';
 	import PlanList from '$lib/components/PlanList.svelte';
+	import HourlyCard from '$lib/components/HourlyCard.svelte';
 	import RankMix from '$lib/components/viz/RankMix.svelte';
 	import SegBar from '$lib/components/viz/SegBar.svelte';
 	import { POSITION_BUCKETS } from '$lib/plan';
@@ -102,6 +103,8 @@
 	</div>
 	<Chart data={data.series} {markers} anomalies={data.anomalies} />
 	</section>
+
+{#if data.hourly}<HourlyCard data={data.hourly} pagesHref="/sites/{page.params.id}/pages?days=1" />{/if}
 
 	<div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
 	<section class="rounded-2xl border bg-card p-5 shadow-xs lg:col-span-2" aria-labelledby="rank-h">

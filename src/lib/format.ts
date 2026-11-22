@@ -17,3 +17,20 @@ export function ago(ms: number | null): string {
 	if (s < 129600) return `${Math.round(s / 3600)} h ago`;
 	return `${Math.round(s / 86400)} d ago`;
 }
+/** Seconds as "1m 05s" (or "42s"): how GA4 shows engagement time. */
+export const fmtDur = (s: number | null | undefined) => {
+	if (s == null || !Number.isFinite(s)) return '–';
+	const n = Math.round(s);
+	return n < 60 ? `${n}s` : `${Math.floor(n / 60)}m ${String(n % 60).padStart(2, '0')}s`;
+};
+/** An amount in a currency (ISO 4217 code). Without a known code the number is shown plain rather than with a guessed symbol. */
+export const fmtMoney = (n: number | null | undefined, currency?: string | null) => {
+	if (n == null || !Number.isFinite(n)) return '–';
+	const digits = Math.abs(n) >= 1000 ? 0 : 2;
+	if (!currency) return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+	try {
+		return n.toLocaleString('en-US', { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits });
+	} catch {
+		return `${n.toLocaleString('en-US', { maximumFractionDigits: digits })} ${currency}`;
+	}
+};

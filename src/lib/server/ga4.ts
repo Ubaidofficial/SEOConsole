@@ -386,6 +386,43 @@ export async function realtimeEvents(accountId: number, property: string, http: 
 	return (r.rows ?? []).map((row) => ({ event: row.dimensionValues[0].value, count: Number(row.metricValues[0].value) }));
 }
 
+export interface Ga4RealtimeUsers {
+	/** Active users in the last 30 minutes (GA4 Realtime activeUsers). */
+	total: number;
+	/** By page title: Realtime has no page path, only unifiedScreenName (the title on the web). */
+	pages: { title: string; users: number; views: number }[];
+	countries: { country: string; users: number }[];
+	devices: { device: string; users: number }[];
+	/** Active users per minute, 0 = this minute, up to 29. */
+	minutes: { minutesAgo: number; users: number }[];
+}
+
+/**
+ * Who is on the site right now (GA4 Realtime, last 30 minutes): active users in total and by page title, country, device and minute. Five
+ * small Realtime requests, read live. A user can appear under several pages, so the breakdowns need not add up to the total.
+ */
+export async function realtimeUsers(accountId: number, property: string, http: HttpOptions = {}): Promise<Ga4RealtimeUsers> {
+	type R = { rows?: { dimensionValues?: { value: string }[]; metricValues: { value: string }[] }[] };
+	const run = (body: object) => googleJson<R>(tok(accountId), `${DATA}/${property}:runRealtimeReport`, { method: 'POST', body: JSON.stringify(body) }, http);
+	const by = (dim: string, metrics = ['activeUsers'], limit = 50) => run({ dimensions: [{ name: dim }], metrics: metrics.map((name) => ({ name })), orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit });
+	const [total, pages, countries, devices, minutes] = await Promise.all([
+		run({ metrics: [{ name: 'activeUsers' }] }),
+		by('unifiedScreenName', ['activeUsers', 'screenPageViews']),
+		by('country'),
+		by('deviceCategory', ['activeUsers'], 10),
+		run({ dimensions: [{ name: 'minutesAgo' }], metrics: [{ name: 'activeUsers' }], limit: 30 })
+	]);
+	const v = (x: { value: string } | undefined) => Number(x?.value) || 0;
+	const dim = (row: NonNullable<R['rows']>[number]) => row.dimensionValues?.[0]?.value || '(not set)';
+	return {
+		total: v(total.rows?.[0]?.metricValues[0]),
+		pages: (pages.rows ?? []).map((r) => ({ title: dim(r), users: v(r.metricValues[0]), views: v(r.metricValues[1]) })),
+		countries: (countries.rows ?? []).map((r) => ({ country: dim(r), users: v(r.metricValues[0]) })),
+		devices: (devices.rows ?? []).map((r) => ({ device: dim(r), users: v(r.metricValues[0]) })),
+		minutes: (minutes.rows ?? []).map((r) => ({ minutesAgo: Number(dim(r)) || 0, users: v(r.metricValues[0]) })).sort((a, b) => a.minutesAgo - b.minutesAgo)
+	};
+}
+
 export interface Ga4SourceRow { source: string; medium: string; channel: string; sessions: number; engagedSessions: number; keyEvents: number }
 
 /** How many source / medium rows a window keeps: the long tail past this is a handful of sessions each. */
@@ -510,4 +547,87 @@ export async function aiAssistantDaily(accountId: number, property: string, star
 		if (offset + LIMIT >= MAX_ROWS) throw new Error(`GA4 returned more than ${MAX_ROWS.toLocaleString('en-US')} AI-assistant rows for ${startDate} to ${endDate}; the test cannot be judged on a partial load.`);
 	}
 	return [...merged.values()];
+}
+
+/** What a value report is broken down by: GA4 dimension per kind. */
+export const VALUE_DIMS = { channel: 'sessionDefaultChannelGroup', landing: 'landingPagePlusQueryString', campaign: 'sessionCampaignName' } as const;
+export type Ga4ValueKind = keyof typeof VALUE_DIMS;
+/**
+ * Sessions with what they were worth: engagement time (seconds, GA4 userEngagementDuration), revenue (totalRevenue: purchases,
+ * subscriptions and ad revenue, in the property's currency) and transactions. A property without e-commerce returns 0 revenue.
+ */
+export interface Ga4ValueRow { key: string; sessions: number; engagedSessions: number; keyEvents: number; engagementSec: number; revenue: number; transactions: number }
+/** How many rows a value report keeps, per kind (largest by sessions first). */
+export const VALUE_ROW_LIMIT: Record<Ga4ValueKind, number> = { channel: 100, landing: 5000, campaign: 1000 };
+
+/** Sessions, engagement time, revenue and transactions over a whole window, by channel group, landing page or campaign. */
+export async function valueReport(accountId: number, property: string, kind: Ga4ValueKind, startDate: string, endDate: string, http: HttpOptions = {}): Promise<{ rows: Ga4ValueRow[]; currency: string | null; truncated: boolean }> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[]; metadata?: { currencyCode?: string } }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				dateRanges: [{ startDate, endDate }],
+				dimensions: [{ name: VALUE_DIMS[kind] }],
+				metrics: ['sessions', 'engagedSessions', 'keyEvents', 'userEngagementDuration', 'totalRevenue', 'transactions'].map((name) => ({ name })),
+				orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+				limit: VALUE_ROW_LIMIT[kind]
+			})
+		},
+		http
+	);
+	const merged = new Map<string, Ga4ValueRow>();
+	for (const row of r.rows ?? []) {
+		// Landing pages that differ only by query string are one page, as everywhere else in the app.
+		const raw = row.dimensionValues[0].value;
+		const key = kind === 'landing' ? landingPath(raw) : raw || '(not set)';
+		const m = row.metricValues.map((v) => Number(v.value) || 0);
+		const cur = merged.get(key) ?? { key, sessions: 0, engagedSessions: 0, keyEvents: 0, engagementSec: 0, revenue: 0, transactions: 0 };
+		cur.sessions += m[0];
+		cur.engagedSessions += m[1];
+		cur.keyEvents += m[2];
+		cur.engagementSec += m[3];
+		cur.revenue += m[4];
+		cur.transactions += m[5];
+		merged.set(key, cur);
+	}
+	return { rows: [...merged.values()], currency: r.metadata?.currencyCode || null, truncated: (r.rows?.length ?? 0) >= VALUE_ROW_LIMIT[kind] };
+}
+
+export interface Ga4SearchTerm { term: string; searches: number; users: number }
+export const SEARCH_TERM_LIMIT = 500;
+
+/**
+ * What visitors typed into the site's own search box over a window: GA4's searchTerm on view_search_results events, which enhanced
+ * measurement records when a results page carries the term in its address (?q=, ?s=, ?search= and similar). [] when site search is not tracked.
+ */
+export async function siteSearchTerms(accountId: number, property: string, startDate: string, endDate: string, http: HttpOptions = {}): Promise<Ga4SearchTerm[]> {
+	const r = await googleJson<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+		tok(accountId),
+		`${DATA}/${property}:runReport`,
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				dateRanges: [{ startDate, endDate }],
+				dimensions: [{ name: 'searchTerm' }],
+				metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }],
+				dimensionFilter: { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'view_search_results' } } },
+				orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+				limit: SEARCH_TERM_LIMIT
+			})
+		},
+		http
+	);
+	const merged = new Map<string, Ga4SearchTerm>();
+	for (const row of r.rows ?? []) {
+		const term = row.dimensionValues[0].value.trim().toLowerCase();
+		if (!term || term === '(not set)') continue;
+		const cur = merged.get(term) ?? { term, searches: 0, users: 0 };
+		cur.searches += Number(row.metricValues[0].value) || 0;
+		// Users of differently cased spellings can overlap; the larger count is the honest floor.
+		cur.users = Math.max(cur.users, Number(row.metricValues[1].value) || 0);
+		merged.set(term, cur);
+	}
+	return [...merged.values()].sort((a, b) => b.searches - a.searches);
 }
