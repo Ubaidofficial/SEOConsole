@@ -253,8 +253,8 @@
 	<!-- Conversations -->
 	<aside class="lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto">
 		<div class="flex items-center gap-2">
-			<button type="button" onclick={newChat} class="inline-flex flex-1 items-center gap-2 rounded-lg border bg-card px-3 py-2 text-[13px] font-medium shadow-xs transition-colors hover:bg-accent"><MessageSquarePlus class="size-4" />New chat</button>
-			<button type="button" class="inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-2 text-[13px] lg:hidden" aria-expanded={historyOpen} onclick={() => (historyOpen = !historyOpen)}><History class="size-4" />History</button>
+			<button type="button" onclick={newChat} class="btn flex-1 justify-start"><MessageSquarePlus class="size-4" />New chat</button>
+			<button type="button" class="btn lg:hidden" aria-expanded={historyOpen} onclick={() => (historyOpen = !historyOpen)}><History class="size-4" />History</button>
 		</div>
 		<nav class="mt-3 space-y-0.5 {historyOpen ? '' : 'max-lg:hidden'}" aria-label="Conversations">
 			{#if threads.length === 0}
@@ -338,9 +338,9 @@
 							{/each}
 						</ul>
 						<div class="mt-3 flex flex-wrap gap-2">
-							<button type="button" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-90" onclick={() => decide(true)}><Check class="size-4" />{approvals.length > 1 ? 'Approve all' : 'Approve'}</button>
-							{#if approvals.length > 1}<button type="button" class="rounded-lg border px-3 py-1.5 text-[13px] hover:bg-accent" onclick={() => decide('each', picks)}>Approve selected</button>{/if}
-							<button type="button" class="rounded-lg border px-3 py-1.5 text-[13px] hover:bg-accent" onclick={() => decide(false)}>Decline</button>
+							<button type="button" class="btn btn-primary btn-sm" onclick={() => decide(true)}><Check class="size-4" />{approvals.length > 1 ? 'Approve all' : 'Approve'}</button>
+							{#if approvals.length > 1}<button type="button" class="btn btn-sm" onclick={() => decide('each', picks)}>Approve selected</button>{/if}
+							<button type="button" class="btn btn-sm" onclick={() => decide(false)}>Decline</button>
 						</div>
 					</li>
 				{/if}
