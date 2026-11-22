@@ -23,6 +23,8 @@ import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
 import { realtimeFor } from './realtime';
 import { hourlyReport } from './hourly';
+import { clarityByDimension, clarityDashboardUrl } from '../claritydims';
+import { clarityInstallFor } from './clarityscan';
 import { bingCrawlReport, bingPageQueries } from './bingcrawl';
 import { bingClientFor } from './channels';
 import type { BingCrawlClient } from './bing';
@@ -128,6 +130,7 @@ const reportJson = (rep: Awaited<ReturnType<typeof submitForIndexing>>) => ({
 	addedToWatchList: rep.watching,
 	note: rep.note
 });
+const pctOrNull = (n: number | null) => (n == null ? null : r2(n * 100) + '%');
 const isoOrNull = (t: number | null | undefined) => (t ? new Date(t).toISOString() : null);
 
 /** get_ga4_summary view=pages (landing pages, every channel) or view=events (key events by name). */
@@ -755,13 +758,18 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_clarity_snapshot',
-		description: 'Latest stored Microsoft Clarity snapshot (last ~24h when it was taken; Clarity only exposes 1-3 days and 10 API calls/day/project, so SEOConsole refreshes the daily snapshot three times a day (every 8½ hours) and keeps one per day). dimension: "" (totals), URL or Device.',
-		schema: { ...siteArg, dimension: { type: 'string', enum: ['', 'URL', 'Device'] } },
+		description: 'Latest stored Microsoft Clarity snapshot (last ~24h when it was taken; Clarity only exposes 1-3 days and 10 API calls/day/project, so SEOConsole refreshes the daily snapshot three times a day (every 8½ hours), alternating the Device and Channel breakdowns, and keeps one per day). dimension: "" (totals), URL, Device or Channel (adds a byChannel summary: sessions, rage/dead/quick-back shares, scroll depth, active time per traffic channel). clarityUrl opens the project in Clarity, where recordings and heatmaps are (filter Recordings by Visited URL).',
+		schema: { ...siteArg, dimension: { type: 'string', enum: ['', 'URL', 'Device', 'Channel'] } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			if (!linksFor(site.id).clarity) return { connected: false, hint: 'Add a Clarity API token for this site on the Connect page.' };
-			const row = db().prepare('SELECT day, payload FROM clarity_snapshots WHERE site_id = ? AND dimension = ? ORDER BY day DESC LIMIT 1').get(site.id, String(a.dimension ?? '')) as { day: string; payload: string } | undefined;
-			return row ? { day: row.day, metrics: JSON.parse(row.payload) } : { connected: true, note: 'No snapshot stored yet.' };
+			const dim = String(a.dimension ?? '');
+			const clarityUrl = clarityDashboardUrl(clarityInstallFor(site.id).ids[0]);
+			const row = db().prepare('SELECT day, payload FROM clarity_snapshots WHERE site_id = ? AND dimension = ? ORDER BY day DESC LIMIT 1').get(site.id, dim) as { day: string; payload: string } | undefined;
+			if (!row) return { connected: true, clarityUrl, note: dim === 'Channel' ? 'The channel breakdown alternates with the device breakdown; it appears after the next Clarity refresh.' : 'No snapshot stored yet.' };
+			const metrics = JSON.parse(row.payload);
+			if (dim === 'Channel') return { day: row.day, clarityUrl, byChannel: clarityByDimension(metrics, 'Channel').map((c) => ({ channel: c.value, sessions: c.sessions, botSessions: c.botSessions, rageClicks: pctOrNull(c.rageClicks), deadClicks: pctOrNull(c.deadClicks), quickBacks: pctOrNull(c.quickBacks), scrollDepth: pctOrNull(c.scrollDepth), activeTimeSeconds: c.activeTime })), metrics };
+			return { day: row.day, clarityUrl, metrics };
 		}
 	},
 	{

@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { fmtInt, ago } from '$lib/format';
 	import ClarityInstall from '$lib/components/ClarityInstall.svelte';
+	import DataTable from '$lib/components/DataTable.svelte';
 	let { data, form } = $props();
 
 	type Metric = { metricName: string; information: Record<string, string | number>[] };
@@ -30,11 +31,59 @@
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">API calls left today</div><div class="tnum text-xl font-semibold">{data.callsLeft}<span class="text-sm text-muted-foreground"> / 10</span></div>
 			<form method="POST" action="/connect?/resync" use:enhance><input type="hidden" name="siteId" value={page.params.id} /><input type="hidden" name="kind" value="clarity" /><button class="btn btn-ghost btn-xs">refresh now (uses calls)</button></form></div>
 	</div>
-	<p class="mb-3 text-xs text-muted-foreground">Snapshot {data.totals?.day ?? '–'} · {data.status.state === 'error' ? data.status.message : 'synced ' + ago(data.status.lastSync)}. Clarity allows 10 API calls a day and shows only 1–3 days, so this refreshes every 8½ hours (9 calls, one kept for you) and keeps a daily history. Columns are as Clarity returns them.</p>
+	<p class="mb-3 text-xs text-muted-foreground">Snapshot {data.totals?.day ?? '–'} · {data.status.state === 'error' ? data.status.message : 'synced ' + ago(data.status.lastSync)}. Clarity allows 10 API calls a day and shows only 1–3 days, so this refreshes every 8½ hours (9 calls, one kept for you), alternating the device and channel breakdowns, and keeps a daily history. Columns are as Clarity returns them.</p>
 
 	{#if data.history.length > 1}
 		<section class="card mb-4 p-4"><h2 class="mb-2 font-medium">Stored daily snapshots</h2>
 			<div class="tnum flex gap-4 overflow-x-auto text-xs">{#each data.history as h}<div><div class="text-muted-foreground">{h.day.slice(5)}</div><div class="font-medium">{fmtInt(h.sessions)}</div></div>{/each}</div>
+		</section>
+	{/if}
+
+	<div class="mb-4 flex flex-wrap items-center gap-3">
+		<a class="btn btn-sm" href={data.clarityUrl} target="_blank" rel="noopener noreferrer">Open in Clarity ↗</a>
+		<span class="text-xs text-muted-foreground">Recordings and heatmaps stay in Clarity. To watch one page, open Recordings and add the filter <b>Visited URL</b> with its address.</span>
+	</div>
+
+	{#if data.channels}
+		<section class="mb-5">
+			<h2 class="mb-1 font-medium">Behaviour by traffic channel</h2>
+			<p class="mb-2 text-xs text-muted-foreground">Snapshot {data.channels.day}. Do search visitors struggle more than others? A channel with far more rage or dead clicks points at a landing page that does not match what it promised.</p>
+			<DataTable
+				rows={data.channels.rows}
+				cols={[
+					{ key: 'value', label: 'Channel', type: 'text' },
+					{ key: 'sessions', label: 'Sessions', type: 'int', bar: true },
+					{ key: 'rageClicks', label: 'Rage clicks', title: 'Share of sessions with rage clicks', type: 'pct' },
+					{ key: 'deadClicks', label: 'Dead clicks', title: 'Share of sessions with clicks that did nothing', type: 'pct' },
+					{ key: 'quickBacks', label: 'Quick backs', title: 'Share of sessions that left a page and came straight back', type: 'pct' },
+					{ key: 'scrollDepth', label: 'Scroll depth', type: 'pct' },
+					{ key: 'activeTime', label: 'Active time', type: 'dur' }
+				]}
+				sortKey="sessions"
+				filterable={false}
+			/>
+		</section>
+	{:else}
+		<p class="mb-5 text-xs text-muted-foreground">Behaviour by traffic channel appears after the next Clarity refresh (it alternates with the device breakdown to stay inside Clarity's 10 calls a day).</p>
+	{/if}
+
+	{#if data.frustrated.length}
+		<section class="mb-5">
+			<h2 class="mb-1 font-medium">Pages to watch in Clarity</h2>
+			<p class="mb-2 text-xs text-muted-foreground">Where the largest share of sessions hit rage or dead clicks in the latest snapshot. Watch a few recordings of the top ones.</p>
+			<DataTable
+				rows={data.frustrated}
+				cols={[
+					{ key: 'url', label: 'Page', type: 'text', pii: true },
+					{ key: 'sessions', label: 'Sessions', type: 'int' },
+					{ key: 'rageClicks', label: 'With rage clicks', type: 'int' },
+					{ key: 'deadClicks', label: 'With dead clicks', type: 'int' },
+					{ key: 'frustration', label: 'Share', title: 'Sessions with rage or dead clicks, as a share of the page\'s sessions (a session with both counts twice)', type: 'pct', bar: true }
+				]}
+				sortKey="frustration"
+				filterable={false}
+				pageSize={10}
+			/>
 		</section>
 	{/if}
 

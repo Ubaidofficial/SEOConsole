@@ -392,10 +392,11 @@ const slug = s.topic.replace(/\s+/g, '-');
 		const key = dim || null;
 		const row = (extra: Record<string, string | number>, i = 0) => ({ ...(key ? { [key]: String(extra._k ?? `v${i}`) } : {}), ...Object.fromEntries(Object.entries(extra).filter(([k]) => k !== '_k')) });
 		// By URL: the site's own pages. The products page is the planted problem: 19 of its 140 sessions had dead clicks.
-		const values = dim === 'URL' ? ['/', `/guides/${slug}-1`, `/products/${slug}-6`, `/blog/${slug}-10`] : dim === 'Device' ? ['Mobile', 'PC', 'Tablet'] : [null];
-		const sess = dim === 'URL' ? [3200, 900, 140, 600] : [3200, 2600, 2000];
-		const dead = dim === 'URL' ? [120, 30, 19, 14] : [120, 100, 80];
-		const rage = dim === 'URL' ? [36, 8, 11, 4] : [36, 30, 24];
+		// By channel: social visitors rage-click far more than searchers, so the comparison has something to show.
+		const values = dim === 'URL' ? ['/', `/guides/${slug}-1`, `/products/${slug}-6`, `/blog/${slug}-10`] : dim === 'Device' ? ['Mobile', 'PC', 'Tablet'] : dim === 'Channel' ? ['Organic search', 'Direct', 'Referral', 'Social'] : [null];
+		const sess = dim === 'URL' ? [3200, 900, 140, 600] : dim === 'Channel' ? [4100, 1900, 600, 1200] : [3200, 2600, 2000];
+		const dead = dim === 'URL' ? [120, 30, 19, 14] : dim === 'Channel' ? [110, 70, 20, 100] : [120, 100, 80];
+		const rage = dim === 'URL' ? [36, 8, 11, 4] : dim === 'Channel' ? [30, 20, 6, 34] : [36, 30, 24];
 		// pixelforge and northwind have no Clarity script (see demoPageFetch), so they record nothing until it is installed through Tag Manager
 		const container = demoGtmContainers().find((c) => c.name === hostOfDemo(s.siteUrl))?.path;
 		if ((s.brand === 'pixelforge' || s.brand === 'northwind') && !(container && demoInstalled.has(container))) {

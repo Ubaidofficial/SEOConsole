@@ -4,7 +4,7 @@ import { RealBingClient, type BingClient, type BingCrawlClient, type BingLinksCl
 import { syncBingExtras } from './bingcrawl';
 import { bingLinksDue, syncBingLinks } from './binglinks';
 import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGa4KeyEvents, demoGa4LandingAll, demoGa4PageViews, demoGa4PageTitles, demoGa4UsersTotal, demoGa4Values, demoGa4SearchTerms, demoGtmContainers, demoGtmLive } from './demo-channels';
-import { callsLeft, CLARITY_FRESH_MS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
+import { callsLeft, CLARITY_FRESH_MS, CLARITY_ROTATING_DIMENSIONS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
 import * as ga4 from './ga4';
 import * as gtm from './gtm';
 import { addDays, pacificToday, retentionHorizon } from './dates';
@@ -430,8 +430,14 @@ export async function syncClarity(siteId: number, o: { force?: boolean; fetchImp
 	try {
 		const day = utcDay();
 		let calls = 0;
-		for (const dim of CLARITY_SYNC_DIMENSIONS) {
-			const have = db().prepare('SELECT fetched_at FROM clarity_snapshots WHERE site_id = ? AND day = ? AND dimension = ?').get(siteId, day, dim) as { fetched_at: number } | undefined;
+		// The rotating breakdown read longest ago (never read counts as oldest; Device first on a tie, as before rotation existed).
+		const lastRead = (dim: string) => (db().prepare('SELECT MAX(fetched_at) t FROM clarity_snapshots WHERE site_id = ? AND dimension = ?').get(siteId, dim) as { t: number | null }).t ?? 0;
+		const rotating = [...CLARITY_ROTATING_DIMENSIONS].sort((a, b) => lastRead(a) - lastRead(b))[0];
+		const dims = [...CLARITY_SYNC_DIMENSIONS.filter((x) => !(CLARITY_ROTATING_DIMENSIONS as readonly string[]).includes(x)), rotating];
+		for (const dim of dims) {
+			// The rotating slot is one call: it is fresh when either of its breakdowns was read today within the window.
+			const slot = dim === rotating ? [...CLARITY_ROTATING_DIMENSIONS] : [dim];
+			const have = db().prepare(`SELECT MAX(fetched_at) fetched_at FROM clarity_snapshots WHERE site_id = ? AND day = ? AND dimension IN (${slot.map(() => '?').join(',')}) HAVING fetched_at IS NOT NULL`).get(siteId, day, ...slot) as { fetched_at: number } | undefined;
 			// fresh enough: skip (the scheduler comes back every 8.5 hours); "refresh now" forces it
 			if (have && !o.force && Date.now() - have.fetched_at < CLARITY_FRESH_MS) continue;
 			if (callsLeft(integ.id) <= 1) break; // always leave one call for the user

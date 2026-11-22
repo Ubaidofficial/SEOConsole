@@ -12,8 +12,13 @@ export const CLARITY_DAILY_LIMIT = 10; // per project per day
 export const CLARITY_REFRESH_MS = 8.5 * 3600_000;
 /** A snapshot younger than this is not fetched again by the scheduler (a little under the refresh interval, so timing jitter never skips a run). */
 export const CLARITY_FRESH_MS = 8 * 3600_000;
-/** Calls per scheduled sync: totals, by URL, by device. Leaves headroom for manual refreshes. */
+/** Calls per scheduled sync: totals, by URL, and one rotating breakdown. Leaves headroom for manual refreshes. */
 export const CLARITY_SYNC_DIMENSIONS = ['', 'URL', 'Device'] as const;
+/**
+ * The third call of each refresh alternates between these, whichever was read longest ago, so device and traffic channel are both kept
+ * (each about once or twice a day) without a fourth call: 3 refreshes × 3 calls still fit Clarity's 10 a day.
+ */
+export const CLARITY_ROTATING_DIMENSIONS = ['Device', 'Channel'] as const;
 
 export class ClarityApiError extends Error {
 	constructor(message: string, readonly status: number) {
