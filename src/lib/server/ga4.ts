@@ -386,6 +386,43 @@ export async function realtimeEvents(accountId: number, property: string, http: 
 	return (r.rows ?? []).map((row) => ({ event: row.dimensionValues[0].value, count: Number(row.metricValues[0].value) }));
 }
 
+export interface Ga4RealtimeUsers {
+	/** Active users in the last 30 minutes (GA4 Realtime activeUsers). */
+	total: number;
+	/** By page title: Realtime has no page path, only unifiedScreenName (the title on the web). */
+	pages: { title: string; users: number; views: number }[];
+	countries: { country: string; users: number }[];
+	devices: { device: string; users: number }[];
+	/** Active users per minute, 0 = this minute, up to 29. */
+	minutes: { minutesAgo: number; users: number }[];
+}
+
+/**
+ * Who is on the site right now (GA4 Realtime, last 30 minutes): active users in total and by page title, country, device and minute. Five
+ * small Realtime requests, read live. A user can appear under several pages, so the breakdowns need not add up to the total.
+ */
+export async function realtimeUsers(accountId: number, property: string, http: HttpOptions = {}): Promise<Ga4RealtimeUsers> {
+	type R = { rows?: { dimensionValues?: { value: string }[]; metricValues: { value: string }[] }[] };
+	const run = (body: object) => googleJson<R>(tok(accountId), `${DATA}/${property}:runRealtimeReport`, { method: 'POST', body: JSON.stringify(body) }, http);
+	const by = (dim: string, metrics = ['activeUsers'], limit = 50) => run({ dimensions: [{ name: dim }], metrics: metrics.map((name) => ({ name })), orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }], limit });
+	const [total, pages, countries, devices, minutes] = await Promise.all([
+		run({ metrics: [{ name: 'activeUsers' }] }),
+		by('unifiedScreenName', ['activeUsers', 'screenPageViews']),
+		by('country'),
+		by('deviceCategory', ['activeUsers'], 10),
+		run({ dimensions: [{ name: 'minutesAgo' }], metrics: [{ name: 'activeUsers' }], limit: 30 })
+	]);
+	const v = (x: { value: string } | undefined) => Number(x?.value) || 0;
+	const dim = (row: NonNullable<R['rows']>[number]) => row.dimensionValues?.[0]?.value || '(not set)';
+	return {
+		total: v(total.rows?.[0]?.metricValues[0]),
+		pages: (pages.rows ?? []).map((r) => ({ title: dim(r), users: v(r.metricValues[0]), views: v(r.metricValues[1]) })),
+		countries: (countries.rows ?? []).map((r) => ({ country: dim(r), users: v(r.metricValues[0]) })),
+		devices: (devices.rows ?? []).map((r) => ({ device: dim(r), users: v(r.metricValues[0]) })),
+		minutes: (minutes.rows ?? []).map((r) => ({ minutesAgo: Number(dim(r)) || 0, users: v(r.metricValues[0]) })).sort((a, b) => a.minutesAgo - b.minutesAgo)
+	};
+}
+
 export interface Ga4SourceRow { source: string; medium: string; channel: string; sessions: number; engagedSessions: number; keyEvents: number }
 
 /** How many source / medium rows a window keeps: the long tail past this is a handful of sessions each. */

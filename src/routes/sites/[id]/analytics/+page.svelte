@@ -2,7 +2,7 @@
 	import Explainer from '$lib/components/Explainer.svelte';
 	import Chart from '$lib/components/Chart.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
-	import { ago } from '$lib/format';
+	import { ago, fmtInt } from '$lib/format';
 	import { enhance } from '$app/forms';
 	import { noKeyEventsText } from '$lib/keyeventtext';
 	let { data, form } = $props();
@@ -84,15 +84,43 @@
 		<h2 class="mb-1 font-medium">Right now</h2>
 		<form method="POST" action="?/realtime" use:enhance={() => { rtBusy = true; return async ({ update }) => { await update({ reset: false }); rtBusy = false; }; }} class="mb-2 flex items-center gap-2">
 			<button class="btn text-xs" disabled={rtBusy}>{rtBusy ? 'Asking GA4…' : 'Show the last 30 minutes'}</button>
-			<span class="text-xs text-muted-foreground">GA4 Realtime, read live: the quick check that a new tag sends its event.</span>
+			<span class="text-xs text-muted-foreground">GA4 Realtime, read live: who is on the site, and whether a new tag sends its event.</span>
 		</form>
 		{#if form?.realtime}
 			{@const rt = form.realtime}
 			{#if !rt.linked}<p class="text-xs text-muted-foreground">No GA4 property is linked.</p>
 			{:else if !rt.ok}<p class="text-xs text-warn">GA4 Realtime could not be read: {rt.error}</p>
-			{:else if !rt.events.length}<p class="text-xs text-muted-foreground">No events in the last 30 minutes.</p>
 			{:else}
+				{#if rt.users}
+					{@const u = rt.users}
+					{@const top = Math.max(1, ...u.minutes.map((m) => m.users))}
+					<div class="card mb-3 p-4">
+						<div class="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+							<div><span class="tnum text-3xl font-semibold">{fmtInt(u.total)}</span> <span class="text-xs text-muted-foreground">active users, last 30 minutes</span></div>
+							{#if u.devices.length}<div class="tnum text-xs text-muted-foreground">{u.devices.map((x) => `${x.device} ${fmtInt(x.users)}`).join(' · ')}</div>{/if}
+						</div>
+						{#if u.minutes.length}
+							<div class="mt-3 flex h-12 items-end gap-px" role="img" aria-label="Active users per minute, oldest on the left">
+								{#each Array.from({ length: 30 }, (_, i) => 29 - i) as ago (ago)}
+									{@const m = u.minutes.find((x) => x.minutesAgo === ago)}
+									<div class="flex-1 rounded-t-sm" style="height:{Math.max(3, ((m?.users ?? 0) / top) * 100)}%;background:var(--chart-1);opacity:{m?.users ? 1 : 0.2}" title="{ago === 0 ? 'this minute' : `${ago} min ago`}: {m?.users ?? 0} users"></div>
+								{/each}
+							</div>
+							<div class="mt-1 flex justify-between text-[11px] text-muted-foreground"><span>30 min ago</span><span>now</span></div>
+						{/if}
+						<div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+							<DataTable rows={u.pages} cols={[{ key: 'title', label: 'Page title', type: 'text', pii: true }, { key: 'users', label: 'Active users', type: 'int', bar: true }, { key: 'views', label: 'Views', type: 'int' }]} sortKey="users" filterable={false} pageSize={8} empty="Nobody on the site right now." />
+							<DataTable rows={u.countries} cols={[{ key: 'country', label: 'Country', type: 'text' }, { key: 'users', label: 'Active users', type: 'int', bar: true }]} sortKey="users" filterable={false} pageSize={8} empty="Nobody on the site right now." />
+						</div>
+						<p class="mt-2 text-[11px] text-muted-foreground">GA4 Realtime names pages by title, not address. One visitor can count under several pages.</p>
+					</div>
+				{:else if rt.usersError}
+					<p class="mb-2 text-xs text-warn">Active users could not be read: {rt.usersError}</p>
+				{/if}
+				{#if !rt.events.length}<p class="text-xs text-muted-foreground">No events in the last 30 minutes.</p>
+				{:else}
 				<DataTable rows={rt.events} cols={[{ key: 'event', label: 'Event (last 30 min)', type: 'text' }, { key: 'count', label: 'Count', type: 'int', bar: true }]} sortKey="count" filterable={false} pageSize={10} />
+				{/if}
 				{#if rt.demo}<p class="mt-1 text-xs text-muted-foreground">Demo data.</p>{/if}
 			{/if}
 		{/if}
