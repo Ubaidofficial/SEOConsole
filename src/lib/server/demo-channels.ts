@@ -14,6 +14,8 @@ export const DEMO_CLARITY_ID = 'gl4demo7x2';
 export const demoInstalled = new Map<string, string>();
 /** Containers whose malformed Google tag the demo Tag ID repair has fixed, and the ID it was given. */
 export const demoRepaired = new Map<string, string>();
+/** Demo: tag IDs the duplicate-tag fix paused, per container, so the demo container shows them paused afterwards. */
+export const demoPaused = new Map<string, Set<string>>();
 /** The planted demo problem: a whole pasted gtag.js snippet where a Google tag's ID belongs (coffeelab). */
 export const DEMO_PASTED_TAG = `<!-- Google tag (gtag.js) --> <script async src="https://www.googletagmanager.com/gtag/js?id=G-DEMOCOFFEE1"></script> <script>   window.dataLayer = window.dataLayer || [];   function gtag(){dataLayer.push(arguments);}   gtag('js', new Date());    gtag('config', 'G-DEMOCOFFEE1'); </script>`;
 /** What the demo "Set up GA4 & Tag Manager" created, until the server restarts: properties, containers, and the GA4 tag put in a container (path -> measurement ID). */
@@ -198,7 +200,9 @@ export function demoGtmLive(containerPath: string): GtmLive | null {
 					tag('3', 'GA4 - lead form', 'gaawe', { firing: ['Form submit'], measurementId: mid, eventName: 'generate_lead' }),
 					...(brand === 'pixelforge' ? [tag('4', 'Old remarketing', 'sp', { paused: true })] : []),
 					// a Clarity tag someone added but never gave a trigger: the Clarity check flags it
-					...(brand === 'coffeelab' ? [tag('4', 'Heatmap script', 'html', { firing: [], clarity: true, clarityId: 'cf8demo3k1' })] : [])
+					...(brand === 'coffeelab' ? [tag('4', 'Heatmap script', 'html', { firing: [], clarity: true, clarityId: 'cf8demo3k1' })] : []),
+					// an old GA4 Configuration tag left next to the Google tag: both load GA4 for the same ID (the duplicate-tag fix pauses it)
+					...(brand === 'pixelforge' ? [tag('5', 'GA4 Configuration (old)', 'gaawc', { measurementId: mid, paused: !!demoPaused.get(containerPath)?.has('5') })] : [])
 				];
 	if (setupTag) tags.push(tag('98', 'Google tag (added by SEOConsole)', 'googtag', { measurementId: setupTag }));
 	const added = demoInstalled.get(containerPath);

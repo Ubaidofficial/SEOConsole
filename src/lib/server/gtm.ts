@@ -129,6 +129,12 @@ const param = (item: RawItem, ...keys: string[]) => {
 	return null;
 };
 
+/**
+ * Tag Manager's built-in triggers are not listed in a version's triggers, only referenced by ID. These IDs are the ones Tag Manager's own UI
+ * uses (from my knowledge of it, not from Google's API reference), so an unknown ID still shows as "trigger 123".
+ */
+export const BUILTIN_TRIGGERS: Record<string, string> = { '2147479553': 'All Pages', '2147479572': 'Consent Initialization - All Pages', '2147479573': 'Initialization - All Pages' };
+
 /** Reduce a raw ContainerVersion. Variable references such as {{GA4 ID}} are resolved when the variable is a constant. */
 export function summarizeVersion(v: RawVersion): GtmLive {
 	const triggers = (v.trigger ?? []).slice(0, MAX_ITEMS);
@@ -156,8 +162,8 @@ export function summarizeVersion(v: RawVersion): GtmLive {
 			name: t.name ?? t.tagId ?? '(unnamed)',
 			type,
 			paused: !!t.paused,
-			firing: (t.firingTriggerId ?? []).map((id) => triggerName.get(id) ?? `trigger ${id}`),
-			blocking: (t.blockingTriggerId ?? []).map((id) => triggerName.get(id) ?? `trigger ${id}`),
+			firing: (t.firingTriggerId ?? []).map((id) => triggerName.get(id) ?? BUILTIN_TRIGGERS[id] ?? `trigger ${id}`),
+			blocking: (t.blockingTriggerId ?? []).map((id) => triggerName.get(id) ?? BUILTIN_TRIGGERS[id] ?? `trigger ${id}`),
 			// googtag keeps its ID in `tagId`; GA4 configuration / event tags in `measurementId` / `measurementIdOverride`; dest_ga in `destinationId`.
 			measurementId: ga ? resolve(rawId) : null,
 			badTagId: bad ? bad.replace(/\s+/g, ' ').trim().slice(0, 120) : null,

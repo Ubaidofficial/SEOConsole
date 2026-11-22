@@ -4,7 +4,8 @@ import { config } from './config';
 import { linksFor } from './links';
 import { gtmSourceFor } from './channels';
 import { claritySnippet, parseClarityId } from '../clarityinstall';
-import { DEMO_PASTED_TAG, demoInstalled, demoRepaired } from './demo-channels';
+import { DEMO_PASTED_TAG, demoInstalled, demoPaused, demoRepaired } from './demo-channels';
+import { duplicateGoogleTags } from '../tracking';
 import { GA_ID_KEYS, isBadTagIdValue, type GtmSource } from './gtm';
 
 /**
@@ -106,7 +107,11 @@ export function demoGtmWriter(): GtmTagEditor {
 		publish: async () => ({ versionId: '13', compilerError: false }),
 		// the demo's malformed tag: a Google tag with a whole pasted snippet where the ID belongs
 		getTag: async (_w, tagId) => ({ tagId, name: 'Google tag', type: 'googtag', fingerprint: 'demo', parameter: [{ type: 'template', key: 'tagId', value: DEMO_PASTED_TAG }] }),
-		updateTag: async (w, _id, tag) => void demoRepaired.set(w.replace(/\/workspaces\/\d+$/, ''), tag.parameter?.find((p) => p.key === 'tagId')?.value ?? '')
+		updateTag: async (w, id, tag) => {
+			const container = w.replace(/\/workspaces\/\d+$/, '');
+			if (tag.paused) demoPaused.set(container, new Set([...(demoPaused.get(container) ?? []), id]));
+			else demoRepaired.set(container, tag.parameter?.find((p) => p.key === 'tagId')?.value ?? '');
+		}
 	};
 }
 
@@ -434,4 +439,83 @@ export async function repairTagIdViaGtm(siteId: number, choice: { tagId: string;
 		},
 		mode
 	);
+}
+
+// ── Pause duplicate Google tags ──────────────────────────────────────────────
+export interface DuplicatePlan {
+	ok: boolean;
+	error?: string;
+	needsGrant?: boolean;
+	container?: { path: string; publicId: string; name: string };
+	/** Per measurement ID: the tag kept and the tags that would be paused. */
+	groups?: { measurementId: string; keep: { tagId: string; name: string; firing: string[] }; pause: { tagId: string; name: string; firing: string[] }[] }[];
+	canPublish?: boolean;
+	publishBlocked?: string;
+}
+
+const brief = (t: { id?: string; name: string; firing: string[] }) => ({ tagId: t.id ?? '', name: t.name, firing: t.firing });
+
+/** Which tags would be paused, read live from Tag Manager, without changing anything. */
+export async function planDuplicateFix(siteId: number, o: { writer?: GtmWriter; source?: GtmSource } = {}): Promise<DuplicatePlan> {
+	if (config.readOnly) return { ok: false, error: 'This server runs with READ_ONLY=1, so it never changes Tag Manager.' };
+	const ctx = context(siteId);
+	if ('error' in ctx) return { ok: false, error: ctx.error };
+	if (!hasGtmWrite(ctx.acc)) return { ok: false, needsGrant: true, error: 'SEOConsole can read this container but not edit it yet.' };
+	const src = o.source ?? gtmSourceFor(ctx.acc.id);
+	const [containers, live] = await Promise.all([src.listContainers(), src.liveVersion(ctx.link.external_id)]);
+	const c = containers.find((x) => x.path === ctx.link.external_id);
+	const container = { path: ctx.link.external_id, publicId: c?.publicId ?? ctx.link.label ?? ctx.link.external_id, name: c?.name ?? '' };
+	if (!live) return { ok: false, error: 'The container has never been published, so there is nothing live to fix.', container };
+	const groups = duplicateGoogleTags(live.tags);
+	if (!groups.length) return { ok: false, error: 'No measurement ID has more than one active Google tag in the live container (it may already be fixed).', container };
+	const writer = o.writer ?? (ctx.acc.is_demo ? demoGtmWriter() : realGtmWriter(ctx.acc.id));
+	const latest = await writer.latestVersionId(ctx.link.external_id);
+	return { ok: true, container, groups: groups.map((g) => ({ measurementId: g.measurementId, keep: brief(g.keep), pause: g.pause.map(brief) })), ...publishGuard(live.versionId ?? null, latest) };
+}
+
+/**
+ * The confirmed change: a new workspace in which the duplicate tags are paused (nothing else in them changes, and nothing is deleted, so
+ * unpausing undoes it), then (if asked, and only when the newest version is the live one) a version and publish. Re-plans first, so what is
+ * paused is what is live now, and refuses a tag that is already paused in the new workspace.
+ */
+export async function pauseDuplicateTagsViaGtm(siteId: number, mode: 'publish' | 'workspace', o: { writer?: GtmTagEditor; source?: GtmSource } = {}): Promise<InstallResult & { paused?: string[] }> {
+	const plan = await planDuplicateFix(siteId, o);
+	if (!plan.ok) return { ok: false, error: plan.error, published: false };
+	if (mode === 'publish' && !plan.canPublish) return { ok: false, error: plan.publishBlocked, published: false };
+	const ctx = context(siteId);
+	if ('error' in ctx) return { ok: false, error: ctx.error, published: false };
+	const editor = o.writer ?? (ctx.acc.is_demo ? demoGtmWriter() : realGtmWriter(ctx.acc.id));
+	const targets = plan.groups!.flatMap((g) => g.pause);
+	const workspaceName = `SEOConsole pause duplicate Google tag ${new Date().toISOString().slice(0, 10)}`;
+	const names = targets.map((t) => `"${t.name}"`).join(', ');
+	const r = await installTagViaWorkspace(
+		editor,
+		{
+			siteId,
+			accountId: ctx.acc.id,
+			isDemo: !!ctx.acc.is_demo,
+			container: plan.container!.path,
+			publicId: plan.container!.publicId,
+			apply: async (ws) => {
+				try {
+					for (const t of targets) {
+						const tag = await editor.getTag(ws.path, t.tagId);
+						if (tag.paused) throw new Error(`"${t.name}" is already paused in Tag Manager, so it was changed after it was checked. Nothing was edited.`);
+						await editor.updateTag(ws.path, t.tagId, { ...tag, paused: true });
+					}
+				} catch (e) {
+					throw new Error(`${e instanceof Error ? e.message : String(e)} (SEOConsole had already created the workspace "${workspaceName}"; delete it in Tag Manager if you do not need it)`);
+				}
+			},
+			audit: 'gtm.duplicate',
+			// no colon: Tag Manager rejects ":" in a name
+			workspaceName,
+			workspaceDescription: `Pauses ${names}: duplicate Google tags. Created from SEOConsole.`,
+			versionName: 'Pause duplicate Google tag (SEOConsole)',
+			versionNotes: plan.groups!.map((g) => `${g.measurementId}: kept "${g.keep.name}", paused ${g.pause.map((p) => `"${p.name}"`).join(', ')}.`).join(' '),
+			what: `paused ${names}`
+		},
+		mode
+	);
+	return { ...r, ...(r.ok ? { paused: targets.map((t) => t.name) } : {}) };
 }

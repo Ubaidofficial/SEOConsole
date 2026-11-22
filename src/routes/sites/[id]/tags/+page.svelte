@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ago } from '$lib/format';
 	import TagIdRepair from '$lib/components/TagIdRepair.svelte';
+	import DuplicateTagFix from '$lib/components/DuplicateTagFix.svelte';
 	import KeyEventSetup from '$lib/components/KeyEventSetup.svelte';
 	let { data, form } = $props();
 	const tone = { critical: 'text-bad', warning: 'text-warn', info: 'text-muted-foreground' } as const;
@@ -23,6 +24,7 @@
 		These are prompts to look, not proof of a problem.
 	</p>
 	<TagIdRepair repair={data.repair} {form} />
+	<DuplicateTagFix dup={data.duplicate} {form} />
 	{#if data.findings.length}
 		<ul class="space-y-2 text-sm">
 			{#each data.findings as f (f.id)}

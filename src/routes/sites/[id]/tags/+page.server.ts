@@ -6,7 +6,8 @@ import { getSite } from '$lib/server/clients';
 import { linksFor } from '$lib/server/links';
 import { gtmSnapshot, trackingHealth } from '$lib/server/tracking';
 import { tagTypeLabel } from '$lib/server/gtm';
-import { hasGtmWrite, planTagIdRepair, repairTagIdViaGtm } from '$lib/server/gtmwrite';
+import { hasGtmWrite, pauseDuplicateTagsViaGtm, planDuplicateFix, planTagIdRepair, repairTagIdViaGtm } from '$lib/server/gtmwrite';
+import { duplicateGoogleTags } from '$lib/tracking';
 import { enqueueLinkSync } from '$lib/server/jobs';
 import { applyKeyEvent, discoverSiteEvents, planKeyEvent } from '$lib/server/keyevents';
 
@@ -31,6 +32,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		window: { days, clicks: health.input.traffic.gscClicks, ga4: health.input.traffic.ga4OrganicSessions },
 		sources: health.sources,
 		repair: repairState(site.id, !!snap?.tags.some((t) => t.badTagId)),
+		duplicate: repairState(site.id, !!snap?.published && duplicateGoogleTags(snap.tags).length > 0),
 		keyEvent: (({ canWrite, account }) => ({ canWrite, account, readOnly: config.readOnly, ga4Linked: !!linksFor(site.id).ga4 }))(repairState(site.id, true)),
 		snapshot: snap && {
 			publicId: snap.publicId,
@@ -72,6 +74,22 @@ export const actions: Actions = {
 		if (!keResult.ok) return fail(400, { keResult, keInput: input });
 		enqueueLinkSync(Number(params.id), 'gtm');
 		return { keResult, keInput: input };
+	},
+	/** Which duplicate Google tags would be paused, read live from Tag Manager. Changes nothing. */
+	duplicatePlan: async ({ params }) => {
+		const dupPlan = await planDuplicateFix(Number(params.id)).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
+		if (!dupPlan.ok) return fail(400, { dupPlan });
+		return { dupPlan };
+	},
+	/** The confirmed change: the duplicates paused in a new workspace, published only if asked and safe. */
+	duplicateApply: async ({ params, request }) => {
+		const siteId = Number(params.id);
+		const mode = (await request.formData()).get('mode') === 'publish' ? 'publish' : 'workspace';
+		const dupResult = await pauseDuplicateTagsViaGtm(siteId, mode).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e), published: false }));
+		if (!dupResult.ok) return fail(400, { dupResult });
+		// Re-read the container so the finding above catches up.
+		enqueueLinkSync(siteId, 'gtm');
+		return { dupResult };
 	},
 	/** What the fix would change and which IDs it could use, read live from Tag Manager. Changes nothing. */
 	repairPlan: async ({ params }) => {
