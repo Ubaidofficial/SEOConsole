@@ -14,6 +14,8 @@ export interface Finding {
 }
 
 export interface TrackingTag {
+	/** Tag Manager's own ID for the tag; absent in callers that do not need it. */
+	id?: string;
 	name: string;
 	type: string;
 	paused: boolean;
@@ -39,7 +41,38 @@ export interface TrackingInput {
 	clarity?: ClarityInstallInput | null;
 }
 
-const GA4_TYPES = new Set(['googtag', 'gaawc', 'gaawe']);
+const GA4_TYPES = new Set(['googtag', 'gaawc', 'gaawe', 'dest_ga']);
+/** Tags that load GA4 for a measurement ID and send its page_view: a Google tag, a GA4 Configuration tag, a Google Analytics destination. (GA4 Event tags only send their event.) */
+export const GOOGLE_TAG_TYPES = new Set(['googtag', 'gaawc', 'dest_ga']);
+
+export interface DuplicateGroup {
+	measurementId: string;
+	keep: TrackingTag;
+	pause: TrackingTag[];
+}
+
+/** Earliest first: a Google tag belongs on the Initialization trigger. Old snapshots name built-in triggers by ID only. */
+const INIT = /^(consent )?initialization - all pages$|^trigger 214747957[23]$/i;
+const rankOf = (t: TrackingTag) => [t.firing.some((f) => INIT.test(f)) ? 0 : 1, /added by seoconsole/i.test(t.name) ? 1 : 0, Number(t.id) || Number.MAX_SAFE_INTEGER] as const;
+
+/**
+ * Two or more unpaused tags that each load GA4 for the same measurement ID: the tag can load twice and page views can be counted twice.
+ * Keeps one per ID (the one on an Initialization trigger, else one SEOConsole did not add, else the oldest) and lists the rest to pause.
+ */
+export function duplicateGoogleTags(tags: TrackingTag[]): DuplicateGroup[] {
+	const by = new Map<string, TrackingTag[]>();
+	for (const t of tags) if (GOOGLE_TAG_TYPES.has(t.type) && !t.paused && t.measurementId && t.firing.length) by.set(t.measurementId, [...(by.get(t.measurementId) ?? []), t]);
+	const out: DuplicateGroup[] = [];
+	for (const [measurementId, group] of by) {
+		if (group.length < 2) continue;
+		const sorted = [...group].sort((a, b) => {
+			const x = rankOf(a), y = rankOf(b);
+			return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+		});
+		out.push({ measurementId, keep: sorted[0], pause: sorted.slice(1) });
+	}
+	return out;
+}
 const list = (xs: string[], n = 5) => xs.slice(0, n).join(', ') + (xs.length > n ? ` and ${xs.length - n} more` : '');
 
 /**
@@ -78,6 +111,14 @@ export function auditTracking(input: TrackingInput): Finding[] {
 			out.push({ id: 'ga4-id-unknown', severity: 'info', title: 'Could not compare measurement IDs', detail: `The container sends to ${list(ids)}; Google did not return the linked property's measurement ID, so the match could not be checked.` });
 		} else if (ga4 && !ids.length && !malformed.length) {
 			out.push({ id: 'ga4-id-hidden', severity: 'info', title: 'GA4 tag IDs could not be read', detail: 'The container has GA4 tags, but their measurement IDs are not literal values or constant variables, so the match could not be checked.' });
+		}
+
+		for (const g of duplicateGoogleTags(gtm.tags)) {
+			const fires = (t: TrackingTag) => `“${t.name}” (on ${t.firing.join(', ')})`;
+			out.push({
+				id: 'gtm-duplicate-google-tag', severity: 'warning', title: `${g.pause.length + 1} tags load GA4 for ${g.measurementId}`,
+				detail: `${list([g.keep, ...g.pause].map(fires))} all send to ${g.measurementId}, so the tag can load twice and page views may be counted twice. Keep ${fires(g.keep)} and pause the other${g.pause.length > 1 ? 's' : ''}, then publish.`
+			});
 		}
 
 		const ua = gtm.tags.filter((t) => t.type === 'ua');
