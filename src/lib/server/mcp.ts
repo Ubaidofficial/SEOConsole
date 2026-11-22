@@ -22,6 +22,7 @@ import { gtmSnapshot, trackingHealth } from './tracking';
 import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
 import { realtimeFor } from './realtime';
+import { hourlyReport } from './hourly';
 import { ga4ValuesReport, type ValueRow } from './ga4values';
 import { noKeyEventsText } from '../keyeventtext';
 import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
@@ -222,6 +223,28 @@ const TOOLS: Tool[] = [
 				google: { clicks: g.clicks, impressions: g.impressions, ctr: r2(ctrOf(g) * 100) + '%', position: r2(g.position), clicksChange: pctChange(g.clicks, gp.clicks), impressionsChange: pctChange(g.impressions, gp.impressions), anonymisedClickShare: anonymisedShare(site.id, p.start, p.end) },
 				bing: l.bing ? { clicks: bn.c ?? 0, impressions: bn.i ?? 0, clicksChange: pctChange(bn.c ?? 0, bp.c ?? 0) } : null,
 				ga4OrganicSearch: l.ga4 ? { sessions: gn.s ?? 0, keyEvents: gn.k ?? 0, sessionsChange: pctChange(gn.s ?? 0, gpv.s ?? 0) } : null
+			};
+		}
+	},
+	{
+		name: 'get_last_24_hours',
+		description: 'Google Search clicks and impressions hour by hour (Search Console hourly data: preliminary, trails by a few hours, kept 10 days): the 24 hours ending at the newest hour with data vs the 24 before, plus the pages with the most clicks in those 24 hours. Use it for "did today\'s post get picked up?"; daily tools run about two days behind.',
+		schema: { ...siteArg, limit: { type: 'integer' } },
+		run: (a, sites) => {
+			const site = resolveSite(sites, a.site);
+			const h = hourlyReport(site.id, { pages: limit(a, 10) });
+			if (!h) return { fetched: false, note: 'Hourly data is read on every Search Console sync; it appears after the next one.' };
+			if (h.empty) return { fetched: true, fetchedAt: isoOrNull(h.fetchedAt), note: 'Google returned no hourly data for this property.' };
+			return {
+				site: displayName(site.site_url),
+				fetchedAt: isoOrNull(h.fetchedAt),
+				through: h.through,
+				timezone: 'Hours are on Google\'s clock (Pacific time), as Google sends them.',
+				last24Hours: { clicks: h.last24.clicks, impressions: h.last24.impressions, position: h.last24.position == null ? null : r2(h.last24.position), hoursWithData: h.last24.hours },
+				previous24Hours: h.prev24 ? { clicks: h.prev24.clicks, impressions: h.prev24.impressions } : null,
+				clicksChange: h.prev24?.clicks ? pctChange(h.last24.clicks, h.prev24.clicks) : null,
+				byHour: h.hours.filter((x) => x.recent).map((x) => ({ hour: x.hour || x.label, clicks: x.clicks, impressions: x.impressions })),
+				topPages: h.pages ?? 'Google did not return hourly data by page for this property.'
 			};
 		}
 	},
@@ -489,7 +512,7 @@ const TOOLS: Tool[] = [
 			const total = sites.length;
 			return {
 				sites: total,
-				searchConsole: { connected: total, tools: ['get_overview', 'get_top_queries', 'get_top_pages', 'get_opportunities', 'get_search_types'] },
+				searchConsole: { connected: total, tools: ['get_overview', 'get_top_queries', 'get_top_pages', 'get_opportunities', 'get_search_types', 'get_last_24_hours'] },
 				ga4: { linkedSites: n('ga4'), tools: ['get_ga4_summary', 'get_tracking_health'] },
 				tagManager: { linkedSites: n('gtm'), tools: ['get_gtm_container', 'get_tracking_health'] },
 				bing: { linkedSites: n('bing'), tools: ['get_bing_performance'] },

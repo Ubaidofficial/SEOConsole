@@ -13,6 +13,7 @@ import { enqueueGa4Pages } from '$lib/server/jobs';
 import { createTest, evaluateTestCached, mainResult, suggestControlMatched, testsByAnnotation } from '$lib/server/seotests';
 import { queueFor } from '$lib/server/actions';
 import { planFrom, positionBuckets } from '$lib/plan';
+import { hourlyReport } from '$lib/server/hourly';
 
 /**
  * Clicks from searches that contain the brand against all the others, now and in the period before. Non-brand clicks are the ones
@@ -67,6 +68,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		})
 	);
 	return {
+		hourly: hourlyReport(site.id),
 		changelogAuto: !!site.changelog_auto,
 		plan: planFrom(queueFor(site, days)),
 		brand: brandSplit(site, period),

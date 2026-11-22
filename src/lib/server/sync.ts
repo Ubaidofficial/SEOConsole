@@ -143,6 +143,41 @@ export async function pullAppearance(client: GscClient, siteId: number, siteUrl:
 	return n;
 }
 
+/** Search Console keeps hourly data this many days back. */
+export const HOURLY_DAYS = 10;
+/** Per-page hourly rows are asked for over this many days only: enough for "the last 24 hours", small enough to stay cheap. */
+const HOURLY_PAGE_DAYS = 2;
+
+/**
+ * Clicks and impressions by hour (Google's HOUR dimension with HOURLY_ALL, which may be partial), for the property and, over the last two
+ * days, by page: the quick answer to "did today's post get picked up?" while daily data runs about two days behind. Replaced on every sync.
+ * Whether Google accepts HOUR together with page is not documented, so a refusal of that request keeps the totals and records no pages.
+ * Extra data: never throws.
+ */
+export async function pullHourly(client: GscClient, siteId: number, siteUrl: string, today: string): Promise<{ ok: boolean; hours: number; pages: boolean }> {
+	const d = db();
+	let totals: SearchRow[];
+	try {
+		totals = await client.query(siteUrl, { startDate: addDays(today, -(HOURLY_DAYS - 1)), endDate: today, dimensions: ['HOUR'], dataState: 'HOURLY_ALL', rowLimit: PAGE });
+	} catch {
+		return { ok: false, hours: 0, pages: false };
+	}
+	let pages: SearchRow[] | null = null;
+	try {
+		pages = await client.query(siteUrl, { startDate: addDays(today, -(HOURLY_PAGE_DAYS - 1)), endDate: today, dimensions: ['HOUR', 'page'], dataState: 'HOURLY_ALL', rowLimit: PAGE });
+	} catch {
+		pages = null;
+	}
+	const ins = d.prepare('INSERT OR REPLACE INTO sa_hourly (site_id, hour, page, clicks, impressions, position) VALUES (?,?,?,?,?,?)');
+	d.transaction(() => {
+		d.prepare('DELETE FROM sa_hourly WHERE site_id = ?').run(siteId);
+		for (const r of totals) if (r.keys[0]) ins.run(siteId, r.keys[0], '', r.clicks, r.impressions, r.position);
+		for (const r of pages ?? []) if (r.keys[0] && r.keys[1]) ins.run(siteId, r.keys[0], r.keys[1], r.clicks, r.impressions, r.position);
+		d.prepare('UPDATE sites SET hourly_at = ?, hourly_pages = ? WHERE id = ?').run(Date.now(), pages ? 1 : 0, siteId);
+	})();
+	return { ok: true, hours: totals.length, pages: !!pages };
+}
+
 export async function syncSite(siteId: number, opts: SyncOptions = {}): Promise<SyncResult> {
 	const resolved = opts.client ? { client: opts.client, site: clientForSite(siteId).site } : clientForSite(siteId);
 	const { client } = resolved;
@@ -196,6 +231,7 @@ export async function syncSite(siteId: number, opts: SyncOptions = {}): Promise<
 		} catch {
 			/* ignored on purpose */
 		}
+		await pullHourly(client, siteId, site.site_url, today);
 
 		// 2. One backfill chunk towards the retention horizon
 		site = clientForSite(siteId).site;

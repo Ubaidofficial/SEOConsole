@@ -672,6 +672,15 @@ CREATE TABLE IF NOT EXISTS ga4_search_terms (        -- what visitors typed into
 	users INTEGER NOT NULL,
 	PRIMARY KEY (site_id, days, term)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sa_hourly (               -- Search Console clicks by hour (HOUR dimension, HOURLY_ALL: may be partial), replaced on every sync
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	hour TEXT NOT NULL,                 -- as Google sends it: local start of the hour with offset, e.g. 2026-11-20T14:00:00-08:00
+	page TEXT NOT NULL,                 -- '' for the property's totals; otherwise the page (last two days only)
+	clicks INTEGER NOT NULL,
+	impressions INTEGER NOT NULL,
+	position REAL NOT NULL,
+	PRIMARY KEY (site_id, hour, page)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS annotation_auto (         -- change-log entries the app wrote itself; the key outlives a deleted entry so it never comes back
 	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
 	key TEXT NOT NULL,                  -- robots:<id> | gtm:<container>:<version> | sitemap-added:<day> | sitemap-removed:<day>
@@ -883,6 +892,9 @@ function migrate(db: Database.Database) {
 	// GA4 engagement time, revenue, campaigns and site search: day of the last successful pull, and the last failure (cleared on success).
 	if (!cols('sites').includes('ga4_values_on')) db.exec('ALTER TABLE sites ADD COLUMN ga4_values_on TEXT');
 	if (!cols('sites').includes('ga4_values_error')) db.exec('ALTER TABLE sites ADD COLUMN ga4_values_error TEXT');
+	// Search Console hourly data: when it was last read (ms), and whether Google answered the per-page hourly request.
+	if (!cols('sites').includes('hourly_at')) db.exec('ALTER TABLE sites ADD COLUMN hourly_at INTEGER');
+	if (!cols('sites').includes('hourly_pages')) db.exec('ALTER TABLE sites ADD COLUMN hourly_pages INTEGER NOT NULL DEFAULT 0');
 	if (!cols('ai_runs').includes('via')) db.exec('ALTER TABLE ai_runs ADD COLUMN via TEXT');
 	if (!cols('ai_runs').includes('cost')) db.exec('ALTER TABLE ai_runs ADD COLUMN cost REAL');
 	// The Google identity (the stable "sub") a team member signs in with, once they have used or linked "Sign in with Google".

@@ -200,6 +200,7 @@ export class DemoClient implements GscClient {
 	async query(siteUrl: string, body: QueryBody): Promise<SearchRow[]> {
 		const dimsIn = body.dimensions ?? [];
 		if (dimsIn.length === 1 && dimsIn[0] === 'searchAppearance') return this.appearance(siteUrl, body);
+		if (dimsIn[0] === 'HOUR') return this.hourly(siteUrl, body);
 		const type = body.type ?? body.searchType ?? 'web';
 		// Other search types: a deterministic share of web traffic, present only for some sites, with Discover and
 		// Images showing the usual shape (lots of impressions, few clicks).
@@ -242,6 +243,31 @@ export class DemoClient implements GscClient {
 		rows.sort((a, b) => (dims[0] === 'date' ? a.keys[0].localeCompare(b.keys[0]) : b.clicks - a.clicks));
 		const from = body.startRow ?? 0;
 		return rows.slice(from, from + (body.rowLimit ?? 1000));
+	}
+
+	/**
+	 * Demo hourly report: each day's clicks spread over the hours with a daytime peak, keys like Google's (local hour with offset). The newest
+	 * day stops at 16:00, the way real hourly data is still filling in.
+	 */
+	private async hourly(siteUrl: string, body: QueryBody): Promise<SearchRow[]> {
+		const rest = (body.dimensions ?? []).slice(1);
+		// Real hourly data reaches today while demo daily data stops a few days back: read the days just as far back, then date them forward.
+		const last = this.lastDay();
+		const shift = body.endDate > last ? Math.round((Date.parse(body.endDate) - Date.parse(last)) / 86_400_000) : 0;
+		const days = (await this.query(siteUrl, { startDate: addDays(body.startDate, -shift), endDate: addDays(body.endDate, -shift), dimensions: ['date', ...rest], rowLimit: 100_000 })).map((r) => ({ ...r, keys: [addDays(r.keys[0], shift), ...r.keys.slice(1)] }));
+		const weight = Array.from({ length: 24 }, (_, h) => 0.35 + Math.sin(((h - 5) / 24) * Math.PI * 2 - Math.PI / 2) * -0.3 + (h >= 9 && h <= 21 ? 0.4 : 0));
+		const total = weight.reduce((a, b) => a + b, 0);
+		const newest = days.reduce((m, r) => (r.keys[0] > m ? r.keys[0] : m), '');
+		const out: SearchRow[] = [];
+		for (const r of days)
+			for (let h = 0; h < (r.keys[0] === newest ? 16 : 24); h++) {
+				const w = weight[h] / total;
+				const clicks = Math.round(r.clicks * w);
+				const impressions = Math.round(r.impressions * w);
+				if (!clicks && !impressions) continue;
+				out.push({ keys: [`${r.keys[0]}T${String(h).padStart(2, '0')}:00:00-08:00`, ...r.keys.slice(1)], clicks, impressions, ctr: impressions ? clicks / impressions : 0, position: r.position });
+			}
+		return out.sort((a, b) => a.keys[0].localeCompare(b.keys[0])).slice(0, body.rowLimit ?? 1000);
 	}
 
 	/** Demo search-appearance report: a couple of codes per site, as a small share of web traffic in the window. */
