@@ -5,7 +5,7 @@
 	import { toast } from 'svelte-sonner';
 	import { ChevronDown, RefreshCw, Sparkles } from '@lucide/svelte';
 	import PeriodPicker from '$lib/components/PeriodPicker.svelte';
-	import { SITE_PRIMARY_TABS, SITE_TABS, SITE_TAB_GROUPS } from '$lib/explain';
+	import { SITE_PRIMARY_TABS, SITE_TABS, SITE_TAB_GROUPS, SOURCE_LINK, sourceTabsFor } from '$lib/explain';
 	const tabOf = (t: string) => SITE_TABS.find(([p]) => p === t)!;
 	import Delta from '$lib/components/Delta.svelte';
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
@@ -31,7 +31,11 @@
 	const base = $derived(`/sites/${data.site.id}`);
 	const isActive = (t: string) => (t === '' ? page.url.pathname === base : page.url.pathname.startsWith(base + t));
 	/** A tab from under More that is open right now is shown in the row too, so you can always see where you are. */
-	const activeExtra = $derived(SITE_TABS.map(([t]) => t as string).find((t) => t !== '' && isActive(t) && !(SITE_PRIMARY_TABS as readonly string[]).includes(t)) ?? null);
+	const sourceTabs = $derived(sourceTabsFor(data.linked) as string[]);
+	const inRow = $derived([...(SITE_PRIMARY_TABS as readonly string[]), ...sourceTabs]);
+	const activeExtra = $derived(SITE_TABS.map(([t]) => t as string).find((t) => t !== '' && isActive(t) && !inRow.includes(t)) ?? null);
+	/** A source tab whose source is not linked for this site: shown under More with a Connect marker instead of in the row. */
+	const unlinked = (t: string) => !!SOURCE_LINK[t] && !data.linked[SOURCE_LINK[t]];
 	/**
 	 * Sync is a plain endpoint (POST, then a redirect back), not a form action, so `use:enhance` cannot read its answer (it expects a form
 	 * action's JSON and got the HTML page: "Unexpected token '<'"). Post it directly and reload the data; the layout then shows the sync
@@ -114,20 +118,22 @@
 	<!-- one line on every screen: the tabs scroll sideways on a phone, and More stays put outside the scrolling part -->
 	<div class="-mb-px flex min-w-0 flex-1 items-end overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 		{#each SITE_PRIMARY_TABS as t}{@render tab(t)}{/each}
+		<span class="mx-1 mb-2.5 h-4 w-px shrink-0 self-end bg-[color:var(--border)]" aria-hidden="true"></span>
+		{#each sourceTabs as t}{@render tab(t)}{/each}
 		{#if activeExtra}{@render tab(activeExtra)}{/if}
 	</div>
 	<details class="group shrink-0" bind:open={moreOpen}>
 		<summary class="-mb-px flex cursor-pointer list-none items-center gap-1 border-b-2 border-transparent bg-background px-3 py-2 text-[13px] text-muted-foreground select-none hover:text-foreground [&::-webkit-details-marker]:hidden">More<ChevronDown class="size-3.5 transition-transform group-open:rotate-180" /></summary>
 		<div class="absolute top-full right-0 left-0 z-30 mt-2 grid gap-x-6 gap-y-4 rounded-xl border bg-card p-4 shadow-lg sm:grid-cols-2 lg:grid-cols-4">
 			{#each SITE_TAB_GROUPS as [caption, paths]}
-				{@const rest = paths.filter((t) => !(SITE_PRIMARY_TABS as readonly string[]).includes(t))}
+				{@const rest = paths.filter((t) => !inRow.includes(t))}
 				{#if rest.length}
 					<div role="group" aria-label={caption}>
 						<div class="mb-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{caption}</div>
 						<ul class="space-y-0.5">
 							{#each rest as t}
 								{@const [, label, about] = tabOf(t)}
-								<li><a href="{base}{t}?days={data.days}" class="block rounded-md px-2 py-1.5 hover:bg-muted {isActive(t) ? 'bg-muted' : ''}"><span class="text-[13px] font-medium">{@render tabLogo(t)}{label}{@render tabBadges(t)}</span><span class="block text-xs leading-snug text-muted-foreground">{about}</span></a></li>
+								<li><a href="{base}{t}?days={data.days}" class="block rounded-md px-2 py-1.5 hover:bg-muted {isActive(t) ? 'bg-muted' : ''}"><span class="text-[13px] font-medium">{@render tabLogo(t)}{label}{@render tabBadges(t)}{#if unlinked(t)}<span class="ml-1.5 rounded-full border px-1.5 text-[10px] font-normal text-muted-foreground">Connect</span>{/if}</span><span class="block text-xs leading-snug text-muted-foreground">{about}</span></a></li>
 							{/each}
 						</ul>
 					</div>
