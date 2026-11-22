@@ -234,7 +234,7 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_last_24_hours',
-		description: 'Google Search clicks and impressions hour by hour (Search Console hourly data: preliminary, trails by a few hours, kept 10 days): the 24 hours ending at the newest hour with data vs the 24 before, plus the pages with the most clicks in those 24 hours. Use it for "did today\'s post get picked up?"; daily tools run about two days behind.',
+		description: 'Google clicks and impressions by hour (Search Console hourly data, preliminary): the newest 24 hours vs the 24 before, and their top pages. For "did today\'s post get picked up?"; daily data runs ~2 days behind.',
 		schema: { ...siteArg, limit: { type: 'integer' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
@@ -256,7 +256,7 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_search_types',
-		description: 'Google traffic split by search type (web, image, video, news, discover, googleNews) for a window vs the previous window, plus the search-appearance report (rich results and similar). The overview numbers are web only; this shows the rest. view=pages lists the pages behind one type (`type`, default discover) with their change, to pin a Discover rise or drop on the articles behind it.',
+		description: 'Google traffic split by search type (web, image, video, news, discover, googleNews) for a window vs the previous window, plus the search-appearance report (rich results and similar). The overview numbers are web only; this shows the rest. view=pages: the pages behind one `type` (default discover) with their change.',
 		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['summary', 'pages'] }, type: { type: 'string', enum: [...SEARCH_TYPES] }, limit: { type: 'integer' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
@@ -444,8 +444,8 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_bing_performance',
-		description: 'Bing Webmaster data for a site: daily clicks/impressions plus top queries and pages (weekly buckets); view=links gives inbound links and failing pages that still have links; view=crawl gives pages crawled, crawl errors, pages in Bing\'s index, status codes and the sitemaps Bing knows; view=page_queries (with `page`, a full URL) reads live the searches that showed that page.',
-		schema: { ...siteArg, ...daysArg, limit: { type: 'integer' }, view: { type: 'string', enum: ['performance', 'links', 'crawl', 'page_queries'] }, page: { type: 'string', description: 'full page URL, for view=page_queries' } },
+		description: 'Bing Webmaster data for a site: daily clicks/impressions plus top queries and pages (weekly buckets); view=links: inbound links and failing pages with links; crawl: crawl stats, index size, sitemaps; page_queries: searches for one `page` URL (live).',
+		schema: { ...siteArg, ...daysArg, limit: { type: 'integer' }, view: { type: 'string', enum: ['performance', 'links', 'crawl', 'page_queries'] }, page: { type: 'string' } },
 		run: async (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			const bingLink = linksFor(site.id).bing;
@@ -476,7 +476,7 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_ga4_summary',
-		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events), value (engagement time and revenue by channel and landing page), campaigns (utm_campaign), site_search (terms typed into the site search), realtime (active users and events, last 30 min); `search` filters.',
+		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events), value (engagement time, revenue), campaigns, site_search, realtime (last 30 min); `search` filters.',
 		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources', 'pages', 'events', 'value', 'campaigns', 'site_search', 'realtime'] }, search: { type: 'string' }, limit: { type: 'integer' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
@@ -758,7 +758,7 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_clarity_snapshot',
-		description: 'Latest stored Microsoft Clarity snapshot (last ~24h when it was taken; Clarity only exposes 1-3 days and 10 API calls/day/project, so SEOConsole refreshes the daily snapshot three times a day (every 8½ hours), alternating the Device and Channel breakdowns, and keeps one per day). dimension: "" (totals), URL, Device or Channel (adds a byChannel summary: sessions, rage/dead/quick-back shares, scroll depth, active time per traffic channel). clarityUrl opens the project in Clarity, where recordings and heatmaps are (filter Recordings by Visited URL).',
+		description: 'Latest stored Microsoft Clarity snapshot (~24h; refreshed every 8½ hours within Clarity\'s 10 calls/day, one kept per day). dimension: "" (totals), URL, Device or Channel (adds byChannel). clarityUrl opens the project; recordings and heatmaps are only in Clarity.',
 		schema: { ...siteArg, dimension: { type: 'string', enum: ['', 'URL', 'Device', 'Channel'] } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
