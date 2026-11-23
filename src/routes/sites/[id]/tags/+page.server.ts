@@ -40,7 +40,11 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 			versionName: snap.versionName,
 			versionId: snap.versionId,
 			counts: { tags: snap.tags.length, triggers: snap.triggers.length, variables: snap.variables.length },
-			tags: snap.tags.map((t) => ({ ...t, typeLabel: tagTypeLabel(t.type) }))
+			tags: (() => {
+				// Tags the duplicate check would pause, so the table can point at them.
+				const extra = new Set(duplicateGoogleTags(snap.tags).flatMap((g) => g.pause.map((t) => t.id ?? t.name)));
+				return snap.tags.map((t) => ({ ...t, typeLabel: tagTypeLabel(t.type), duplicate: extra.has(t.id ?? t.name) }));
+			})()
 		}
 	};
 };

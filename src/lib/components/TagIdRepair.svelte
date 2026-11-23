@@ -10,7 +10,7 @@
 	type RepairTag = { tagId: string; name: string; type: string; current: string; paused: boolean; firing: string[]; candidates: { id: string; from: 'inside' | 'property' }[]; recommended: string | null };
 	type RepairPlan = { ok: boolean; error?: string; needsGrant?: boolean; container?: { path: string; publicId: string; name: string }; tags?: RepairTag[]; canPublish?: boolean; publishBlocked?: string };
 	type Result = { ok: boolean; error?: string; published: boolean; reviewUrl?: string; versionId?: string };
-	let { repair, form }: { repair: { show: boolean; canWrite: boolean; account: string | null; readOnly: boolean }; form: { plan?: RepairPlan; result?: Result; fixedId?: string } | null | undefined } = $props();
+	let { repair, form, inline = false }: { repair: { show: boolean; canWrite: boolean; account: string | null; readOnly: boolean }; form: { plan?: RepairPlan; result?: Result; fixedId?: string } | null | undefined; inline?: boolean } = $props();
 	let busy = $state('');
 	const back = $derived(`/sites/${page.params.id}/tags`);
 	const plan = $derived(form?.plan);
@@ -25,13 +25,13 @@
 </script>
 
 {#if repair.show || result}
-	<section class="card mb-4 p-4" aria-labelledby="repair-h">
-		<h2 id="repair-h" class="font-medium">Fix the Tag ID</h2>
+	<svelte:element this={inline ? 'div' : 'section'} class={inline ? 'mt-2' : 'card mb-4 p-4'} aria-labelledby={inline ? undefined : 'repair-h'}>
+		{#if !inline}<h2 id="repair-h" class="font-medium">Fix the Tag ID</h2>{/if}
 		{#if result?.ok}
 			<p class="mt-2 text-sm text-good">{result.published ? `Done: version ${result.versionId ?? ''} is published with the corrected Tag ID.` : 'The corrected tag is ready in a new workspace. Open it in Tag Manager, check it, then Submit and Publish.'}</p>
 			<p class="mt-1 text-xs text-muted-foreground">{result.published ? 'Google Analytics should start receiving visits within a few minutes: check GA4 Realtime. This page catches up after the next Tag Manager sync.' : 'Nothing is live until you publish it.'}{#if result.reviewUrl}<a class="ml-1 underline" href={result.reviewUrl} target="_blank" rel="noreferrer noopener">Open in Tag Manager</a>{/if}</p>
 		{:else}
-			<p class="mt-1 text-xs text-muted-foreground">A Google tag in the live container has text that is not an ID where its Tag ID belongs, so it cannot send anything to Google Analytics. SEOConsole can correct just that field, in a new workspace, after showing you exactly what will change. Nothing changes until you confirm.</p>
+			<p class="mt-1 text-xs text-muted-foreground" class:hidden={inline}>A Google tag in the live container has text that is not an ID where its Tag ID belongs, so it cannot send anything to Google Analytics. SEOConsole can correct just that field, in a new workspace, after showing you exactly what will change. Nothing changes until you confirm.</p>
 			{#if repair.readOnly}
 				<p class="mt-2 text-xs text-warn">This server runs with READ_ONLY=1, so it never changes Tag Manager.</p>
 			{:else if !repair.canWrite}
@@ -74,5 +74,5 @@
 				{/each}
 			{/if}
 		{/if}
-	</section>
+	</svelte:element>
 {/if}
