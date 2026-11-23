@@ -3,10 +3,12 @@
 	import DataTable from '$lib/components/DataTable.svelte';
 	import Delta from '$lib/components/Delta.svelte';
 	import Explainer from '$lib/components/Explainer.svelte';
+	import SectionTabs from '$lib/components/SectionTabs.svelte';
 	import { enhance } from '$app/forms';
 	import { fmtInt, fmtPct, ago } from '$lib/format';
 	let { data, form } = $props();
 	let busy = $state(false);
+	let view = $state('');
 	let pqBusy = $state(false);
 	let pqPage = $state('');
 	let pqForm: HTMLFormElement | undefined = $state();
@@ -37,20 +39,27 @@
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Site</div><div class="pii truncate text-sm font-medium">{data.bingUrl}</div><div class="text-xs text-muted-foreground">{data.status.state === 'error' ? data.status.message : 'synced ' + ago(data.status.lastSync)}</div></div>
 	</div>
 	<div class="card mb-4 p-4"><Chart data={data.series} hide={['position']} labels={{ clicks: 'Bing clicks', impressions: 'Bing impressions' }} /></div>
-	<p class="mb-3 text-xs text-muted-foreground">Daily totals come from Bing's traffic endpoint (updated daily; includes web, chat, news, images, videos from 24 Mar 2023). Query and page tables use Bing's detail endpoints, which Microsoft documents as <b>updated weekly</b>, so they lag the totals and are aggregated from weekly rows.</p>
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<section><h2 class="mb-2 font-medium">Top queries</h2><DataTable rows={data.queries} cols={cols('Query')} sortKey="clicks" pageSize={15} /></section>
+	<details class="mb-4 text-xs text-muted-foreground"><summary class="cursor-pointer select-none hover:text-foreground">Where these numbers come from</summary><p class="mt-1">Daily totals come from Bing's traffic endpoint (updated daily; includes web, chat, news, images, videos from 24 Mar 2023). Query and page tables use Bing's detail endpoints, which Microsoft documents as <b>updated weekly</b>, so they lag the totals and are aggregated from weekly rows.</p></details>
+	<SectionTabs bind:value={view} label="Bing details" tabs={[
+		{ id: 'queries', label: 'Queries' },
+		{ id: 'pages', label: 'Pages' },
+		{ id: 'crawl', label: 'Crawling' },
+		{ id: 'sitemaps', label: 'Sitemaps', count: data.crawl?.feeds.length ?? null },
+		{ id: 'links', label: 'Inbound links' }
+	]} />
+	{#if view === 'queries'}
+			<section><h2 class="sr-only">Top queries</h2><DataTable rows={data.queries} cols={cols('Query')} sortKey="clicks" pageSize={15} /></section>
+	{:else if view === 'pages'}
 		<section>
-			<h2 class="mb-2 font-medium">Top pages</h2>
+			<h2 class="sr-only">Top pages</h2>
 			<DataTable rows={data.pages} cols={cols('Page', true)} sortKey="clicks" pageSize={15} onRowClick={showQueries} />
 			<p class="mt-1 text-xs text-muted-foreground">Click a row to see the searches that showed that page.</p>
 		</section>
-	</div>
 	<form method="POST" action="?/pageQueries" bind:this={pqForm} class="hidden" use:enhance={() => { pqBusy = true; return async ({ update }) => { await update({ reset: false }); pqBusy = false; }; }}>
 		<input type="hidden" name="page" value={pqPage} />
 	</form>
 	{#if pqBusy || pq || (form && 'pqError' in form)}
-		<section class="mt-6" aria-live="polite">
+		<section class="mt-4" aria-live="polite">
 			<h2 class="mb-1 font-medium">Searches for <span class="pii">{path(pq?.page ?? pqPage)}</span></h2>
 			{#if pqBusy}
 				<p class="text-xs text-muted-foreground">Asking Bing…</p>
@@ -64,8 +73,9 @@
 			{/if}
 		</section>
 	{/if}
-	<section class="mt-6" id="crawl">
-		<h2 class="mb-1 font-medium">How Bing crawls the site</h2>
+	{:else if view === 'crawl'}
+	<section id="crawl">
+		<h2 class="sr-only">How Bing crawls the site</h2>
 		{#if !data.crawl}
 			<p class="card p-4 text-sm text-muted-foreground">Read on the next Bing sync.</p>
 		{:else}
@@ -86,7 +96,12 @@
 			{:else}
 				<p class="mb-3 text-sm text-muted-foreground">Bing has no crawl statistics for this period.</p>
 			{/if}
-			<h3 class="mt-4 mb-1 text-sm font-medium">Sitemaps Bing knows</h3>
+		{/if}
+	</section>
+	{:else if view === 'sitemaps'}
+		{#if data.crawl}
+			{@const c = data.crawl}
+			<h2 class="sr-only">Sitemaps Bing knows</h2>
 			{#if c.feedsError}<p class="mb-2 text-xs text-warn">Bing's sitemap list could not be read on the last sync: {c.feedsError}</p>{/if}
 			{#if c.feeds.length}
 				<div class="card overflow-x-auto"><table class="w-full text-sm">
@@ -98,9 +113,11 @@
 			{:else if !c.feedsError}
 				<p class="card p-3 text-sm text-muted-foreground">Bing lists no sitemaps for this site. Submit one in Bing Webmaster Tools under Sitemaps.</p>
 			{/if}
+		{:else}
+			<p class="card p-4 text-sm text-muted-foreground">Read on the next Bing sync.</p>
 		{/if}
-	</section>
-	<section class="mt-6" id="links">
+	{:else}
+	<section id="links">
 		<div class="mb-2 flex flex-wrap items-center gap-2">
 			<h2 class="font-medium">Inbound links Bing knows about</h2>
 			<form method="POST" action="?/refreshLinks" class="ml-auto" use:enhance={() => { busy = true; return async ({ update }) => { await update(); busy = false; }; }}>
@@ -151,4 +168,5 @@
 			</div>
 		{/if}
 	</section>
+	{/if}
 {/if}

@@ -2,11 +2,13 @@
 	import Explainer from '$lib/components/Explainer.svelte';
 	import Chart from '$lib/components/Chart.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
+	import SectionTabs from '$lib/components/SectionTabs.svelte';
 	import { ago, fmtInt } from '$lib/format';
 	import { enhance } from '$app/forms';
 	import { noKeyEventsText } from '$lib/keyeventtext';
 	let { data, form } = $props();
 	let rtBusy = $state(false);
+	let view = $state('');
 	const TIME_TIP = 'Average engagement time per session: how long the page was in front of the visitor. Kept for the 7d, 28d, 3m, 6m and 16m periods.';
 	// Present only once the value report has synced for this period; revenue only when some session earned any.
 	const values = $derived(data.linked && data.values.linked && data.values.status === 'ok' ? data.values : null);
@@ -49,37 +51,6 @@
 	<p>GA4 organic sessions and Search Console clicks are different measurements (sessions vs. clicks, consent-mode gaps, other search engines count as organic in GA4), so expect them to move together but not match. A divergence is a prompt to look, not proof of a problem.</p>
 </Explainer>
 	<DataTable rows={data.channels} {cols} sortKey="sessions" filterable={false} />
-	{#if data.sources.linked}
-		<section class="mt-6">
-			<h2 class="mb-1 font-medium">Traffic sources</h2>
-			{#if data.sources.status === 'pending'}
-				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
-			{:else if data.sources.status === 'failed'}
-				<p class="text-xs text-warn">GA4 could not return traffic sources on the last sync; it will be retried. {data.sources.error}</p>
-			{:else if data.sources.status === 'no-window'}
-				<p class="text-xs text-muted-foreground">Traffic sources are kept for the 7d, 28d, 3m, 6m and 16m periods. Pick one of those to see them.</p>
-			{:else}
-				<Explainer lead="Which sites, apps and campaigns sent sessions, {data.sources.window.start} to {data.sources.window.end}.">
-					<p>Sessions by the source and medium GA4 recorded.{#if data.sources.rows.length > 15} Type a site's name in the filter to find it.{/if} Links opened from apps and email often arrive without a referrer and count as <b>(direct) / (none)</b>; tag your links with <code>utm_source</code> to see them by name.{#if data.sources.truncated} Very small sources past GA4's row limit are not shown.{/if}</p>
-				</Explainer>
-				{#if data.sources.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so this is from {data.sources.window.end}: {data.sources.staleError}</p>{/if}
-				<DataTable
-					rows={data.sources.rows}
-					cols={[
-						{ key: 'source', label: 'Source', type: 'text', pii: true },
-						{ key: 'medium', label: 'Medium', type: 'text' },
-						{ key: 'channel', label: 'Channel group', type: 'text' },
-						{ key: 'sessions', label: 'Sessions', type: 'int', bar: true },
-						{ key: 'sessionsDelta', label: 'Δ sessions', title: data.sources.previousWindow ? `Against ${data.sources.previousWindow.start} to ${data.sources.previousWindow.end}. Empty for a source with no sessions then.` : 'GA4 no longer keeps the whole previous period.', type: 'delta' },
-						{ key: 'engagementRate', label: 'Engaged', type: 'pct' },
-						{ key: 'keyEvents', label: 'Key events', type: 'int' }
-					]}
-					sortKey="sessions"
-					pageSize={15}
-				/>
-			{/if}
-		</section>
-	{/if}
 	<section class="mt-6">
 		<h2 class="mb-1 font-medium">Right now</h2>
 		<form method="POST" action="?/realtime" use:enhance={() => { rtBusy = true; return async ({ update }) => { await update({ reset: false }); rtBusy = false; }; }} class="mb-2 flex items-center gap-2">
@@ -125,25 +96,52 @@
 			{/if}
 		{/if}
 	</section>
-	{#if data.keyEvents.linked}
-		<section class="mt-6">
-			<h2 class="mb-1 font-medium">Key events by name</h2>
-			{#if data.keyEvents.status === 'pending'}
+	<section class="mt-6" aria-label="GA4 details">
+		<SectionTabs bind:value={view} label="GA4 details" tabs={[
+			{ id: 'sources', label: 'Traffic sources' },
+			{ id: 'landing', label: 'Landing pages' },
+			{ id: 'campaigns', label: 'Campaigns' },
+			{ id: 'events', label: 'Key events' },
+			{ id: 'search', label: 'Site search' },
+			{ id: 'ai', label: 'AI assistants' }
+		]} />
+	{#if view === 'sources'}
+	{#if data.sources.linked}
+		<section>
+			<h2 class="sr-only">Traffic sources</h2>
+			{#if data.sources.status === 'pending'}
 				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
-			{:else if data.keyEvents.status === 'failed'}
-				<p class="text-xs text-warn">GA4 could not return key events on the last sync; it will be retried. {data.keyEvents.error}</p>
-			{:else if data.keyEvents.status === 'none'}
-				<p class="text-xs text-muted-foreground">{noKeyEventsText(data.keyEvents.marked)}</p>
+			{:else if data.sources.status === 'failed'}
+				<p class="text-xs text-warn">GA4 could not return traffic sources on the last sync; it will be retried. {data.sources.error}</p>
+			{:else if data.sources.status === 'no-window'}
+				<p class="text-xs text-muted-foreground">Traffic sources are kept for the 7d, 28d, 3m, 6m and 16m periods. Pick one of those to see them.</p>
 			{:else}
-				<p class="mb-2 text-xs text-muted-foreground">{data.keyEvents.window.start} to {data.keyEvents.window.end}, GA4's newest days. Only events marked as key events in GA4 are counted.</p>
-				{#if data.keyEvents.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so recent days may be missing: {data.keyEvents.staleError}</p>{/if}
-				<DataTable rows={data.keyEvents.events} cols={[{ key: 'event', label: 'Event', type: 'text' }, { key: 'keyEvents', label: 'Key events', type: 'int', bar: true }, { key: 'keyEventsDelta', label: 'Δ', title: 'Change against the same number of days just before.', type: 'delta' }, { key: 'prevKeyEvents', label: 'Before', type: 'int' }]} sortKey="keyEvents" filterable={false} pageSize={15} />
+				<Explainer lead="Which sites, apps and campaigns sent sessions, {data.sources.window.start} to {data.sources.window.end}.">
+					<p>Sessions by the source and medium GA4 recorded.{#if data.sources.rows.length > 15} Type a site's name in the filter to find it.{/if} Links opened from apps and email often arrive without a referrer and count as <b>(direct) / (none)</b>; tag your links with <code>utm_source</code> to see them by name.{#if data.sources.truncated} Very small sources past GA4's row limit are not shown.{/if}</p>
+				</Explainer>
+				{#if data.sources.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so this is from {data.sources.window.end}: {data.sources.staleError}</p>{/if}
+				<DataTable
+					rows={data.sources.rows}
+					cols={[
+						{ key: 'source', label: 'Source', type: 'text', pii: true },
+						{ key: 'medium', label: 'Medium', type: 'text' },
+						{ key: 'channel', label: 'Channel group', type: 'text' },
+						{ key: 'sessions', label: 'Sessions', type: 'int', bar: true },
+						{ key: 'sessionsDelta', label: 'Δ sessions', title: data.sources.previousWindow ? `Against ${data.sources.previousWindow.start} to ${data.sources.previousWindow.end}. Empty for a source with no sessions then.` : 'GA4 no longer keeps the whole previous period.', type: 'delta' },
+						{ key: 'engagementRate', label: 'Engaged', type: 'pct' },
+						{ key: 'keyEvents', label: 'Key events', type: 'int' }
+					]}
+					sortKey="sessions"
+					pageSize={15}
+				/>
 			{/if}
 		</section>
 	{/if}
+	{/if}
+	{#if view === 'landing'}
 	{#if data.landing.linked}
-		<section class="mt-6">
-			<h2 class="mb-1 font-medium">Landing pages, every channel</h2>
+		<section>
+			<h2 class="sr-only">Landing pages, every channel</h2>
 			{#if data.landing.status === 'pending'}
 				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
 			{:else if data.landing.status === 'failed'}
@@ -174,9 +172,11 @@
 			{/if}
 		</section>
 	{/if}
+	{/if}
+	{#if view === 'campaigns'}
 	{#if data.values.linked}
-		<section class="mt-6">
-			<h2 class="mb-1 font-medium">Campaigns</h2>
+		<section>
+			<h2 class="sr-only">Campaigns</h2>
 			{#if data.values.status === 'pending'}
 				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
 			{:else if data.values.status === 'failed'}
@@ -192,9 +192,31 @@
 				<DataTable rows={data.values.campaigns} cols={valueCols('Campaign')} sortKey="sessions" pageSize={15} />
 			{/if}
 		</section>
+	{/if}
+	{/if}
+	{#if view === 'events'}
+	{#if data.keyEvents.linked}
+		<section>
+			<h2 class="sr-only">Key events by name</h2>
+			{#if data.keyEvents.status === 'pending'}
+				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
+			{:else if data.keyEvents.status === 'failed'}
+				<p class="text-xs text-warn">GA4 could not return key events on the last sync; it will be retried. {data.keyEvents.error}</p>
+			{:else if data.keyEvents.status === 'none'}
+				<p class="text-xs text-muted-foreground">{noKeyEventsText(data.keyEvents.marked)}</p>
+			{:else}
+				<p class="mb-2 text-xs text-muted-foreground">{data.keyEvents.window.start} to {data.keyEvents.window.end}, GA4's newest days. Only events marked as key events in GA4 are counted.</p>
+				{#if data.keyEvents.staleError}<p class="mb-2 text-xs text-warn">The last refresh failed, so recent days may be missing: {data.keyEvents.staleError}</p>{/if}
+				<DataTable rows={data.keyEvents.events} cols={[{ key: 'event', label: 'Event', type: 'text' }, { key: 'keyEvents', label: 'Key events', type: 'int', bar: true }, { key: 'keyEventsDelta', label: 'Δ', title: 'Change against the same number of days just before.', type: 'delta' }, { key: 'prevKeyEvents', label: 'Before', type: 'int' }]} sortKey="keyEvents" filterable={false} pageSize={15} />
+			{/if}
+		</section>
+	{/if}
+	{/if}
+	{#if view === 'search'}
+	{#if data.values.linked}
 		{#if data.values.status === 'ok'}
-			<section class="mt-6">
-				<h2 class="mb-1 font-medium">Site search</h2>
+			<section>
+				<h2 class="sr-only">Site search</h2>
 				{#if !data.values.searchTerms.length}
 					<p class="text-xs text-muted-foreground">No site searches recorded in this period. GA4 counts them when enhanced measurement's site search is on and the results page keeps the term in its address, such as <code>?q=</code> or <code>?s=</code>.</p>
 				{:else}
@@ -206,9 +228,11 @@
 			</section>
 		{/if}
 	{/if}
+	{/if}
+	{#if view === 'ai'}
 	{#if data.ai.linked}
-		<section class="mt-6">
-			<h2 class="mb-1 font-medium">AI assistants</h2>
+		<section>
+			<h2 class="sr-only">AI assistants</h2>
 			{#if data.ai.status === 'pending'}
 				<p class="text-xs text-muted-foreground">Appears after the next GA4 sync.</p>
 			{:else if data.ai.status === 'failed'}
@@ -226,4 +250,6 @@
 			{/if}
 		</section>
 	{/if}
+	{/if}
+	</section>
 {/if}

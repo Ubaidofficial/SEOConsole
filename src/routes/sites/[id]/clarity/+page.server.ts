@@ -58,6 +58,10 @@ export const load: PageServerLoad = ({ params }) => {
 		...install,
 		clarityUrl: clarityDashboardUrl(install.install.ids[0]),
 		channels: byChannel ? { day: byChannel.day, rows: clarityByDimension(byChannel.metrics, 'Channel') } : null,
+		devices: (() => {
+			const dev = snap('Device');
+			return dev ? { day: dev.day, rows: clarityByDimension(dev.metrics, 'Device') } : null;
+		})(),
 		frustrated,
 		status: { state: link.sync_status, message: link.sync_message, lastSync: link.last_sync_at },
 		callsLeft: callsLeft(link.integration_id!),

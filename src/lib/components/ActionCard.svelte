@@ -26,7 +26,7 @@
 				<form method="POST" action="/sites/{a.siteId}/actions?/state" use:enhance class="flex gap-1.5">
 					<input type="hidden" name="key" value={a.key} />
 					{#if restore}<Tip interactive text={BUTTON_EXPLAIN.restore}><button class="btn btn-xs !px-2.5" name="state" value="open">Restore</button></Tip>
-					{:else}<Tip interactive text={BUTTON_EXPLAIN.done}><button class="btn btn-xs !px-2.5" name="state" value="done">Done</button></Tip><Tip interactive text={BUTTON_EXPLAIN.snooze}><button class="btn btn-xs !px-2.5 text-muted-foreground" name="state" value="snoozed">Snooze</button></Tip>{/if}
+					{:else}<Tip interactive text={BUTTON_EXPLAIN.done}><button class="btn btn-xs !px-2.5" name="state" value="done">Done</button></Tip><Tip interactive text={BUTTON_EXPLAIN.snooze}><button class="btn btn-ghost btn-xs !px-2 text-muted-foreground" name="state" value="snoozed">Snooze</button></Tip>{/if}
 				</form>
 			{/if}
 		</div>
