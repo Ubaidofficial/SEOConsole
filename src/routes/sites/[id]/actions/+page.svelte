@@ -34,9 +34,14 @@
 		<span class="mr-1 text-sm"><b>{data.open.length}</b> open {#if blocking}· <b class="text-bad">{blocking} blocking</b>{/if}</span>
 		<button class="chip {only === 'blocking' ? 'chip-on' : ''}" onclick={() => (only = only === 'blocking' ? 'all' : 'blocking')} disabled={!blocking}>Blocking ({blocking})</button>
 		<button class="chip {only === 'quick' ? 'chip-on' : ''}" onclick={() => (only = only === 'quick' ? 'all' : 'quick')} disabled={!quick} title="Low-effort items that are not blocking">Quick wins ({quick})</button>
-		<span class="mx-1 text-muted-foreground">|</span>
-		<button class="chip {type === 'all' ? 'chip-on' : ''}" onclick={() => (type = 'all')}>All kinds</button>
-		{#each types as t}<button class="chip {type === t ? 'chip-on' : ''}" onclick={() => (type = t)}>{TYPE_LABEL[t]} ({count((a) => a.type === t)})</button>{/each}
+		{#if types.length > 1}
+			<label class="ml-1 flex items-center gap-1.5 text-xs text-muted-foreground">Kind
+				<select class="input !h-7 !py-0 text-xs" bind:value={type}>
+					<option value="all">All kinds ({data.open.length})</option>
+					{#each [...types].sort((x, y) => count((a) => a.type === y) - count((a) => a.type === x)) as t}<option value={t}>{TYPE_LABEL[t]} ({count((a) => a.type === t)})</option>{/each}
+				</select>
+			</label>
+		{/if}
 	</div>
 	{#if rows.length === 0}<div class="card p-6 text-center text-sm text-muted-foreground">Nothing matches these filters. <button class="underline" onclick={() => ((type = 'all'), (only = 'all'))}>Clear them</button></div>{/if}
 	<div class="stagger space-y-3">

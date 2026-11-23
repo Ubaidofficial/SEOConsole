@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { fmtInt, ago } from '$lib/format';
 	import ClarityInstall from '$lib/components/ClarityInstall.svelte';
+	import SectionTabs from '$lib/components/SectionTabs.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 	let { data, form } = $props();
 
@@ -17,59 +18,53 @@
 		const sum = (k: string) => t.reduce((a: number, x: Record<string, string | number>) => a + Number(x[k] ?? 0), 0);
 		return { sessions: sum('totalSessionCount'), bots: sum('totalBotSessionCount'), users: sum('distinctUserCount') || sum('distantUserCount') };
 	});
+	let view = $state('');
+	// Once Clarity is installed, connected and recording, the setup checklist folds to one line.
+	const recording = $derived(data.linked && ['on-page', 'via-gtm', 'unseen'].includes(data.install.state) && headline.sessions > 0 && !data.install.findings.some((f: { severity: string }) => f.severity !== 'info') && !form);
+	const behaviourCols = (label: string) => [
+		{ key: 'value', label, type: 'text' as const },
+		{ key: 'sessions', label: 'Sessions', type: 'int' as const, bar: true },
+		{ key: 'rageClicks', label: 'Rage clicks', title: 'Share of sessions with rage clicks', type: 'pct' as const },
+		{ key: 'deadClicks', label: 'Dead clicks', title: 'Share of sessions with clicks that did nothing', type: 'pct' as const },
+		{ key: 'quickBacks', label: 'Quick backs', title: 'Share of sessions that left a page and came straight back', type: 'pct' as const },
+		{ key: 'scrollDepth', label: 'Scroll depth', type: 'pct' as const },
+		{ key: 'activeTime', label: 'Active time', type: 'dur' as const }
+	];
 </script>
 
-<ClarityInstall install={data.install} scan={data.scan} gtm={data.gtm} readOnly={data.readOnly} connected={data.linked} sessions={data.linked && data.totals ? headline.sessions : null} form={form ?? null} />
+{#if recording}
+	<details class="card mb-4 px-4 py-3">
+		<summary class="cursor-pointer text-sm select-none"><span class="text-good">●</span> Clarity is installed and recording <span class="text-xs text-muted-foreground">· setup details</span></summary>
+		<div class="mt-3"><ClarityInstall install={data.install} scan={data.scan} gtm={data.gtm} readOnly={data.readOnly} connected={data.linked} sessions={headline.sessions} form={form ?? null} /></div>
+	</details>
+{:else}
+	<ClarityInstall install={data.install} scan={data.scan} gtm={data.gtm} readOnly={data.readOnly} connected={data.linked} sessions={data.linked && data.totals ? headline.sessions : null} form={form ?? null} />
+{/if}
 
 {#if !data.linked}
 	<div class="card p-5 text-sm"><p class="mb-1 font-medium">Connect Clarity's data</p><p class="mb-3 text-muted-foreground">The script records visits; an API token lets SEOConsole read them (Clarity: <b>Settings → Data Export → Generate new API token</b>). Then rage clicks, dead clicks and scroll depth show next to your search data.</p><a class="btn btn-primary" href="/connect">Paste the token on Connect</a></div>
 {:else}
 	<div class="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Sessions (last 24h at snapshot)</div><div class="tnum text-xl font-semibold">{fmtInt(headline.sessions)}</div></div>
-		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">of which bots</div><div class="tnum text-xl font-semibold">{fmtInt(headline.bots)}</div></div>
+		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Sessions, last 24h</div><div class="tnum text-xl font-semibold">{fmtInt(headline.sessions)}</div><div class="text-xs text-muted-foreground">{fmtInt(headline.bots)} of them bots</div></div>
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Distinct users</div><div class="tnum text-xl font-semibold">{fmtInt(headline.users)}</div></div>
-		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">API calls left today</div><div class="tnum text-xl font-semibold">{data.callsLeft}<span class="text-sm text-muted-foreground"> / 10</span></div>
+		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Snapshot</div><div class="text-xl font-semibold">{data.totals?.day ?? '–'}</div><div class="truncate text-xs text-muted-foreground">{data.status.state === 'error' ? data.status.message : 'read ' + ago(data.status.lastSync)}</div></div>
+		<div class="card px-3 py-2" title="Clarity allows 10 API calls a day and shows only 1 to 3 days, so SEOConsole refreshes every 8½ hours (9 calls, one kept for you), alternating the device and channel breakdowns, and keeps a daily history."><div class="text-xs text-muted-foreground">API calls left today</div><div class="tnum text-xl font-semibold">{data.callsLeft}<span class="text-sm text-muted-foreground"> / 10</span></div>
 			<form method="POST" action="/connect?/resync" use:enhance><input type="hidden" name="siteId" value={page.params.id} /><input type="hidden" name="kind" value="clarity" /><button class="btn btn-ghost btn-xs">refresh now (uses calls)</button></form></div>
 	</div>
-	<p class="mb-3 text-xs text-muted-foreground">Snapshot {data.totals?.day ?? '–'} · {data.status.state === 'error' ? data.status.message : 'synced ' + ago(data.status.lastSync)}. Clarity allows 10 API calls a day and shows only 1–3 days, so this refreshes every 8½ hours (9 calls, one kept for you), alternating the device and channel breakdowns, and keeps a daily history. Columns are as Clarity returns them.</p>
-
-	{#if data.history.length > 1}
-		<section class="card mb-4 p-4"><h2 class="mb-2 font-medium">Stored daily snapshots</h2>
-			<div class="tnum flex gap-4 overflow-x-auto text-xs">{#each data.history as h}<div><div class="text-muted-foreground">{h.day.slice(5)}</div><div class="font-medium">{fmtInt(h.sessions)}</div></div>{/each}</div>
-		</section>
-	{/if}
-
 	<div class="mb-4 flex flex-wrap items-center gap-3">
 		<a class="btn btn-sm" href={data.clarityUrl} target="_blank" rel="noopener noreferrer">Open in Clarity ↗</a>
-		<span class="text-xs text-muted-foreground">Recordings and heatmaps stay in Clarity. To watch one page, open Recordings and add the filter <b>Visited URL</b> with its address.</span>
+		<span class="text-xs text-muted-foreground">Recordings and heatmaps are in Clarity: filter Recordings by <b>Visited URL</b> to watch one page.</span>
 	</div>
 
-	{#if data.channels}
-		<section class="mb-5">
-			<h2 class="mb-1 font-medium">Behaviour by traffic channel</h2>
-			<p class="mb-2 text-xs text-muted-foreground">Snapshot {data.channels.day}. Do search visitors struggle more than others? A channel with far more rage or dead clicks points at a landing page that does not match what it promised.</p>
-			<DataTable
-				rows={data.channels.rows}
-				cols={[
-					{ key: 'value', label: 'Channel', type: 'text' },
-					{ key: 'sessions', label: 'Sessions', type: 'int', bar: true },
-					{ key: 'rageClicks', label: 'Rage clicks', title: 'Share of sessions with rage clicks', type: 'pct' },
-					{ key: 'deadClicks', label: 'Dead clicks', title: 'Share of sessions with clicks that did nothing', type: 'pct' },
-					{ key: 'quickBacks', label: 'Quick backs', title: 'Share of sessions that left a page and came straight back', type: 'pct' },
-					{ key: 'scrollDepth', label: 'Scroll depth', type: 'pct' },
-					{ key: 'activeTime', label: 'Active time', type: 'dur' }
-				]}
-				sortKey="sessions"
-				filterable={false}
-			/>
-		</section>
-	{:else}
-		<p class="mb-5 text-xs text-muted-foreground">Behaviour by traffic channel appears after the next Clarity refresh (it alternates with the device breakdown to stay inside Clarity's 10 calls a day).</p>
-	{/if}
+	<SectionTabs bind:value={view} label="Clarity details" tabs={[
+		{ id: 'pages', label: 'Pages to watch', count: data.frustrated.length || null },
+		{ id: 'channel', label: 'By channel' },
+		{ id: 'device', label: 'By device' },
+		{ id: 'raw', label: 'Raw data' }
+	]} />
 
-	{#if data.frustrated.length}
-		<section class="mb-5">
-			<h2 class="mb-1 font-medium">Pages to watch in Clarity</h2>
+	{#if view === 'pages'}
+		{#if data.frustrated.length}
 			<p class="mb-2 text-xs text-muted-foreground">Where the largest share of sessions hit rage or dead clicks in the latest snapshot. Watch a few recordings of the top ones.</p>
 			<DataTable
 				rows={data.frustrated}
@@ -84,22 +79,46 @@
 				filterable={false}
 				pageSize={10}
 			/>
-		</section>
-	{/if}
-
-	{#each sections as [title, snap]}
-		{#if snap}
-			<h2 class="mt-5 mb-2 font-medium">{title}</h2>
-			{#each snap.metrics as m}
-				{@const keys = keysOf(m)}
-				<div class="card mb-3 overflow-x-auto">
-					<div class="border-b px-3 py-2 text-sm font-medium" style="border-color:var(--border)">{pretty(m.metricName)}</div>
-					<table class="w-full">
-						<thead><tr>{#each keys as k}<th class="th">{pretty(k)}</th>{/each}</tr></thead>
-						<tbody>{#each m.information.slice(0, 15) as r}<tr>{#each keys as k}<td class="td tnum">{r[k] === undefined ? '' : fmt(r[k])}</td>{/each}</tr>{/each}</tbody>
-					</table>
-				</div>
-			{/each}
+		{:else}
+			<p class="text-sm text-muted-foreground">No page had rage or dead clicks in the latest snapshot.</p>
 		{/if}
-	{/each}
+	{:else if view === 'channel'}
+		{#if data.channels}
+			<p class="mb-2 text-xs text-muted-foreground">Snapshot {data.channels.day}. A channel with far more rage or dead clicks points at landing pages that do not match what they promised.</p>
+			<DataTable rows={data.channels.rows} cols={behaviourCols('Channel')} sortKey="sessions" filterable={false} />
+		{:else}
+			<p class="text-sm text-muted-foreground">Appears after the next Clarity refresh: it alternates with the device breakdown to stay inside Clarity's 10 calls a day.</p>
+		{/if}
+	{:else if view === 'device'}
+		{#if data.devices}
+			<p class="mb-2 text-xs text-muted-foreground">Snapshot {data.devices.day}. Much worse numbers on mobile usually mean a layout or tap-target problem.</p>
+			<DataTable rows={data.devices.rows} cols={behaviourCols('Device')} sortKey="sessions" filterable={false} />
+		{:else}
+			<p class="text-sm text-muted-foreground">Appears after the next Clarity refresh.</p>
+		{/if}
+	{:else}
+		<p class="mb-3 text-xs text-muted-foreground">Every metric as Clarity's API returns it, for checking a number against Clarity itself.</p>
+		{#if data.history.length > 1}
+			<div class="card mb-3 p-3"><div class="mb-1 text-sm font-medium">Sessions per stored day</div>
+				<div class="tnum flex gap-4 overflow-x-auto text-xs">{#each data.history as h}<div><div class="text-muted-foreground">{h.day.slice(5)}</div><div class="font-medium">{fmtInt(h.sessions)}</div></div>{/each}</div>
+			</div>
+		{/if}
+		{#each sections as [title, snap]}
+			{#if snap}
+				<details class="card mb-3">
+					<summary class="cursor-pointer px-3 py-2 text-sm font-medium select-none">{title} <span class="text-xs font-normal text-muted-foreground">· {snap.metrics.length} metrics</span></summary>
+					{#each snap.metrics as m}
+						{@const keys = keysOf(m)}
+						<div class="overflow-x-auto border-t" style="border-color:var(--border)">
+							<div class="px-3 pt-2 text-xs font-medium">{pretty(m.metricName)}</div>
+							<table class="w-full">
+								<thead><tr>{#each keys as k}<th class="th">{pretty(k)}</th>{/each}</tr></thead>
+								<tbody>{#each m.information.slice(0, 15) as r}<tr>{#each keys as k}<td class="td tnum">{r[k] === undefined ? '' : fmt(r[k])}</td>{/each}</tr>{/each}</tbody>
+							</table>
+						</div>
+					{/each}
+				</details>
+			{/if}
+		{/each}
+	{/if}
 {/if}

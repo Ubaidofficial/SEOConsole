@@ -2,6 +2,7 @@
 	import SegBar from '$lib/components/viz/SegBar.svelte';
 	import BarList from '$lib/components/viz/BarList.svelte';
 	import Explainer from '$lib/components/Explainer.svelte';
+	import SectionTabs from '$lib/components/SectionTabs.svelte';
 	import { enhance } from '$app/forms';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import ShowMore from '$lib/components/ShowMore.svelte';
@@ -21,6 +22,7 @@
 	const eventText: Record<string, string> = { deindexed: 'No longer indexed', indexed: 'Now indexed', canonical_changed: 'Canonical changed', blocked: 'Blocked by robots.txt', unblocked: 'Unblocked', fetch_error: 'Page fetch problem' };
 	const idx: Record<string, string> = { indexed: 'yes', not_indexed: 'no', unknown: 'unknown', 'not checked': 'not checked' };
 	const rows = $derived(data.classes.rows.filter((r) => cls === 'all' || r.cls === cls).map((r) => ({ ...r, label: labels[r.cls], index: idx[r.index] ?? r.index })));
+	let view = $state('');
 </script>
 
 <section class="card mb-4 p-4">
@@ -53,6 +55,12 @@
 	<p class="mt-2 text-[11px] text-muted-foreground">Order of checking: your watch list, then pages that appeared for the first time this period (indexing still open), then pages that lost visibility, then the biggest pages. The inspected set is a rotating sample, not the whole site.</p>
 </section>
 
+<SectionTabs bind:value={view} label="Indexing details" tabs={[
+	{ id: 'monitor', label: 'Monitor results' },
+	{ id: 'sitemaps', label: 'Sitemap coverage' },
+	{ id: 'weak', label: 'Weak and dead URLs' }
+]} />
+{#if view === 'monitor'}
 <div class="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
 	<section class="card p-4">
 		<h2 class="mb-1 font-medium">Why pages are not indexed</h2>
@@ -93,7 +101,7 @@
 		<div class="card p-4 text-sm text-muted-foreground">No changes recorded yet. The first check only records a starting point; changes show up from the second check on.</div>
 	{/if}
 </section>
-
+{:else if view === 'sitemaps'}
 <section class="mb-5">
 	<div class="mb-1 flex flex-wrap items-center gap-3">
 		<h2 class="font-medium">Sitemap coverage</h2>
@@ -135,7 +143,7 @@
 		<p class="mt-2 text-[11px] text-muted-foreground">URLs are compared without scheme, www, query string or trailing slash. A page missing from the sitemap may be a parameter or canonical variant rather than a real omission.</p>
 	{/if}
 </section>
-
+{:else}
 <section>
 	<h2 class="mb-1 font-medium">Weak and dead URLs</h2>
 	<p class="mb-2 max-w-3xl text-xs text-muted-foreground">Every page Search Console has shown, classed by how it is doing against the previous {data.days} days (cut-offs are my own, chosen to be conservative). A page that never got an impression is invisible to Search Console; compare with your sitemap to find those.</p>
@@ -151,3 +159,4 @@
 	{#if cls !== 'all'}<p class="mb-2 text-xs text-muted-foreground">{help[cls]}.</p>{/if}
 	<DataTable {rows} cols={[{ key: 'page', label: 'Page', type: 'link' }, { key: 'label', label: 'Class', type: 'text' }, { key: 'clicks', label: 'Clicks', type: 'int' }, { key: 'prevClicks', label: 'Before', type: 'int' }, { key: 'impressions', label: 'Impressions', type: 'int' }, { key: 'position', label: 'Position', type: 'pos' }, { key: 'index', label: 'Indexed?', type: 'text' }]} sortKey="prevClicks" empty="No problem pages in this period." />
 </section>
+{/if}

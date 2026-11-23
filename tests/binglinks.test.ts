@@ -177,7 +177,7 @@ describe('storing it', () => {
 		await syncBingLinks(siteId, new DemoBing());
 		const item = actionsFor(getSite(siteId)!).find((a) => a.type === 'reclaim')!;
 		expect(item).toBeTruthy();
-		expect(item.href).toMatch(/\/bing#links$/);
+		expect(item.href).toMatch(/\/bing\?section=links#links$/);
 		expect(item.title).toMatch(/no longer work/);
 		expect(item.evidence.join(' ')).toMatch(/discontinued-guide/);
 	});

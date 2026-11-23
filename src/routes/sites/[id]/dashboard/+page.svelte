@@ -90,7 +90,7 @@
 		{:else if !a.synced}<p class="text-sm text-muted-foreground">Appears after the first GA4 sync.</p>
 		{:else if !a.sources}<p class="text-sm text-muted-foreground">Sources are kept for the 7d, 28d, 3m, 6m and 16m periods; pick one of those (or they appear after the next GA4 sync).</p>
 		{:else}
-			<p class="mb-3 text-xs text-muted-foreground">{range(a.sources.window)} · <a class="underline" href="analytics?days={data.days}">all sources</a></p>
+			<p class="mb-3 text-xs text-muted-foreground">{range(a.sources.window)} · <a class="underline" href="analytics?days={data.days}&section=sources">all sources</a></p>
 			<BarList limit={10} items={a.sources.rows.map((r) => ({ label: r.source, note: r.medium, value: r.sessions, pii: true }))} unit="sessions" />
 		{/if}
 		{#if c?.synced && c.referrers.length}
@@ -175,7 +175,7 @@
 		{:else if !a.landing}<p class="text-sm text-muted-foreground">Landing pages are kept for the 7d, 28d, 3m, 6m and 16m periods; pick one of those (or they appear after the next GA4 sync).</p>
 		{:else if !a.landing.rows.length}<p class="text-sm text-muted-foreground">No sessions in {range(a.landing.window)}.</p>
 		{:else}
-			<p class="mb-3 text-xs text-muted-foreground">{range(a.landing.window)} · the note is each page's biggest channel · <a class="underline" href="analytics?days={data.days}">all landing pages</a></p>
+			<p class="mb-3 text-xs text-muted-foreground">{range(a.landing.window)} · the note is each page's biggest channel · <a class="underline" href="analytics?days={data.days}&section=landing">all landing pages</a></p>
 			<BarList limit={10} color="var(--chart-2)" items={a.landing.rows.map((r) => ({ label: r.page, value: r.sessions, note: `${r.topChannel} ${fmtPct(r.channels[0]?.sessions / r.sessions, 0)}`, pii: true }))} unit="sessions" />
 		{/if}
 	</section>
