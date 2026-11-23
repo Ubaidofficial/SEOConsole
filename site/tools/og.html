@@ -24,12 +24,22 @@
   .shot .bar { height: 30px; background: #f1f1ee; border-bottom: 1px solid rgba(13,13,15,0.12); display: flex; align-items: center; gap: 7px; padding: 0 12px; }
   .shot .bar i { width: 10px; height: 10px; border-radius: 50%; background: rgba(13,13,15,0.18); }
   .shot img { display: block; width: 100%; }
+  .kick { margin-top: 26px; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: #3b3b42; }
+  .alert { position: absolute; left: 640px; top: 392px; width: 400px; background: #fff; border: 1.5px solid #0d0d0f; border-radius: 16px; padding: 16px 18px; box-shadow: 8px 8px 0 #0d0d0f; }
+  .alert .h { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; }
+  .alert .h img { width: 26px; height: 26px; border-radius: 7px; }
+  .alert .h span { margin-left: auto; font-size: 13px; font-weight: 500; color: #6b6b73; }
+  .alert p { margin: 10px 0 0; font-size: 17px; line-height: 1.3; color: #2b2b31; }
+  .alert .tag { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 8px; border-radius: 6px; margin-right: 6px; }
+  .alert .bad { color: #b42318; background: #fef0ee; border: 1px solid rgba(180,35,24,0.35); }
+  .alert .good { color: #2f6b00; background: rgba(198,255,74,0.45); border: 1px solid rgba(47,107,0,0.35); }
 </style>
 </head>
 <body>
   <div class="copy">
     <div class="brand"><img src="../assets/brand/mark-dark.svg" alt="">SEOConsole</div>
-    <h1>Find <span class="hl">hidden</span> SEO opportunities across all your websites.</h1>
+    <h1>Find <span class="hl">hidden</span> SEO wins across all your websites.</h1>
+    <div class="kick">Alerts, rank tracking and AI agents, built in.</div>
   </div>
   <div class="chips">
     <span class="chip"><img src="../assets/logos/search-console.svg" alt="">Google Search Console</span>
@@ -40,5 +50,10 @@
     <span class="chip oss">Free · open source</span>
   </div>
   <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img src="../assets/shots/dashboard-1600.webp" alt=""></div>
+  <div class="alert">
+    <div class="h"><img src="../assets/brand/mark-dark.svg" alt="">SEOConsole<span>#seo-alerts</span></div>
+    <p><span class="tag bad">▼ Clicks falling</span>/guides/ lost 31% this week</p>
+    <p><span class="tag good">▲ New top 3</span>4 searches reached the top 3</p>
+  </div>
 </body>
 </html>
