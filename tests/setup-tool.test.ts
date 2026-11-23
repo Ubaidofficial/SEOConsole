@@ -40,7 +40,7 @@ describe('MCP setup_google_tag', () => {
 	it('a container that already has a Google tag gets nothing; an unsafe publish is refused but a workspace is allowed', async () => {
 		const g = await call({ site: id('greenleaf'), mode: 'publish' });
 		expect(g.data).toMatchObject({ ok: true, nothingToDo: true });
-		expect(g.data.changes.join(' ')).toMatch(/already has/);
+		expect(g.data.changes.join(' ')).toMatch(/“Google tag” \(Google tag, fires on All Pages\) already loads G-DEMO10000.*no second Google tag/);
 		const t = await call({ site: id('trailmaps'), mode: 'publish' });
 		expect(t.data).toMatchObject({ ok: false, canPublish: false });
 		expect(t.data.error).toBeTruthy();

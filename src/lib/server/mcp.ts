@@ -520,7 +520,7 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_tracking_health',
-		description: `Cross-checks Search Console, GA4 and Tag Manager for one site and ranks findings critical / warning / info: unpublished container, no GA4 tag, a different GA4 property than the linked one, paused or trigger-less tags, leftover Universal Analytics tags, GA4 organic sessions far below Search Console clicks. Prompts to investigate, not proof.`,
+		description: `Cross-checks Search Console, GA4 and Tag Manager for one site and ranks findings critical / warning / info: unpublished container, no GA4 tag, a different GA4 property than the linked one, two unpaused Google tags for one measurement ID, paused or trigger-less tags, leftover Universal Analytics tags, GA4 organic sessions far below Search Console clicks. Prompts to investigate, not proof.`,
 		schema: { ...siteArg, ...daysArg },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);

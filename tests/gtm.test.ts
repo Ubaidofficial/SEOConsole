@@ -15,6 +15,7 @@ import { createApiKey } from '../src/lib/server/apikeys';
 import { handleMcp } from '../src/lib/server/mcp';
 import { queueDepth } from '../src/lib/server/jobs';
 import { auditTracking, type TrackingInput, type TrackingTag } from '../src/lib/tracking';
+import { existingGoogleTag } from '../src/lib/server/gtmwrite';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const drain = async () => {
@@ -346,5 +347,20 @@ describe('auditTracking: malformed Tag ID', () => {
 	});
 	it('older snapshots without the new fields behave as before', () => {
 		expect(ids(base({ gtm: { publicId: 'GTM-X', published: true, tags: [tag({ type: 'googtag', measurementId: null })] } }))).toEqual(['ga4-id-hidden']);
+	});
+});
+
+describe('existingGoogleTag (before the Google tag install adds one)', () => {
+	const t = (o: Partial<TrackingTag>) => ({ ...tag({ name: 'GA', type: 'dest_ga', measurementId: 'G-GOOD1234' }), ...o });
+
+	it('finds the unpaused tag already loading that ID and names it with its trigger', () => {
+		const r = existingGoogleTag([t({ name: 'Google Analytics G-GOOD1234', firing: ['Initialization - All Pages'] })], 'g-good1234')!;
+		expect(r.tags.map((x) => x.name)).toEqual(['Google Analytics G-GOOD1234']);
+		expect(r.message).toBe('“Google Analytics G-GOOD1234” (Google Analytics destination, fires on Initialization - All Pages) already loads G-GOOD1234 from the live container, so no second Google tag is added.');
+	});
+
+	it('finds nothing for a paused tag, an event tag, another ID, or when the ID is not known yet', () => {
+		expect(existingGoogleTag([t({ paused: true }), t({ type: 'gaawe' }), t({ measurementId: 'G-OTHER999' }), t({ type: 'html' })], 'G-GOOD1234')).toBeNull();
+		expect(existingGoogleTag([t({})], null)).toBeNull();
 	});
 });
