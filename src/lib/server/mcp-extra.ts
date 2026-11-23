@@ -286,7 +286,8 @@ function setupChanges(p: SetupPlan): string[] {
 	if (g?.state === 'create') out.push(`GA4: create the property ${g.displayName} (${g.timeZone}, ${g.currencyCode}) with a web data stream for ${g.uri}.`);
 	if (m?.state === 'linked' || m?.state === 'match') out.push(`Tag Manager: the container ${m.label}${m.state === 'match' ? ', linked to this site' : ''}.`);
 	if (m?.state === 'create') out.push(`Tag Manager: create the web container ${m.name} for ${m.domain}.`);
-	if (t?.state === 'present') out.push(`The live container already has ${t.existing.map((e) => `"${e.name}"${e.measurementId ? ` (${e.measurementId})` : ''}`).join(', ')}: no tag is added.${t.mismatch ? ` ${t.mismatch}` : ''}`);
+	if (t?.state === 'present' && t.already) out.push(t.already);
+	else if (t?.state === 'present') out.push(`The live container already has ${t.existing.map((e) => `"${e.name}"${e.measurementId ? ` (${e.measurementId})` : ''}`).join(', ')}: no tag is added.${t.mismatch ? ` ${t.mismatch}` : ''}`);
 	if (t?.state === 'add') out.push(`Add "${t.tagName}" for ${t.measurementId ?? 'the new property'} on all pages, in a new workspace${t.canPublish ? ', then publish' : ''}.`);
 	return out;
 }

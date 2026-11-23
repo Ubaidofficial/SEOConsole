@@ -5,8 +5,8 @@ import { linksFor } from './links';
 import { gtmSourceFor } from './channels';
 import { claritySnippet, parseClarityId } from '../clarityinstall';
 import { DEMO_PASTED_TAG, demoInstalled, demoPaused, demoRepaired } from './demo-channels';
-import { duplicateGoogleTags } from '../tracking';
-import { GA_ID_KEYS, isBadTagIdValue, type GtmSource } from './gtm';
+import { duplicateGoogleTags, GOOGLE_TAG_TYPES } from '../tracking';
+import { GA_ID_KEYS, isBadTagIdValue, tagTypeLabel, type GtmSource, type GtmTag } from './gtm';
 
 /**
  * Writing to Tag Manager: adding Microsoft Clarity (this file's plan/install pair), and, for "Set up GA4 & Tag Manager" (setup.ts), creating
@@ -116,6 +116,20 @@ export function demoGtmWriter(): GtmTagEditor {
 }
 
 export const GA4_TAG_NAME = 'Google tag (added by SEOConsole)';
+
+/**
+ * Before adding a Google tag for `measurementId`: the unpaused tags in the live container that already load the Google tag for that ID
+ * (a Google tag, GA4 configuration or Google Analytics destination tag), and a sentence naming them with their triggers. A second one can
+ * load the tag twice and double-count page views, so the install adds nothing when one is found.
+ */
+export function existingGoogleTag<T extends Pick<GtmTag, 'name' | 'type' | 'paused' | 'firing' | 'measurementId'>>(live: T[], measurementId: string | null): { tags: T[]; message: string } | null {
+	if (!measurementId) return null;
+	const id = measurementId.toUpperCase();
+	const tags = live.filter((t) => !t.paused && GOOGLE_TAG_TYPES.has(t.type) && t.measurementId?.toUpperCase() === id);
+	if (!tags.length) return null;
+	const named = tags.map((t) => `“${t.name}” (${tagTypeLabel(t.type)}, ${t.firing.length ? `fires on ${t.firing.join(' and ')}` : 'no firing trigger'})`);
+	return { tags, message: `${named.join(' and ')} already load${tags.length > 1 ? '' : 's'} ${id} from the live container, so no second Google tag is added.` };
+}
 
 /** Tag Manager accounts, and creating a web container in one. Tag Manager API v2 has no accounts.create, so an account cannot be made here. */
 export interface GtmAdmin {
