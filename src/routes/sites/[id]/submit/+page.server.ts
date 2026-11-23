@@ -10,7 +10,7 @@ import { clientForSite } from '$lib/server/clients';
 import { diagnoseSitemap } from '$lib/server/sitemapcov';
 import { demoSitemapFetch } from '$lib/server/demo-channels';
 import { enqueueIndexMonitor } from '$lib/server/jobs';
-import { CHANNELS, MAX_DRIP_DAYS, MAX_SUBMIT_URLS, RECHECK_DAYS, SubmitRefused, clearQueue, presetUrls, quotaOverview, refreshBingQuota, resubmitSitemaps, submissionStatus, submitForIndexing, submitSitemapTo, type Channel, type Preset } from '$lib/server/submission';
+import { CHANNELS, MAX_DRIP_DAYS, MAX_SUBMIT_URLS, RECHECK_DAYS, SubmitRefused, clearQueue, presetUrls, quotaOverview, refreshBingQuota, resubmitSitemaps, submissionStatus, submitForIndexing, submitSitemapTo, submitSitemapsToBing, bingSitemapNote, type Channel, type Preset } from '$lib/server/submission';
 
 export const load: PageServerLoad = ({ params }) => {
 	const site = getSite(Number(params.id))!;
@@ -60,7 +60,8 @@ export const actions: Actions = {
 		const site = getSite(Number(params.id))!;
 		try {
 			const feed = await submitSitemapTo(site, String((await request.formData()).get('feed') ?? ''), 'app');
-			return { ok: `Submitted ${feed}. Search Console reads it on its own schedule; submitting again does not speed that up.` };
+			const b = await submitSitemapsToBing(site, [feed], 'app');
+			return { ok: `Submitted ${feed}. ${bingSitemapNote(b)} Search Console reads it on its own schedule.`.replace(/\s+/g, ' ') };
 		} catch (e) {
 			if (e instanceof SubmitRefused) return fail(400, { error: e.message });
 			throw e;
@@ -71,7 +72,8 @@ export const actions: Actions = {
 		try {
 			const r = await resubmitSitemaps(site, 'app');
 			if (!r.submitted.length && !r.failed.length) return fail(400, { error: 'Search Console lists no sitemap for this site yet: submit one first.' });
-			return r.failed.length ? fail(502, { error: `Resubmitted ${r.submitted.length}; ${r.failed.length} failed: ${r.failed[0].error}` }) : { ok: `Resubmitted ${r.submitted.length} sitemap${r.submitted.length === 1 ? '' : 's'}.` };
+			const b = await submitSitemapsToBing(site, r.submitted, 'app');
+			return r.failed.length ? fail(502, { error: `Resubmitted ${r.submitted.length}; ${r.failed.length} failed: ${r.failed[0].error}` }) : { ok: `Resubmitted ${r.submitted.length} sitemap${r.submitted.length === 1 ? '' : 's'}. ${bingSitemapNote(b)}`.trim() };
 		} catch (e) {
 			if (e instanceof SubmitRefused) return fail(400, { error: e.message });
 			throw e;

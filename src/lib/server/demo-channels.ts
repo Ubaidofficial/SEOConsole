@@ -33,6 +33,7 @@ const dayFactor = (date: string, end: string, seed: string) => {
 export class DemoBing implements BingClient, BingLinksClient, BingCrawlClient {
 	/** Demo: Bing "accepts" every submission and keeps a small daily allowance so the quota message can be seen. */
 	async submitUrlBatch(): Promise<void> {}
+	async submitFeed(): Promise<void> {}
 	async urlSubmissionQuota(): Promise<{ daily: number | null; monthly: number | null }> {
 		return { daily: 10_000, monthly: 300_000 };
 	}

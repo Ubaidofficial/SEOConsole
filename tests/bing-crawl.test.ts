@@ -82,12 +82,12 @@ describe('storing and reporting', () => {
 		await syncBingExtras(siteId, 'x', new DemoBing());
 		const before = bingCrawlReport(siteId, '2000-01-01', '2100-01-01')!.days.length;
 		const r = await syncBingExtras(siteId, 'x', { crawlStats: async () => Promise.reject(new Error('Bing API 500')), feeds: async () => [] });
-		expect(r).toEqual({ crawl: false, feeds: true });
+		expect(r).toEqual({ crawl: false, feeds: true, mirrored: null });
 		const c = bingCrawlReport(siteId, '2000-01-01', '2100-01-01')!;
 		expect(c.crawlError).toBe('Bing API 500');
 		expect(c.days.length).toBe(before);
 		expect(c.feeds).toEqual([]);
-		expect(await syncBingExtras(siteId, 'x', {})).toEqual({ crawl: false, feeds: false });
+		expect(await syncBingExtras(siteId, 'x', {})).toEqual({ crawl: false, feeds: false, mirrored: null });
 	});
 
 	it('page queries are summed over the window, newest weeks only', async () => {

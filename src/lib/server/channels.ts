@@ -9,7 +9,8 @@ import * as ga4 from './ga4';
 import * as gtm from './gtm';
 import { addDays, pacificToday, retentionHorizon } from './dates';
 import { getIntegration, integrationSecret, linksFor, markLink } from './links';
-import { getSite } from './clients';
+import { clientForSite, getSite } from './clients';
+import { foundSitemaps } from './sitemapcov';
 import { logGtmVersion } from './autolog';
 import { PERIODS } from '../periods';
 import { pullGa4Values } from './ga4values';
@@ -113,6 +114,13 @@ export function gtmSourceFor(accountId: number): gtm.GtmSource {
 }
 
 // ── sync: Bing ───────────────────────────────────────────────────────────────
+/** The site's own sitemaps: those Search Console lists, else those the last read found on the site (robots.txt or a usual address). */
+export async function siteSitemaps(siteId: number): Promise<string[]> {
+	const { client, site } = clientForSite(siteId);
+	const listed = (await client.listSitemaps(site.site_url)).map((s) => s.path);
+	return listed.length ? listed : (foundSitemaps(siteId)?.feeds ?? []);
+}
+
 export async function syncBing(siteId: number, client?: BingClient) {
 	const link = linksFor(siteId).bing;
 	if (!link?.integration_id) throw new Error('Site is not linked to Bing');
@@ -133,7 +141,7 @@ export async function syncBing(siteId: number, client?: BingClient) {
 		// Inbound links and crawl issues: weekly, extra data, so a failure is recorded inside syncBingLinks and never fails this sync.
 		if (bingLinksDue(siteId)) await syncBingLinks(siteId, c as Partial<BingLinksClient>);
 		// Crawl statistics and sitemaps: daily data, also extra, also never fails this sync.
-		await syncBingExtras(siteId, link.external_id, c as Partial<BingCrawlClient>);
+		await syncBingExtras(siteId, link.external_id, c as Partial<BingCrawlClient>, { wanted: () => siteSitemaps(siteId), readOnly: config.readOnly });
 		return { days: daily.length, queries: queries.length, pages: pages.length };
 	} catch (e) {
 		markLink(siteId, 'bing', 'error', e instanceof Error ? e.message : String(e));

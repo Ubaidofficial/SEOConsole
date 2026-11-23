@@ -43,7 +43,7 @@ import { buildDigest } from './digest';
 import { decayReport } from './decay';
 import { quickWins } from './quickwins';
 import { createKey as createIndexNowKey, getKey as getIndexNowKey, hostStatuses, indexNowStatus, setAuto as setIndexNowAuto, verifyHost } from './indexnow';
-import { checkFeed, CHANNELS, CHANNEL_LABEL, MAX_DRIP_DAYS, MAX_SUBMIT_URLS, RECHECK_DAYS, SubmitRefused, clearQueue, deleteSitemapFrom, presetUrls, queueStatus, quotaOverview, refreshBingQuota, resubmitSitemaps, submissionStatus, submitForIndexing, submitSitemapTo, type Channel, type Preset } from './submission';
+import { checkFeed, CHANNELS, CHANNEL_LABEL, MAX_DRIP_DAYS, MAX_SUBMIT_URLS, RECHECK_DAYS, SubmitRefused, clearQueue, deleteSitemapFrom, presetUrls, queueStatus, quotaOverview, refreshBingQuota, resubmitSitemaps, submissionStatus, submitForIndexing, submitSitemapTo, submitSitemapsToBing, bingSitemapNote, type Channel, type Preset } from './submission';
 import { diagnoseSitemap } from './sitemapcov';
 import { enqueueIndexMonitor } from './jobs';
 import { audit } from './db';
@@ -454,7 +454,7 @@ const TOOLS: Tool[] = [
 				const p = periodFor(site, days(a));
 				const c = bingCrawlReport(site.id, p.start, p.end);
 				if (!c) return { fetched: false, hint: 'Crawl statistics are read on every Bing sync; they appear after the next one.' };
-				return { period: { start: p.start, end: p.end }, fetchedAt: isoOrNull(c.fetchedAt), ...(c.crawlError ? { crawlError: c.crawlError } : {}), ...(c.feedsError ? { sitemapsError: c.feedsError } : {}), note: 'Bing keeps about six months of crawl statistics.', totals: c.totals, daily: c.days.slice(-limit(a, 60)), sitemaps: c.feeds };
+				return { period: { start: p.start, end: p.end }, fetchedAt: isoOrNull(c.fetchedAt), ...(c.crawlError ? { crawlError: c.crawlError } : {}), ...(c.feedsError ? { sitemapsError: c.feedsError } : {}), note: 'Bing keeps about six months of crawl statistics.', totals: c.totals, daily: c.days.slice(-limit(a, 60)), sitemaps: c.feeds, ...(c.sentBySeoConsole ? { sitemapsSentBySeoConsole: c.sentBySeoConsole } : {}) };
 			}
 			if (a.view === 'page_queries') {
 				const page = String(a.page ?? '').trim();
@@ -1024,14 +1024,20 @@ const TOOLS: Tool[] = [
 	{
 		name: 'submit_sitemap',
 		needs: 'submit',
-		description: 'Submit a sitemap to Search Console for one site (it must be inside the property). Without `sitemap_url`, submits again every sitemap Search Console already lists for the site. Search Console reads it on its own schedule: submitting does not speed that up, and "accepted" is not "indexed". Run check_sitemap first. Needs a key with the submit permission.',
+		description: 'Submit a sitemap to Search Console for one site (it must be inside the property), and to Bing when Bing is linked. Without `sitemap_url`, submits again every sitemap Search Console already lists. Both read it on their own schedule; "accepted" is not "indexed". Run check_sitemap first. Needs a key with the submit permission.',
 		schema: { ...siteArg, sitemap_url: { type: 'string', description: 'Full sitemap address; omit to resubmit all listed sitemaps' } },
 		run: async (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			const feed = typeof a.sitemap_url === 'string' ? a.sitemap_url.trim() : '';
-			if (feed) return { site: displayName(site.site_url), submitted: [await submitSitemapTo(site, feed, 'mcp').catch(refuse)], note: 'Search Console accepted the submission. It reads the file later; see get_sitemaps for its status.' };
+			const bingOf = (b: Awaited<ReturnType<typeof submitSitemapsToBing>>) => (b.linked ? { submitted: b.submitted, failed: b.failed } : 'not linked');
+			if (feed) {
+				const f = await submitSitemapTo(site, feed, 'mcp').catch(refuse);
+				const b = await submitSitemapsToBing(site, [f], 'mcp');
+				return { site: displayName(site.site_url), submitted: [f], bing: bingOf(b), note: `Search Console accepted the submission. ${bingSitemapNote(b)} Both read the file later; see get_sitemaps and get_bing_performance view=crawl.`.replace(/\s+/g, ' ') };
+			}
 			const r = await resubmitSitemaps(site, 'mcp').catch(refuse);
-			return { site: displayName(site.site_url), submitted: r.submitted, failed: r.failed, note: r.submitted.length ? 'Search Console accepted the resubmission. It reads the files later; see get_sitemaps.' : 'No sitemap is listed for this site yet: pass `sitemap_url` to submit one.' };
+			const b = await submitSitemapsToBing(site, r.submitted, 'mcp');
+			return { site: displayName(site.site_url), submitted: r.submitted, failed: r.failed, bing: bingOf(b), note: r.submitted.length ? `Search Console accepted the resubmission. ${bingSitemapNote(b)} Both read the files later.`.replace(/\s+/g, ' ') : 'No sitemap is listed for this site yet: pass `sitemap_url` to submit one.' };
 		}
 	},
 	{
