@@ -14,6 +14,7 @@ import { autoBuildDue, runAutoBuild } from './requestindex';
 import { listTests, warmTests } from './seotests';
 import { ensureGa4TestData } from './ga4tests';
 import { runMonthlyReport, runUrgentAlerts, runWeeklyDigest } from './digest';
+import { runAlertRules } from './alerts';
 import { actionsFor } from './actions';
 import { getSite } from './clients';
 import { importGoogleUpdates, lastUpdatesCheck } from './gupdates';
@@ -205,6 +206,14 @@ export function schedulerTick() {
 				d.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES ('urgent_checked', ?)").run(String(Date.now()));
 			}
 		});
+	}
+	// Alert rules (src/lib/server/alerts.ts): checked hourly against stored data; new data arrives with each sync, every few hours.
+	if (!process.env.VITEST) {
+		const last = Number((d.prepare("SELECT value FROM kv WHERE key = 'alerts_checked'").get() as { value: string } | undefined)?.value ?? 0);
+		if (Date.now() - last > 3600_000) {
+			d.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES ('alerts_checked', ?)").run(String(Date.now()));
+			enqueue('alerts', async () => void (await runAlertRules()));
+		}
 	}
 	// The daily database copy (SQLite's own backup call, checked and pruned); a failure raises an audit entry and one webhook notice a day.
 	if (!process.env.VITEST && backupDue()) enqueue('backup', async () => void (await runBackup()));

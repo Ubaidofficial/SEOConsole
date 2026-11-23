@@ -870,6 +870,64 @@ CREATE TABLE IF NOT EXISTS oauth_grants (
 	id INTEGER PRIMARY KEY, client_id TEXT NOT NULL, key_id INTEGER NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
 	refresh_hash TEXT NOT NULL UNIQUE, prev_refresh_hash TEXT, refresh_expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS rule_groups (             -- keyword buckets (kind 'bucket') and page groups (kind 'pages') defined by people, per site
+	id INTEGER PRIMARY KEY,
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL,                 -- bucket | pages
+	name TEXT NOT NULL,
+	rules TEXT NOT NULL,                -- JSON RuleSet (src/lib/rules.ts)
+	created_at INTEGER NOT NULL,
+	UNIQUE(site_id, kind, name)
+);
+CREATE TABLE IF NOT EXISTS saved_views (             -- a tab's filters saved under a name, shared with the whole team
+	id INTEGER PRIMARY KEY,
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	tab TEXT NOT NULL,                  -- the site tab it belongs to: /queries | /pages
+	name TEXT NOT NULL,
+	params TEXT NOT NULL,               -- the filter part of the address (the period is left out, so a view follows the period picker)
+	created_by TEXT,
+	created_at INTEGER NOT NULL,
+	UNIQUE(site_id, tab, name)
+);
+CREATE TABLE IF NOT EXISTS tracked_queries (         -- searches whose daily Google position is followed on the Rank tracking tab (from Search Console data, no credits)
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	query TEXT NOT NULL,                -- as Search Console reports it (lower case)
+	added_at INTEGER NOT NULL,
+	PRIMARY KEY (site_id, query)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS alert_rules (             -- what raises an alert for a site: the built-in rules (one per kind, thresholds editable) and custom ones
+	id INTEGER PRIMARY KEY,
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL,                 -- see ALERT_KINDS in src/lib/alerts.ts
+	builtin INTEGER NOT NULL DEFAULT 0,
+	name TEXT,
+	threshold REAL NOT NULL,
+	window_days INTEGER NOT NULL DEFAULT 7,
+	scope_kind TEXT,                    -- NULL (whole site) | page (URL path prefix) | query (regex) | bucket | pages (page group id)
+	scope_value TEXT,
+	enabled INTEGER NOT NULL DEFAULT 1,
+	created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS alert_rules_builtin ON alert_rules(site_id, kind) WHERE builtin = 1;
+CREATE TABLE IF NOT EXISTS alert_events (            -- one alert: opened when a rule's condition starts to hold, ended when it stops
+	id INTEGER PRIMARY KEY,
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	rule_id INTEGER REFERENCES alert_rules(id) ON DELETE SET NULL,
+	kind TEXT NOT NULL,
+	positive INTEGER NOT NULL DEFAULT 0, -- good news (a rise), not a problem
+	title TEXT NOT NULL,
+	detail TEXT,
+	opened_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	active INTEGER NOT NULL DEFAULT 1,  -- the condition still holds; a rule opens a new alert only when none of its alerts is active
+	status TEXT NOT NULL DEFAULT 'open', -- open | resolved | dismissed | cleared (the condition ended by itself)
+	closed_at INTEGER,
+	closed_by TEXT,
+	delivery TEXT NOT NULL DEFAULT 'none', -- none | sent | failed
+	delivery_message TEXT
+);
+CREATE INDEX IF NOT EXISTS alert_events_site ON alert_events(site_id, active, status);
+CREATE INDEX IF NOT EXISTS alert_events_status ON alert_events(status, opened_at);
 `;
 
 declare global {
@@ -930,6 +988,10 @@ function migrate(db: Database.Database) {
 	if (!cols('sites').includes('bing_extras_at')) db.exec('ALTER TABLE sites ADD COLUMN bing_extras_at INTEGER');
 	if (!cols('sites').includes('bing_crawl_error')) db.exec('ALTER TABLE sites ADD COLUMN bing_crawl_error TEXT');
 	if (!cols('sites').includes('bing_feeds_error')) db.exec('ALTER TABLE sites ADD COLUMN bing_feeds_error TEXT');
+	// Alerts for one site can go to their own Slack or Discord webhook (checked against those hosts), else to DIGEST_WEBHOOK_URL.
+	if (!cols('sites').includes('alert_webhook')) db.exec('ALTER TABLE sites ADD COLUMN alert_webhook TEXT');
+	// Pinned sites come first on the dashboard, whatever the sort.
+	if (!cols('sites').includes('pinned')) db.exec('ALTER TABLE sites ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
 	if (!cols('ai_runs').includes('via')) db.exec('ALTER TABLE ai_runs ADD COLUMN via TEXT');
 	if (!cols('ai_runs').includes('cost')) db.exec('ALTER TABLE ai_runs ADD COLUMN cost REAL');
 	// The Google identity (the stable "sub") a team member signs in with, once they have used or linked "Sign in with Google".

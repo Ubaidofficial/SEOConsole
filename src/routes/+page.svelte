@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
-	import { Eye, EyeOff, ExternalLink, RefreshCw, Search, Trash2, Sparkles } from '@lucide/svelte';
+	import { Bell, Eye, EyeOff, ExternalLink, GitCompare, Pin, RefreshCw, Search, Trash2, Sparkles } from '@lucide/svelte';
 	import { ConfirmButton } from '$lib/components/ui/confirm';
 	import PeriodPicker from '$lib/components/PeriodPicker.svelte';
 	import SourceSpark, { type SparkSeries } from '$lib/components/SourceSpark.svelte';
@@ -18,13 +18,29 @@
 	let { data, form } = $props();
 	let q = $state('');
 	let account = $state('all');
-	let sort = $state<'clicks' | 'impressions' | 'clicksDelta' | 'name'>('clicks');
+	let sort = $state<'clicks' | 'impressions' | 'clicksDelta' | 'attention' | 'name'>('clicks');
+	let group = $state('');
+	const ATT = { look: 2, watch: 1 } as const;
+	const attentionRank = (c: (typeof data.cards)[number]) => (c.attention ? ATT[c.attention] : 0) * 1000 + Math.min(999, c.alerts);
 
 	const cards = $derived(
 		data.cards
-			.filter((c) => (account === 'all' || String(c.accountId) === account) && (!q || `${c.name} ${c.label ?? ''} ${c.tags.join(' ')}`.toLowerCase().includes(q.toLowerCase())))
-			.sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity)))
+			.filter((c) => (account === 'all' || String(c.accountId) === account) && (!group || c.tags.includes(group)) && (!q || `${c.name} ${c.label ?? ''} ${c.tags.join(' ')}`.toLowerCase().includes(q.toLowerCase())))
+			.sort((a, b) =>
+				Number(b.pinned) - Number(a.pinned) ||
+				(sort === 'name' ? a.name.localeCompare(b.name)
+				: sort === 'attention' ? attentionRank(b) - attentionRank(a) || (a.clicksDelta ?? 0) - (b.clicksDelta ?? 0)
+				: (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity))
+			)
 	);
+	/** The totals of the group (tag) picked, for its own line above the cards. Overlapping URL-prefix properties are counted once. */
+	const groupTotals = $derived.by(() => {
+		if (!group) return null;
+		const xs = cards.filter((c) => !c.hidden && !c.removed && !c.coveredBy);
+		const clicks = xs.reduce((a, c) => a + c.clicks, 0);
+		const impressions = xs.reduce((a, c) => a + c.impressions, 0);
+		return { sites: xs.length, clicks, impressions, look: xs.filter((c) => c.attention === 'look').length };
+	});
 	type Kpi = { label: string; v: string; d: number | null; inv: boolean; pos?: boolean; color?: string; title?: string; pending?: boolean };
 	const kpis = $derived<Kpi[]>([
 		{ label: data.totals.ga4 || data.totals.bing ? 'Google clicks' : 'Clicks', v: fmtInt(data.totals.clicks), d: data.totals.clicksDelta, inv: false, color: 'var(--src-gsc)', title: 'Clicks from Google Search, from Search Console' },
@@ -103,12 +119,20 @@
 			<option value="all">All accounts</option>
 			{#each data.accounts as a}<option value={String(a.id)}>{a.label}</option>{/each}
 		</select>
+		{#if data.tagList.length}
+			<select class="input" bind:value={group} aria-label="Group of sites (tag)" title="Sites are grouped by the tags set on each site's Settings tab">
+				<option value="">All groups</option>
+				{#each data.tagList as t}<option value={t}>Group: {t}</option>{/each}
+			</select>
+		{/if}
 		<select class="input" bind:value={sort} aria-label="Sort">
+			<option value="attention">Sort: needs a look</option>
 			<option value="clicks">Sort: clicks</option>
 			<option value="impressions">Sort: impressions</option>
 			<option value="clicksDelta">Sort: Δ clicks</option>
 			<option value="name">Sort: name</option>
 		</select>
+		{#if data.cards.length > 1 && !data.user?.scoped}<a class="btn" href="/portfolio/compare?days={data.days}" title="Two to four sites on one chart, for a migration or a side-by-side"><GitCompare class="size-3.5" />Compare</a>{/if}
 		<form method="POST" action="?/syncAll" use:enhance><button class="btn" disabled={syncing > 0}><RefreshCw class="size-3.5 {syncing > 0 ? 'animate-spin' : ''}" />{syncing > 0 ? `Syncing ${syncing}…` : 'Sync all'}</button></form>
 	</div>
 </div>
@@ -157,6 +181,9 @@
 		<p class="mb-4 text-xs text-muted-foreground">Comparisons with the previous period appear once each site has finished downloading its history ({data.totals.loading} still loading). Totals for the selected period are already correct for the days downloaded so far.</p>
 	{/if}
 
+	{#if groupTotals}
+		<p class="tnum mb-3 text-sm text-muted-foreground">Group <b class="text-foreground">{group}</b>: {groupTotals.sites} site{groupTotals.sites === 1 ? '' : 's'}, <b class="text-foreground">{fmtInt(groupTotals.clicks)}</b> clicks, {fmtInt(groupTotals.impressions)} impressions{#if groupTotals.look} · {groupTotals.look} need a look{/if}</p>
+	{/if}
 	<div class="stagger grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
 		{#each cards as c (c.id)}
 			<article class="group relative rounded-2xl border bg-card p-5 shadow-xs transition-all hover:-translate-y-px hover:shadow-md {c.hidden ? 'opacity-55' : ''}">
@@ -168,6 +195,8 @@
 							<AuthorityBadges authority={c.authority} class="ml-1" />
 							{#if c.removed}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px]" title="Google no longer lists this property for the account">removed in Search Console</span>{/if}
 							{#if isPrefix(c)}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px]">URL prefix</span>{/if}
+							{#if c.attention}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px] {c.attention === 'look' ? 'text-bad' : 'text-warn'}" title="Clicks fell {c.attention === 'look' ? '20%' : '10%'} or more against the previous period, beyond day-to-day noise">{c.attention === 'look' ? 'Needs a look' : 'Watch'}</span>{/if}
+							{#if c.alerts}<a href="/sites/{c.id}/alerts" class="chip relative z-10 inline-flex shrink-0 items-center gap-0.5 !px-1.5 !py-0 text-[10px] text-bad" title="{c.alerts} open alert{c.alerts === 1 ? '' : 's'}"><Bell class="size-2.5" />{c.alerts}</a>{/if}
 							<a href={c.href} target="_blank" rel="noreferrer noopener" class="tap relative z-10 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 [@media(hover:none)]:opacity-100" aria-label="Open the site in a new tab" title="Open site"><ExternalLink class="size-3.5" /></a>
 						</div>
 						<div class="pii truncate text-sm text-muted-foreground">{c.label ? c.name + ' · ' : ''}{c.account}</div>
@@ -179,6 +208,14 @@
 								<span class="tnum rounded-full bg-muted px-3 py-1 text-sm font-medium">{fmtInt(c.clicks)} clicks</span>
 								<Delta value={c.clicksDelta} why={c.comparable ? 'Too little data in the previous period' : 'Previous period still loading'} />
 							</div>
+						{/if}
+						{#if !c.removed}
+							<form method="POST" action="?/pin" use:enhance class="relative z-10">
+								<input type="hidden" name="id" value={c.id} />
+								<button class="grid size-8 place-items-center rounded-full border bg-background shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground {c.pinned ? 'text-foreground' : 'text-muted-foreground'}" aria-label={c.pinned ? 'Unpin' : 'Pin to the front'} aria-pressed={c.pinned} title={c.pinned ? 'Pinned: shown first whatever the sort. Click to unpin.' : 'Pin to the front of the dashboard'}>
+									<Pin class="size-4 {c.pinned ? 'fill-current' : ''}" />
+								</button>
+							</form>
 						{/if}
 						{#if c.removed}
 							<form method="POST" action="?/purgeRemoved" use:enhance class="relative z-10">

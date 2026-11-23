@@ -3,8 +3,22 @@
 	import DataTable from '$lib/components/DataTable.svelte';
 	import { fmtInt, fmtSigned } from '$lib/format';
 	import { isBranded } from '$lib/analytics';
+	import { page } from '$app/state';
+	import { enhance } from '$app/forms';
+	import RuleGroupEditor from '$lib/components/RuleGroupEditor.svelte';
+	import Chart from '$lib/components/Chart.svelte';
 	let { data } = $props();
-	const views = [['folders', 'URL folders'], ['topics', 'Topic clusters'], ['heatmap', 'Decay heatmap'], ['locales', 'Locales & countries']] as const;
+	let editing = $state<number | 'new' | null>(null);
+	let chartFor = $state<{ id: number; name: string } | null>(null);
+	let chart = $state<any[]>([]);
+	const canEdit = $derived(page.data.user?.role !== 'viewer');
+	async function showChart(row: { id: number | null; name: string }) {
+		if (row.id == null || !data.mine) return;
+		if (chartFor?.id === row.id) return (chartFor = null);
+		chartFor = { id: row.id, name: row.name };
+		chart = await fetch(`/sites/${page.params.id}/history?kind=group&type=${data.mine.kind}&value=${row.id}&days=480`).then((r) => r.json());
+	}
+	const views = [['buckets', 'Keyword buckets'], ['pagegroups', 'Page groups'], ['folders', 'URL folders'], ['topics', 'Topic clusters'], ['heatmap', 'Decay heatmap'], ['locales', 'Locales & countries']] as const;
 	const href = (o: Record<string, string | number>) => `?${new URLSearchParams({ days: String(data.days), view: data.view, depth: String(data.depth), by: data.by, ...Object.fromEntries(Object.entries(o).map(([k, v]) => [k, String(v)])) })}`;
 	const monthLabel = (m: string) => new Date(m + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' });
 	const cell = (v: number, max: number) => (max > 0 ? Math.min(1, v / max) : 0);
@@ -18,7 +32,46 @@
 	{/if}
 </nav>
 
-{#if data.view === 'folders' && data.groups}
+{#if data.mine}
+	{@const bucket = data.mine.kind === 'bucket'}
+	<div class="mb-3 flex flex-wrap items-center gap-3">
+		<p class="text-xs text-muted-foreground">{bucket ? 'Searches sorted into topics by your own rules. A search can sit in several buckets.' : 'Pages sorted into sections by your own rules on the path. A page can sit in several groups.'} Click a row for its daily chart.</p>
+		{#if canEdit && editing !== 'new'}<button class="btn ml-auto" onclick={() => (editing = 'new')}>{bucket ? 'New bucket' : 'New page group'}</button>{/if}
+	</div>
+	{#if editing === 'new'}<div class="mb-4"><RuleGroupEditor kind={data.mine.kind} onDone={() => (editing = null)} /></div>{/if}
+	{#if data.mine.rows.length}
+		{#if !data.mine.comparable}<p class="mb-2 text-xs text-warn">Change against the previous period is hidden: that period is not downloaded yet.</p>{/if}
+		{@const none = data.mine.rows.find((r) => r.id == null)}
+		<DataTable rows={data.mine.rows.filter((r) => r.id != null)} onRowClick={showChart} cols={[{ key: 'name', label: bucket ? 'Bucket' : 'Group', type: 'text', pii: false }, { key: 'members', label: bucket ? 'Searches' : 'Pages', type: 'int' }, { key: 'clicks', label: 'Clicks', type: 'int', bar: true }, { key: 'deltaPct', label: 'Δ clicks', type: 'delta' }, { key: 'impressions', label: 'Impressions', type: 'int' }, { key: 'ctr', label: 'CTR', type: 'pct' }, { key: 'position', label: 'Position', type: 'pos' }, { key: 'summary', label: 'Rules', type: 'text', pii: true }]} sortKey="clicks" />
+		{#if none}<p class="tnum mt-2 text-xs text-muted-foreground">{bucket ? 'In no bucket' : 'In no group'}: {none.members.toLocaleString('en-US')} {bucket ? 'searches' : 'pages'}, {none.clicks.toLocaleString('en-US')} clicks.</p>{/if}
+		{#if chartFor}
+			<div class="card mt-3 p-4">
+				<div class="mb-2 flex flex-wrap items-center gap-2"><span class="font-medium">{chartFor.name}</span><span class="text-xs text-muted-foreground">all stored history</span>
+					<a class="btn btn-sm ml-auto" href="{bucket ? 'queries' : 'pages'}?days={data.days}&{bucket ? 'bucket' : 'group'}={chartFor.id}">Open in {bucket ? 'Queries' : 'Pages'}</a>
+				</div>
+				<Chart data={chart} defaultMetrics={['clicks', 'position']} height={220} />
+			</div>
+		{/if}
+		<h3 class="mt-6 mb-2 text-sm font-medium">{bucket ? 'Your buckets' : 'Your page groups'}</h3>
+		<ul class="divide-y rounded-xl border bg-card" style="border-color:var(--border)">
+			{#each data.mine.groups as g (g.id)}
+				<li class="px-4 py-2.5">
+					<div class="flex flex-wrap items-center gap-2 text-sm">
+						<span class="font-medium">{g.name}</span>
+						<a class="text-xs text-muted-foreground hover:underline" href="{bucket ? 'queries' : 'pages'}?days={data.days}&{bucket ? 'bucket' : 'group'}={g.id}">open in {bucket ? 'Queries' : 'Pages'}</a>
+						{#if canEdit}
+							<button class="btn btn-sm ml-auto" onclick={() => (editing = editing === g.id ? null : g.id)}>{editing === g.id ? 'Close' : 'Edit'}</button>
+							<form method="POST" action="?/deleteGroup" use:enhance><input type="hidden" name="id" value={g.id} /><button class="btn btn-sm text-muted-foreground">Remove</button></form>
+						{/if}
+					</div>
+					{#if editing === g.id}<div class="mt-2"><RuleGroupEditor kind={data.mine.kind} group={g} onDone={() => (editing = null)} /></div>{/if}
+				</li>
+			{/each}
+		</ul>
+	{:else if editing !== 'new'}
+		<div class="card p-6 text-center text-sm text-muted-foreground">{bucket ? 'No keyword buckets yet. A bucket gathers searches about one topic, such as everything containing “shoe” but not “repair”.' : 'No page groups yet. A group gathers a section of the site, such as every path starting with /blog/.'}</div>
+	{/if}
+{:else if data.view === 'folders' && data.groups}
 	<p class="mb-3 text-xs text-muted-foreground">Pages grouped by the folder they live in (<code>/blog/post</code> → <code>/blog/</code>); pages directly under the root share “/”. Compared with the previous {data.days} days. Use it to see which section of the site is growing or shrinking, rather than reading page by page.</p>
 	{#if data.comparable === false}<p class="mb-2 text-xs text-warn">Change against the previous period is hidden: {data.reason}</p>{/if}
 	<DataTable rows={data.groups} cols={[{ key: 'key', label: 'Folder', type: 'text', pii: true }, { key: 'pages', label: 'Pages', type: 'int' }, { key: 'clicks', label: 'Clicks', type: 'int', bar: true }, { key: 'deltaPct', label: 'Δ clicks', type: 'delta' }, { key: 'impressions', label: 'Impressions', type: 'int' }, { key: 'position', label: 'Position', type: 'pos' }]} sortKey="clicks" />

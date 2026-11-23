@@ -90,16 +90,18 @@ export const SITE_TABS = [
 	['/dashboard', 'All sources', 'Search Console, GA4, Bing and Clarity on one screen: traffic by channel, top sources, countries, devices, top pages and queries, and how visitors behave.'],
 	['/quickwins', 'Quick wins', 'The easiest improvements first: titles to rewrite, searches one push from page 1, questions you already rank for, and quick fixes.'],
 	['/actions', 'Actions', 'This site\'s to-do list, in the order to do it.'],
-	['/queries', 'Queries', 'Search queries, with filters for brand, country and device.'],
+	['/queries', 'Queries', 'Search queries, with quick filters, keyword buckets and saved views.'],
+	['/rank', 'Rank tracking', 'The daily Google position of the searches you choose, from Search Console data: no credits, every country and device.'],
 	['/pages', 'Pages', 'Pages with Google, Bing, GA4 and Clarity numbers side by side.'],
 	['/trends', 'Trends', 'Queries and pages whose clicks changed by more than normal day-to-day noise, against the previous period.'],
-	['/groups', 'Groups', 'Pages grouped by the folder they live in, to see which section of the site is growing or shrinking.'],
+	['/groups', 'Groups', 'Your keyword buckets and page groups, plus pages by folder and queries by topic, to see which part of the site is growing or shrinking.'],
 	['/opportunities', 'Opportunities', 'Your own click-through rate by position, and the queries ranking just below the top results (striking distance).'],
 	['/cannibalization', 'Cannibalization', 'Queries where two or more of your pages each hold a real share of the impressions.'],
 	['/decay', 'Decay', 'Pages that lost clicks against the previous period by more than the site as a whole moved.'],
 	['/segments', 'Segments', 'Clicks and impressions split by device and by country.'],
 	['/types', 'Search types', 'Search Console numbers split by search type, such as web, image and video.'],
 	['/vitals', 'Web vitals', 'Real-visitor page speed (Core Web Vitals) from Google\'s Chrome UX Report. Needs a free Google API key.'],
+	['/alerts', 'Alerts', 'This site\'s alerts and the rules behind them: thresholds, custom alerts and where they are sent.'],
 	['/tests', 'Tests', 'Measure whether an SEO change worked, comparing before and after or against control pages.'],
 	['/submit', 'Submit', 'Send new or changed pages to the search engines that accept them, send sitemaps to Search Console, and see what happened to each URL.'],
 	['/request', 'Request', 'A short daily list of pages worth asking Google about in Search Console, with a link to each, and a record of what you asked and whether it worked.'],
@@ -139,8 +141,8 @@ export const SOURCE_LINK: Record<string, 'ga4' | 'bing' | 'gtm' | 'clarity' | 'a
 
 /** How the site tabs are grouped under More: a caption and the tab paths under it. Every tab appears in exactly one group (a test checks it). */
 export const SITE_TAB_GROUPS = [
-	['Traffic', ['', '/queries', '/pages', '/trends', '/groups', '/segments', '/types']],
-	['Findings', ['/quickwins', '/actions', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests']],
+	['Traffic', ['', '/queries', '/pages', '/rank', '/trends', '/groups', '/segments', '/types']],
+	['Findings', ['/quickwins', '/actions', '/alerts', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests']],
 	['Indexing', ['/submit', '/request', '/indexing', '/indexnow', '/sitemaps', '/inspect']],
 	['Sources', ['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai']],
 	['Site', ['/settings']]

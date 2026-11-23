@@ -5,6 +5,7 @@
 	import Chart from '$lib/components/Chart.svelte';
 	import { POSITION_BUCKETS } from '$lib/plan';
 	import BarList from '$lib/components/viz/BarList.svelte';
+	import SavedViews from '$lib/components/SavedViews.svelte';
 
 	import { enhance } from '$app/forms';
 	import { ago } from '$lib/format';
@@ -31,7 +32,8 @@
 		loading = false;
 	}
 	/** Filters besides the query type, so the Filters button can say how many are on. */
-	const activeFilters = $derived([data.onlyQuestions, data.pos, data.filters.country, data.filters.device, data.re, data.nre].filter(Boolean).length);
+	const activeFilters = $derived([data.pos, data.filters.country, data.filters.device, data.re, data.nre].filter(Boolean).length);
+	const canEdit = $derived(page.data.user?.role !== 'viewer');
 	let detail: HTMLElement | undefined = $state();
 	const cols = $derived([
 		{ key: 'query', label: 'Query', type: 'text' as const, pii: (r: { branded: boolean }) => r.branded },
@@ -52,9 +54,6 @@
 		<summary class="btn cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden">Filters{#if activeFilters}<span class="ml-1.5 rounded-full bg-[color:var(--link)] px-1.5 text-[10px] text-white">{activeFilters}</span>{/if}</summary>
 		<div class="card absolute left-0 z-20 mt-1 w-[min(44rem,90vw)] p-3 shadow-lg">
 			<div class="mb-2 flex flex-wrap items-center gap-2">
-	<select class="input" aria-label="Question queries" value={data.onlyQuestions ? 'questions' : ''} onchange={(e) => setParam('q', e.currentTarget.value)} title="Question-style queries: how, what, why, can… or containing a question mark (English only)">
-		<option value="">Any wording</option><option value="questions">Questions only</option>
-	</select>
 	<select class="input" aria-label="Position" value={data.pos} onchange={(e) => setParam('pos', e.currentTarget.value)}>
 		<option value="">Any position</option>{#each POSITION_BUCKETS as b}<option value={b.key}>{b.label}</option>{/each}
 	</select>
@@ -76,8 +75,18 @@
 	{#if data.regexError}<p class="mt-1 text-xs text-bad">{data.regexError}</p>{/if}
 		</div>
 	</details>
+	{#if data.buckets.length}
+		<select class="input" aria-label="Keyword bucket" value={data.bucket ? String(data.bucket) : ''} onchange={(e) => setParam('bucket', e.currentTarget.value)}>
+			<option value="">All buckets</option>{#each data.buckets as b}<option value={String(b.id)}>{b.name}</option>{/each}
+		</select>
+	{/if}
 	<a class="btn ml-auto" href="/sites/{page.params.id}/export?dim=query&days={page.url.searchParams.get('days') ?? 28}">Export CSV</a>
 </div>
+<nav class="mb-2 flex flex-wrap items-center gap-1.5" aria-label="Quick filters">
+	{#each data.quickFilters as f}<button type="button" class="chip {data.qf === f.key ? 'chip-on' : ''}" title={f.hint} aria-pressed={data.qf === f.key} onclick={() => { const u = new URL(page.url); u.searchParams.delete('q'); data.qf === f.key ? u.searchParams.delete('qf') : u.searchParams.set('qf', f.key); goto(u.pathname + u.search, { keepFocus: true, noScroll: true }); }}>{f.label}</button>{/each}
+</nav>
+<SavedViews views={data.views} canSave={canEdit} />
+{#if data.bucketMissing}<p class="mb-2 text-xs text-bad">That keyword bucket no longer exists.</p>{/if}
 <p class="mb-2 text-xs text-muted-foreground"><b class="text-foreground">{data.rows.length.toLocaleString('en-US')}</b> searches. Branded = contains <span class="pii">{data.brandTerms.length ? data.brandTerms.join(', ') : '(no brand terms — set them in Settings)'}</span>. Click a row for its full-history chart.</p>
 
 {#if data.openseo}
@@ -91,7 +100,9 @@
 
 {#if open}
 	<div class="card mt-3 scroll-mt-4 p-4" bind:this={detail}>
-		<div class="mb-2 font-medium">“<span class="pii">{open}</span>” — all stored history</div>
+		<div class="mb-2 flex flex-wrap items-center gap-2"><span class="font-medium">“<span class="pii">{open}</span>” — all stored history</span>
+			{#if data.tracked.includes(open)}<a class="chip ml-auto" href="rank?days={page.url.searchParams.get('days') ?? 28}">Tracked</a>{:else if canEdit}<form class="ml-auto" method="POST" action="?/track" use:enhance><input type="hidden" name="query" value={open} /><button class="btn btn-sm" title="Follow its daily position on the Rank tracking tab">Track position</button></form>{/if}
+		</div>
 		{#if loading}<p class="text-muted-foreground">Loading…</p>{:else}
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 				<div class="lg:col-span-2"><Chart data={history} defaultMetrics={['clicks', 'position']} height={220} /></div>

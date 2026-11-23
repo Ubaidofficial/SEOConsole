@@ -91,8 +91,9 @@ export const webhook = () => {
  * POST to the operator's webhook (set in .env, never taken from a form, so this app cannot be pointed at an arbitrary address by
  * someone using the UI). https only, except for localhost; no redirects; 10 s; the reply body is not kept.
  */
-export async function postWebhook(text: string, digest: unknown, fetchImpl: typeof fetch = fetch): Promise<{ ok: boolean; message: string }> {
-	const w = webhook();
+export async function postWebhook(text: string, digest: unknown, fetchImpl: typeof fetch = fetch, target?: { url: string; format: WebhookFormat }): Promise<{ ok: boolean; message: string }> {
+	// `target` is a site's own alert webhook, already checked against the Slack and Discord hosts by siteWebhook() in alerts.ts.
+	const w = target ?? webhook();
 	if (!w.url) return { ok: false, message: 'No webhook is configured (DIGEST_WEBHOOK_URL).' };
 	let u: URL;
 	try {

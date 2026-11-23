@@ -17,6 +17,7 @@ import { authorityMap } from '$lib/server/authority';
 import { hasRole } from '$lib/server/roles';
 import { cardTraffic, sumSource } from '$lib/server/traffic';
 import { eachDay } from '$lib/server/dates';
+import { attentionOf } from '$lib/alerts';
 
 export const load: PageServerLoad = ({ url, locals }) => {
 	const showHidden = url.searchParams.get('hidden') === '1';
@@ -27,6 +28,7 @@ export const load: PageServerLoad = ({ url, locals }) => {
 	const days = daysParam(url, latest);
 	const authBySite = authorityMap();
 	const cards = siteCards(days, { includeHidden: showHidden }).filter((c) => scope === null || scope.includes(c.site.id));
+	const alertsBySite = new Map((db().prepare("SELECT site_id, COUNT(*) n FROM alert_events WHERE status = 'open' AND positive = 0 GROUP BY site_id").all() as { site_id: number; n: number }[]).map((r) => [r.site_id, r.n]));
 	const totals = portfolioTotals(cards.filter((c) => !c.site.hidden && c.site.permission !== 'none'));
 	const links = allLinks();
 	const has = (id: number, k: string) => links.some((l) => l.site_id === id && l.kind === k);
@@ -70,6 +72,7 @@ export const load: PageServerLoad = ({ url, locals }) => {
 		accounts: listAccounts()
 			.filter((a) => scope === null || cards.some((c) => c.site.account_id === a.id))
 			.map((a) => ({ id: a.id, label: a.label ?? a.email, status: a.status })),
+		tagList: [...new Set(cards.flatMap((c) => (c.site.tags ? c.site.tags.split(',').filter(Boolean) : [])))].sort(),
 		cards: cards.map((c) => ({
 			id: c.site.id,
 			name: displayName(c.site.site_url),
@@ -77,6 +80,10 @@ export const load: PageServerLoad = ({ url, locals }) => {
 			href: c.site.site_url.startsWith('sc-domain:') ? `https://${c.site.site_url.slice(10)}/` : c.site.site_url,
 			label: c.site.label,
 			tags: c.site.tags ? c.site.tags.split(',').filter(Boolean) : [],
+			pinned: !!c.site.pinned,
+			alerts: alertsBySite.get(c.site.id) ?? 0,
+			// Falling clicks put a site first under "Needs a look": a real drop (beyond day-to-day noise) of 20%+ is "look", 10%+ "watch".
+			attention: attentionOf(c),
 			account: c.site.account_label ?? c.site.account_email,
 			accountId: c.site.account_id,
 			permission: c.site.permission,
@@ -165,6 +172,15 @@ export const actions: Actions = {
 			const id = intParam((await request.formData()).get('id'));
 			if (!purgeRemovedSite(id)) return fail(400, { error: 'Only properties removed from Search Console can be deleted here.' });
 			return { ok: 'Deleted the stored data for that removed property.' };
+		} catch {
+			return fail(400, { error: 'Invalid site' });
+		}
+	},
+	/** Pin a site to the front of the dashboard (or unpin it). */
+	pin: async ({ request }) => {
+		try {
+			const id = intParam((await request.formData()).get('id'));
+			db().prepare('UPDATE sites SET pinned = 1 - pinned WHERE id = ?').run(id);
 		} catch {
 			return fail(400, { error: 'Invalid site' });
 		}

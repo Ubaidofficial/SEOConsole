@@ -59,13 +59,13 @@ afterEach(() => {
 });
 
 /** The app-changing tools (the ones marked `write`); the search-engine tools of the submit and delete levels are tested in submission.test.ts. */
-const WRITES = ['mark_action', 'log_change', 'start_seo_test', 'set_brand_terms', 'sync_site', 'read_sitemaps', 'run_onpage_check', 'submit_indexnow', 'watch_urls', 'set_automation'];
-const NEW_READS = ['get_portfolio', 'get_change_log', 'get_history', 'get_site_settings', 'get_automation'];
+const WRITES = ['mark_action', 'log_change', 'start_seo_test', 'set_brand_terms', 'sync_site', 'read_sitemaps', 'run_onpage_check', 'submit_indexnow', 'watch_urls', 'set_automation', 'track_queries', 'close_alert'];
+const NEW_READS = ['get_portfolio', 'get_change_log', 'get_history', 'get_site_settings', 'get_automation', 'get_alerts', 'get_rank_tracking', 'get_keyword_buckets', 'get_update_impact', 'get_not_found_pages'];
 
 describe('what the server offers', () => {
-	it('the ten app-changing tools are all there among the tools that change things, and the rest only read', () => {
+	it('the twelve app-changing tools are all there among the tools that change things, and the rest only read', () => {
 		for (const w of WRITES) expect(MCP_WRITE_TOOL_NAMES, w).toContain(w);
-		expect(MCP_READ_TOOL_NAMES).toHaveLength(49);
+		expect(MCP_READ_TOOL_NAMES).toHaveLength(54);
 		expect(MCP_READ_TOOL_NAMES.length + MCP_WRITE_TOOL_NAMES.length).toBe(MCP_TOOL_NAMES.length);
 		expect(new Set(MCP_TOOL_NAMES).size).toBe(MCP_TOOL_NAMES.length);
 		for (const n of NEW_READS) expect(MCP_READ_TOOL_NAMES).toContain(n);
@@ -79,7 +79,7 @@ describe('what the server offers', () => {
 		}
 		// only the two tools of the delete level are marked destructive (see submission.test.ts)
 		expect(list.filter((t) => t.annotations.destructiveHint).map((t) => t.name).sort()).toEqual(['cancel_indexing_queue', 'delete_sitemap']);
-		expect(list).toHaveLength(73);
+		expect(list).toHaveLength(80);
 	});
 	it('the server instructions say changes need the owner\'s permission and nothing can delete', async () => {
 		const i = (await rpc(reader, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).json.result.instructions as string;
@@ -89,7 +89,7 @@ describe('what the server offers', () => {
 	});
 	it('no tool is named or built to delete, disconnect, or touch keys, tokens or passwords (the two delete-level tools are the exception, and get_site_verification_token only reads a public token Google asks you to publish)', () => {
 		for (const n of MCP_TOOL_NAMES.filter((x) => !['delete_sitemap', 'cancel_indexing_queue', 'get_site_verification_token'].includes(x))) expect(n, n).not.toMatch(/delete|remove|disconnect|revoke|unlink|purge|password|credential|token|api_key|secret/);
-		const src = readFileSync('src/lib/server/mcp-extra.ts', 'utf8');
+		const src = readFileSync('src/lib/server/mcp-extra.ts', 'utf8') + readFileSync('src/lib/server/mcp-more.ts', 'utf8');
 		expect(src).not.toMatch(/DELETE FROM|DROP TABLE|\.delete[A-Z(]|deleteSite|deleteSitemap|removeIntegration|removeLink|deleteApiKey/);
 		for (const forbidden of ['./apikeys', './oauth', './connect', './crypto', './accounts', './adminauth', './sessions', './password']) expect(src, forbidden).not.toContain(`from '${forbidden}'`);
 	});
@@ -99,7 +99,8 @@ describe('a key that cannot make changes is refused, and nothing changes', () =>
 	const ARGS: Record<string, object> = {
 		mark_action: { site: '1', key: 'x', state: 'done' }, log_change: { site: '1', date: '2026-10-01', title: 'refused' }, start_seo_test: { site: '1', name: 't', startDate: '2026-10-01', pages: ['/blog/'] },
 		set_brand_terms: { site: '1', terms: ['refused brand'] }, sync_site: { site: '1' }, read_sitemaps: { site: '1' }, run_onpage_check: { site: '1' },
-		submit_indexnow: { site: '1', urls: ['https://greenleaf.example/a'] }, watch_urls: { site: '1', urls: ['https://greenleaf.example/a'] }, set_automation: { switch: 'bingAuto', on: true }
+		submit_indexnow: { site: '1', urls: ['https://greenleaf.example/a'] }, watch_urls: { site: '1', urls: ['https://greenleaf.example/a'] }, set_automation: { switch: 'bingAuto', on: true },
+		track_queries: { site: '1', add: ['refused search'] }, close_alert: { ids: [1], status: 'dismissed' }
 	};
 	it('every one of them says so in plain words and tells the owner where to allow it', async () => {
 		expect(Object.keys(ARGS).sort()).toEqual([...WRITES].sort());
@@ -115,6 +116,7 @@ describe('a key that cannot make changes is refused, and nothing changes', () =>
 		expect(count("SELECT COUNT(*) n FROM annotations WHERE title = 'refused'")).toBe(0);
 		expect(count("SELECT COUNT(*) n FROM sites WHERE brand_terms LIKE '%refused%'")).toBe(0);
 		expect(count('SELECT COUNT(*) n FROM seo_tests')).toBe(0);
+		expect(count('SELECT COUNT(*) n FROM tracked_queries')).toBe(0);
 		expect(audits()).toEqual([]);
 		expect(count("SELECT COUNT(*) n FROM kv WHERE key LIKE 'mcp-cooldown:%'")).toBe(0);
 	});

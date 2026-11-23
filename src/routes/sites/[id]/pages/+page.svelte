@@ -4,6 +4,8 @@
 	import DataTable from '$lib/components/DataTable.svelte';
 	import Chart from '$lib/components/Chart.svelte';
 	import SectionTabs from '$lib/components/SectionTabs.svelte';
+	import SavedViews from '$lib/components/SavedViews.svelte';
+	import { goto } from '$app/navigation';
 	let { data } = $props();
 	let open = $state<string | null>(null);
 	let history = $state<any[]>([]);
@@ -118,6 +120,13 @@
 		{#each notes as n}<p class="mt-1">{n}</p>{/each}
 	</details>
 {/if}
+{#if data.pageGroups.length || data.views.length}
+	<div class="mb-2 flex flex-wrap items-center gap-2">
+		{#if data.pageGroups.length}<select class="input" aria-label="Page group" value={data.group ? String(data.group) : ''} onchange={(e) => { const u = new URL(page.url); const v = e.currentTarget.value; v ? u.searchParams.set('group', v) : u.searchParams.delete('group'); goto(u.pathname + u.search, { keepFocus: true, noScroll: true }); }}><option value="">All pages</option>{#each data.pageGroups as g}<option value={String(g.id)}>{g.name}</option>{/each}</select>{/if}
+		{#if data.groupMissing}<span class="text-xs text-bad">That page group no longer exists.</span>{/if}
+	</div>
+{/if}
+<SavedViews views={data.views} canSave={page.data.user?.role !== 'viewer'} />
 <div class="flex flex-wrap items-start justify-between gap-2"><SectionTabs bind:value={view} label="Columns" tabs={views} /><a class="btn" href="/sites/{page.params.id}/export?dim=page&days={page.url.searchParams.get('days') ?? 28}">Export CSV</a></div>
 {#key view}<DataTable rows={data.rows} {cols} sortKey={sortFor} onRowClick={toggle} empty="No page data yet." />{/key}
 {#if open}
