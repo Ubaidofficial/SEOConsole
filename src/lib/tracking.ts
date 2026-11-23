@@ -124,8 +124,13 @@ export function auditTracking(input: TrackingInput): Finding[] {
 		const ua = gtm.tags.filter((t) => t.type === 'ua');
 		if (ua.length) out.push({ id: 'gtm-ua', severity: 'warning', title: 'Universal Analytics tags are still in the container', detail: `${list(ua.map((t) => t.name))}. Universal Analytics no longer processes data; these tags do nothing useful.` });
 
-		const paused = gtm.tags.filter((t) => t.paused);
+		// A paused Google tag whose ID an active Google tag still loads is a duplicate put to rest (the duplicate fix does exactly this): a note, not a warning.
+		const loaded = new Set(gtm.tags.filter((t) => GOOGLE_TAG_TYPES.has(t.type) && !t.paused && t.firing.length && t.measurementId).map((t) => t.measurementId));
+		const restingDup = (t: TrackingTag) => t.paused && GOOGLE_TAG_TYPES.has(t.type) && !!t.measurementId && loaded.has(t.measurementId);
+		const paused = gtm.tags.filter((t) => t.paused && !restingDup(t));
 		if (paused.length) out.push({ id: 'gtm-paused', severity: 'warning', title: `${paused.length} paused tag${paused.length > 1 ? 's' : ''}`, detail: `${list(paused.map((t) => t.name))}. Paused tags are published but never fire.` });
+		const resting = gtm.tags.filter(restingDup);
+		if (resting.length) out.push({ id: 'gtm-paused-duplicate', severity: 'info', title: `${resting.length} duplicate Google tag${resting.length > 1 ? 's' : ''} paused`, detail: `${list(resting.map((t) => t.name))}: another active tag already loads ${list([...new Set(resting.map((t) => t.measurementId!))])}. Delete it in Tag Manager whenever you like, or leave it paused.` });
 
 		const idle = gtm.tags.filter((t) => !t.paused && !t.firing.length);
 		if (idle.length) out.push({ id: 'gtm-no-trigger', severity: 'info', title: `${idle.length} tag${idle.length > 1 ? 's' : ''} with no firing trigger`, detail: `${list(idle.map((t) => t.name))}. They never fire on their own; that is fine only if they run through tag sequencing.` });

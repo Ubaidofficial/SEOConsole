@@ -12,7 +12,7 @@
 	type Result = { ok: boolean; error?: string; published: boolean; reviewUrl?: string; versionId?: string; keyEvent?: 'marked' | 'already' | 'skipped' | 'failed'; keyEventError?: string; tagAlready?: boolean; liveCheck?: { state: string; note: string }; customDimensions?: { created: string[]; failed?: string } };
 	type Found = { events: { event: string; params: string[]; how: 'push' | 'helper'; where: string }[]; read: { pages: number; scripts: number }; note: string };
 	type Input = { event: string; params: string[]; measurementId?: string };
-	let { access, form }: { access: { canWrite: boolean; account: string | null; readOnly: boolean; ga4Linked: boolean }; form: { kePlan?: Plan; keResult?: Result; keInput?: Input; keFound?: Found } | null | undefined } = $props();
+	let { access, form, bare = false }: { bare?: boolean; access: { canWrite: boolean; account: string | null; readOnly: boolean; ga4Linked: boolean }; form: { kePlan?: Plan; keResult?: Result; keInput?: Input; keFound?: Found } | null | undefined } = $props();
 	const found = $derived(form?.keFound);
 	let busy = $state('');
 	const back = $derived(`/sites/${page.params.id}/tags`);
@@ -30,8 +30,8 @@
 		r.keyEvent === 'marked' ? 'GA4 now counts it as a key event.' : r.keyEvent === 'already' ? 'GA4 already counted it as a key event.' : r.keyEvent === 'failed' ? `Marking it as a key event failed: ${r.keyEventError}` : 'Mark it as a key event in GA4 (Admin → Key events), or allow SEOConsole to edit Google Analytics.';
 </script>
 
-<section class="card mb-4 p-4" aria-labelledby="ke-h">
-	<h2 id="ke-h" class="font-medium">Track an event as a key event</h2>
+<svelte:element this={bare ? 'div' : 'section'} class={bare ? '' : 'card mb-4 p-4'} aria-labelledby={bare ? undefined : 'ke-h'}>
+	{#if !bare}<h2 id="ke-h" class="font-medium">Track an event as a key event</h2>{/if}
 	<p class="mt-1 text-xs text-muted-foreground">When your site pushes an event to the dataLayer (for example <code>job_alert_signup</code> after a sign-up), SEOConsole can add the Tag Manager variables, trigger and GA4 event tag that send it to Google Analytics, and mark it as a key event there. It shows exactly what will change first; nothing changes until you confirm.</p>
 	{#if access.readOnly}
 		<p class="mt-2 text-xs text-warn">This server runs with READ_ONLY=1, so it never changes Tag Manager or Google Analytics.</p>
@@ -100,4 +100,4 @@
 			</div>
 		{/if}
 	{/if}
-</section>
+</svelte:element>

@@ -48,6 +48,16 @@ describe('finding duplicate Google tags', () => {
 		expect(f!.detail).toContain('Keep “Main” (on Initialization - All Pages)');
 	});
 
+	it('a duplicate put to rest is a note, not a "paused tag" warning; any other paused tag still warns', () => {
+		const findings = (tags: TrackingTag[]) => auditTracking({ gtm: { publicId: 'GTM-1', published: true, tags }, ga4: { measurementIds: ['G-X1234'] }, traffic: { days: 28, gscClicks: 0, ga4OrganicSessions: null } });
+		const rested = findings([t('5', 'Dup', 'dest_ga', ['All Pages'], 'G-X1234', true), t('9', 'Main', 'dest_ga', ['Initialization - All Pages'], 'G-X1234')]);
+		expect(rested.map((f) => f.id)).toEqual(['gtm-paused-duplicate']);
+		expect(rested[0]).toMatchObject({ severity: 'info', title: '1 duplicate Google tag paused' });
+		// the only Google tag for an ID, paused: GA4 gets nothing, so it still warns
+		expect(findings([t('5', 'Only', 'dest_ga', ['All Pages'], 'G-X1234', true)]).some((f) => f.id === 'gtm-paused')).toBe(true);
+		expect(findings([t('1', 'Main', 'googtag', ['All Pages'], 'G-X1234'), t('2', 'Old remarketing', 'sp', ['All Pages'], null, true)]).find((f) => f.id === 'gtm-paused')!.detail).toContain('Old remarketing');
+	});
+
 	it('built-in triggers are named when the version is read', () => {
 		const v = summarizeVersion({ containerVersionId: '3', tag: [{ tagId: '1', name: 'G', type: 'dest_ga', firingTriggerId: ['2147479573', '2147479553', '42'], parameter: [{ key: 'destinationId', value: 'G-X1234' }] }] });
 		expect(v.tags[0].firing).toEqual(['Initialization - All Pages', 'All Pages', 'trigger 42']);
