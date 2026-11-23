@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Explainer from '$lib/components/Explainer.svelte';
 	import { CAUSE_ADVICE, CAUSE_LABEL } from '$lib/diagnose';
-	import { fmtInt } from '$lib/format';
+	import { fmtInt, fmtSigned } from '$lib/format';
 	let { data } = $props();
 	const d = $derived(data.d);
 	const tone: Record<string, string> = { ok: 'text-good', check: 'text-bad', wait: 'text-warn', info: 'text-muted-foreground' };
@@ -67,5 +67,30 @@
 		<table class="w-full text-sm"><thead><tr><th class="th">Page</th><th class="th text-right">Clicks lost</th></tr></thead><tbody>
 			{#each d.concentration.pages as p}<tr><td class="td pii max-w-96 truncate" title={p.key}>{p.key}</td><td class="td tnum text-right">{fmtInt(p.lost)}</td></tr>{/each}
 		</tbody></table>
+	</section>
+{/if}
+
+{#if data.updates.length}
+	<section class="card mb-4 p-4" id="updates">
+		<h2 class="mb-1 font-medium">Google updates and this site</h2>
+		<p class="mb-2 text-xs text-muted-foreground">Clicks per day in the 28 days after each update finished against the 28 days before it began, checked against the trend before and the same dates last year.</p>
+		<div class="overflow-x-auto"><table class="w-full text-sm">
+			<thead><tr><th class="th">Update</th><th class="th">Dates</th><th class="th text-right" title="Clicks per day, 28 days before it began">Before</th><th class="th text-right" title="Clicks per day, 28 days after it finished">After</th><th class="th text-right">Change</th><th class="th text-right" title="What the site was already doing: the 28 days before against the 28 before those">Trend before</th><th class="th text-right" title="The same two windows a year earlier">Last year</th><th class="th">Verdict</th></tr></thead>
+			<tbody>
+				{#each data.updates as u (u.id)}
+					<tr>
+						<td class="td">{u.name}</td>
+						<td class="td tnum text-xs text-muted-foreground whitespace-nowrap">{u.begin} → {u.end ?? 'ongoing'}</td>
+						<td class="td tnum text-right">{u.beforePerDay == null ? '–' : u.beforePerDay.toFixed(u.beforePerDay < 10 ? 1 : 0)}</td>
+						<td class="td tnum text-right">{u.afterPerDay == null ? '–' : u.afterPerDay.toFixed(u.afterPerDay < 10 ? 1 : 0)}</td>
+						<td class="td tnum text-right">{fmtSigned(u.change)}</td>
+						<td class="td tnum text-right text-muted-foreground">{fmtSigned(u.trendBefore)}</td>
+						<td class="td tnum text-right text-muted-foreground">{fmtSigned(u.lastYear)}</td>
+						<td class="td" title={u.why}><span class={u.verdict === 'hurt' ? 'text-bad font-medium' : u.verdict === 'helped' ? 'text-good font-medium' : 'text-muted-foreground'}>{data.verdictText[u.verdict]}</span></td>
+					</tr>
+				{/each}
+			</tbody>
+		</table></div>
+		<p class="mt-2 text-xs text-muted-foreground">A verdict is a coincidence in time, not proof: a launch, migration or seasonal peak in the same weeks moves the same numbers. Hover a verdict for the reason.</p>
 	</section>
 {/if}

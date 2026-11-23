@@ -4,6 +4,7 @@ import { getSite } from '$lib/server/clients';
 import { addDays } from '$lib/server/dates';
 import { fillDays, pageHistory, queryHistory, siteEnd } from '$lib/server/queries';
 import { db } from '$lib/server/db';
+import { groupHistory } from '$lib/server/groups';
 
 /**
  * kind=split: for one search, each competing page's position week by week (impression-weighted), over the last 16 weeks. Used by the
@@ -31,6 +32,8 @@ export const GET: RequestHandler = ({ params, url }) => {
 	const value = url.searchParams.get('value') ?? '';
 	const end = siteEnd(site);
 	const start = addDays(end, -Math.min(600, Number(url.searchParams.get('days')) || 480));
+	// a keyword bucket (type=bucket) or page group (type=pages), by id: its daily totals
+	if (kind === 'group') return json(fillDays(groupHistory(site, url.searchParams.get('type') === 'pages' ? 'pages' : 'bucket', Number(value), start, end), start, end));
 	if (kind === 'split') return json(splitHistory(site.id, value, url.searchParams.getAll('page'), end));
 	if (kind === 'pages') {
 		// which of the site's pages rank for one search, over the selected period

@@ -211,9 +211,9 @@ export function projectClicks(weekly: WeekPoint[], horizon = 8): Projection | nu
 // ── Search intent ────────────────────────────────────────────────────────────
 export type Intent = 'navigational' | 'transactional' | 'commercial' | 'informational' | 'unclassified';
 export const INTENTS: Intent[] = ['navigational', 'transactional', 'commercial', 'informational', 'unclassified'];
-const TRANSACTIONAL = /\b(buy|order|price|prices|pricing|cost|costs|cheap|cheapest|deal|deals|discount|coupon|promo|sale|for sale|shop|store|near me|delivery|subscribe|subscription|download|book|booking|hire|quote|free trial|sign up|signup)\b/i;
-const COMMERCIAL = /\b(best|top|vs|versus|review|reviews|compare|comparison|alternative|alternatives|recommended|rating|ratings|cheaper than|which is better|pros and cons)\b/i;
-const INFORMATIONAL = /\b(guide|tutorial|meaning|definition|define|examples?|ideas|tips|steps|learn|explained|history|benefits|causes|symptoms|difference between|what is|how to|why)\b/i;
+export const TRANSACTIONAL = /\b(buy|order|price|prices|pricing|cost|costs|cheap|cheapest|deal|deals|discount|coupon|promo|sale|for sale|shop|store|near me|delivery|subscribe|subscription|download|book|booking|hire|quote|free trial|sign up|signup)\b/i;
+export const COMMERCIAL = /\b(best|top|vs|versus|review|reviews|compare|comparison|alternative|alternatives|recommended|rating|ratings|cheaper than|which is better|pros and cons)\b/i;
+export const INFORMATIONAL = /\b(guide|tutorial|meaning|definition|define|examples?|ideas|tips|steps|learn|explained|history|benefits|causes|symptoms|difference between|what is|how to|why)\b/i;
 const NAV_WORDS = /\b(login|log in|sign in|account|website|official|app|contact|customer service|support|phone number|address|careers|jobs at)\b/i;
 
 /**

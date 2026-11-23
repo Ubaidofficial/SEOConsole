@@ -48,6 +48,8 @@ export interface SiteRow {
 	sitemap_auto: number;
 	bing_submit_auto: number;
 	changelog_auto: number;
+	alert_webhook: string | null;
+	pinned: number;
 	created_at: number;
 }
 

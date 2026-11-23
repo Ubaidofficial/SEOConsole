@@ -3,13 +3,14 @@ import { config } from '$lib/server/config';
 import { db } from '$lib/server/db';
 import { queueDepth } from '$lib/server/jobs';
 import { ROLE_LABEL } from '$lib/server/roles';
+import { openAlertCount } from '$lib/server/alerts';
 
 export const load: LayoutServerLoad = ({ locals, url }) => {
 	// Read so SvelteKit runs this again on every page change: otherwise the "lost access" banner and the queue count keep the values
 	// from the first page load, and an account that loses access while a tab is open is never announced. Two small counts.
 	void url?.pathname;
 	// Before sign-in the login page gets nothing about the installation (account counts, queue depth, whether Google is set up).
-	if (config.hasPassword && !locals.authed) return { demo: false, readOnly: false, hasPassword: true, authed: false, user: null, accounts: 0, revoked: 0, googleConfigured: false, queue: { waiting: 0, active: 0 } };
+	if (config.hasPassword && !locals.authed) return { demo: false, readOnly: false, hasPassword: true, authed: false, user: null, accounts: 0, revoked: 0, googleConfigured: false, queue: { waiting: 0, active: 0 }, alerts: { open: 0, problems: 0 } };
 	const u = locals.user;
 	const accounts = (db().prepare('SELECT COUNT(*) n FROM accounts').get() as { n: number }).n;
 	const revoked = (db().prepare("SELECT COUNT(*) n FROM accounts WHERE status = 'revoked'").get() as { n: number }).n;
@@ -23,6 +24,8 @@ export const load: LayoutServerLoad = ({ locals, url }) => {
 		accounts,
 		revoked,
 		googleConfigured: !!(config.googleClientId && config.googleClientSecret),
-		queue: queueDepth()
+		queue: queueDepth(),
+		/** open alerts on the sites this person may see, for the header badge */
+		alerts: u ? openAlertCount(u.siteIds) : { open: 0, problems: 0 }
 	};
 };

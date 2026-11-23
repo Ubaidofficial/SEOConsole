@@ -66,11 +66,12 @@ const A: Role = 'admin';
  * action cannot slip through unclassified; and anything not listed needs admin anyway (fail closed).
  */
 export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
-	'/': { syncAll: E, hideDuplicates: E, toggleHidden: E, purgeRemoved: A, hideOnboarding: A, showOnboarding: A, onboardIndexing: E, onboardBrand: A },
+	'/': { pin: E, syncAll: E, hideDuplicates: E, toggleHidden: E, purgeRemoved: A, hideOnboarding: A, showOnboarding: A, onboardIndexing: E, onboardBrand: A },
 	'/accounts': { refresh: E, verifyToken: A, verifyNow: A, relabel: A, remove: A, addSite: A },
 	'/agents': { create: A, permission: A, changes: A, remove: A },
 	'/connect': { ahrefsKey: A, ahrefsRemove: A, ahrefsRefresh: A, mozKeys: A, mozRemove: A, mozRefresh: A, automationDefault: A, automationApply: A, resync: E, bingKey: A, bingRemove: A, ga4Auto: A, gtmAuto: A, clarity: A, manual: A, pick: A, unlink: A, openseo: A, crux: A, cruxRemove: A, openseoRemove: A, setupRun: A, setupTos: A, setupCheck: A },
 	'/chat': { delete: 'viewer' },
+	'/alerts': { resolve: E, dismiss: E, reopen: E, check: E },
 	'/digest': { generate: E, send: E, monthly: E, sendMonthly: E, check: E },
 	'/updates': { import: E, add: E, remove: E },
 	'/sitemaps': { resubmitAll: E },
@@ -80,6 +81,10 @@ export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
 	'/profile': { name: 'viewer', email: 'viewer', password: 'viewer', linkGoogle: 'viewer', unlinkGoogle: 'viewer' },
 	'/sites/[id]': { addNote: E, makeTest: E, deleteNote: E, changelogAuto: E },
 	'/sites/[id]/actions': { state: E },
+	'/sites/[id]/alerts': { rule: E, addRule: E, deleteRule: E, webhook: A, testWebhook: A, resolve: E, dismiss: E, reopen: E, check: E },
+	'/sites/[id]/rank': { add: E, remove: E },
+	'/sites/[id]/groups': { saveGroup: E, deleteGroup: E },
+	'/sites/[id]/pages': { saveView: E, deleteView: E },
 	'/sites/[id]/bing': { refreshLinks: E, pageQueries: 'viewer' },
 	'/sites/[id]/clarity': { check: E, plan: E, install: A },
 	'/sites/[id]/ai': { addPrompts: E, deletePrompt: E, competitors: E, run: E },
@@ -92,7 +97,7 @@ export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
 	'/sites/[id]/onpage': { top: E, urls: E, oseoAudit: E },
 	'/sites/[id]/request': { build: E, requested: E, dismiss: E, auto: E },
 	'/sites/[id]/settings': { save: A, resync: A, removeProperty: A },
-	'/sites/[id]/queries': { oseoVolumes: E },
+	'/sites/[id]/queries': { oseoVolumes: E, saveView: E, deleteView: E, track: E },
 	'/sites/[id]/opportunities': { oseoPreview: E, oseoTrack: E },
 	'/sites/[id]/analytics': { realtime: 'viewer' },
 	'/sites/[id]/tags': { repairPlan: E, repairApply: A, keyEventDiscover: E, keyEventPlan: E, keyEventApply: A, duplicatePlan: E, duplicateApply: A },
@@ -132,9 +137,9 @@ export function requiredRole(method: string, url: URL): Role {
 }
 
 /** Pages a person limited to some sites may still open: they show nothing from other sites. Everything else covers every site. */
-const SCOPED_READABLE = new Set(['/', '/team', '/updates']);
+const SCOPED_READABLE = new Set(['/', '/team', '/updates', '/alerts']);
 /** Routes a person limited to some sites may also post to: the chat, whose tools only ever see that person's sites, and their own account page. */
-const SCOPED_USABLE = new Set(['/chat', '/chat/stream', '/chat/models', '/profile']);
+const SCOPED_USABLE = new Set(['/chat', '/chat/stream', '/chat/models', '/profile', '/alerts']);
 
 /**
  * Why a request is refused, or null. `not-found` for a site outside the person's scope (it is not even confirmed to exist),

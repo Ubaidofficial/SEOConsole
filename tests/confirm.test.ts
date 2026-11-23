@@ -231,7 +231,8 @@ describe('the Agents page and the tool list', () => {
 		// Raised from 50,000 to 51,000 for get_automation and set_automation (the Connect page's automation switches, about 1.1 KB after trimming).
 		// Raised from 51,000 to 52,000 for get_last_24_hours (Search Console hourly data) and the new views on the GA4, Bing, Clarity and search-type tools, after trimming.
 		// Raised from 52,000 to 53,000 for fix_duplicate_google_tag (pause duplicate Google tags in Tag Manager, about 0.7 KB).
-		expect(text.length, `tools/list is ${text.length} bytes`).toBeLessThan(53_000);
+		// Raised from 53,000 to 56,000 for seven tools at once (alerts, rank tracking, keyword buckets, update impact, not-found pages, track_queries, close_alert; about 2.8 KB after trimming).
+		expect(text.length, `tools/list is ${text.length} bytes`).toBeLessThan(56_000);
 		for (const t of tools) {
 			// get_opportunities lists every kind of finding it can return, so it is the one long definition
 			const long = t.name === 'get_opportunities';

@@ -81,3 +81,30 @@
 	{/each}
 	<p class="mt-2 text-xs text-muted-foreground">The crawl keeps only the final address after redirects, so chains of several redirects cannot be counted. A 401, 403 or 429 answer is not called broken: a site's own bot protection often answers a crawler that way.</p>
 </section>
+
+<section class="card mb-4 p-4" id="notfound">
+	<h2 class="font-medium">Not-found pages visitors reach</h2>
+	{#if !data.notFound.ga4}
+		<p class="mt-1 text-xs text-muted-foreground">Needs GA4: pages are found by the title GA4 records for them (“404”, “Page not found” and the same in six more languages). <a class="underline" href="analytics">Link GA4</a>.</p>
+	{:else if !data.notFound.rows.length}
+		<p class="mt-1 text-sm text-muted-foreground">No page GA4 saw in the last 28 days has a not-found title.</p>
+		<p class="mt-1 text-xs text-muted-foreground">If your 404 page has an ordinary title, it cannot be found this way.</p>
+	{:else}
+		<p class="mt-1 text-sm">{data.notFound.rows.length} address{data.notFound.rows.length === 1 ? '' : 'es'} answered “not found”{#if data.notFound.rows.some((r) => r.likelyInvented)}; <b>{data.notFound.rows.filter((r) => r.likelyInvented).length}</b> look made up by an AI assistant{/if}.</p>
+		<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
+			<thead><tr><th class="th">Address</th><th class="th text-right">Views</th><th class="th text-right" title="Sessions an AI assistant sent here (GA4 referrer)">From AI</th><th class="th">Known to</th><th class="th"></th></tr></thead>
+			<tbody>
+				{#each data.notFound.rows.slice(0, 40) as r (r.path)}
+					<tr>
+						<td class="td pii max-w-96 truncate" title={r.title}>{r.path}</td>
+						<td class="td tnum text-right">{r.views}</td>
+						<td class="td tnum text-right" title={r.assistants.join(', ')}>{r.ai || '–'}{#if r.assistants.length} <span class="text-xs text-muted-foreground">{r.assistants.join(', ')}</span>{/if}</td>
+						<td class="td text-xs text-muted-foreground">{[r.inSearch ? 'Google' : '', r.inSitemap ? 'sitemap' : ''].filter(Boolean).join(', ') || 'neither'}</td>
+						<td class="td text-xs">{#if r.likelyInvented}<span class="text-bad">likely made up by AI: redirect it</span>{:else if r.inSitemap}<span class="text-warn">in a sitemap: fix or remove</span>{/if}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table></div>
+		<p class="mt-2 text-xs text-muted-foreground">“Likely made up” means an AI assistant sent visits here and neither Google nor a sitemap has ever known the address. Redirect it to the page it meant.</p>
+	{/if}
+</section>

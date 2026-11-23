@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { Toaster, toast } from 'svelte-sonner';
-	import { Bot, LayoutDashboard, Sparkles, Layers, ListChecks, Map as MapIcon, Plug, RefreshCw, UserCog, Users } from '@lucide/svelte';
+	import { Bell, Bot, LayoutDashboard, Sparkles, Layers, ListChecks, Map as MapIcon, Plug, RefreshCw, UserCog, Users } from '@lucide/svelte';
 	import PrivacyToggle from '$lib/components/privacy-toggle.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import { pageTitle } from '$lib/titles';
@@ -20,6 +20,7 @@
 		['/', 'Dashboard', LayoutDashboard],
 		['/chat', 'Ask', Sparkles],
 		['/actions', 'Actions', ListChecks],
+		['/alerts', 'Alerts', Bell],
 		['/portfolio', 'Portfolio', Layers],
 		['/sitemaps', 'Sitemaps', MapIcon],
 		['/connect', 'Connect', Plug],
@@ -28,7 +29,7 @@
 		['/team', 'Team', UserCog]
 	] as const;
 	// Someone limited to some sites gets only the pages that show nothing from other sites (the server refuses the rest).
-	const SCOPED_LINKS = new Set(['/', '/chat', '/team']);
+	const SCOPED_LINKS = new Set(['/', '/chat', '/alerts', '/team']);
 	const shown = $derived(data.user?.scoped ? links.filter(([href]) => SCOPED_LINKS.has(href)) : links);
 	const active = (href: string) => (href === '/' ? page.url.pathname === '/' || page.url.pathname.startsWith('/sites') : page.url.pathname.startsWith(href));
 
@@ -71,7 +72,7 @@
 					aria-current={active(href) ? 'page' : undefined}
 					class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors {active(href) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'}"
 				>
-					<Icon class="size-3.5" />{label}
+					<Icon class="size-3.5" />{label}{#if href === '/alerts' && data.alerts.open}<span class="ml-0.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.alerts.problems ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.alerts.open} open alert{data.alerts.open === 1 ? '' : 's'}">{data.alerts.open}</span>{/if}
 				</a>
 			{/each}
 		</nav>{/if}

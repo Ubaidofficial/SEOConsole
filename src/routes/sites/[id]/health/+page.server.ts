@@ -7,6 +7,7 @@ import { nicheFor } from '$lib/server/nichefit';
 import { linkHealthFor, verifyLinkTargets, VERIFY_MAX } from '$lib/server/linkhealth';
 import { STATUS_ADVICE, STATUS_LABEL, FIT_LABEL } from '$lib/nichefit';
 import { VERDICT_LABEL } from '$lib/publishing';
+import { notFoundPages } from '$lib/server/notfound';
 
 export const load: PageServerLoad = async ({ params, url }) => {
 	const site = getSite(Number(params.id))!;
@@ -18,6 +19,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		publishing: publishingFor(site, 90),
 		niche: { period: niche.period, queriesUsed: niche.profile.queriesUsed, headline: niche.profile.headline, reachOnlyShare: niche.profile.reachOnlyShare, noClicksShare: niche.profile.noClicksShare, topics: niche.profile.topics.slice(0, 25), candidates: niche.candidates, kw: kw.join('\n') },
 		links: { ...links, unchecked: links.unchecked.slice(0, 20), uncheckedTotal: links.unchecked.length, broken: links.broken.slice(0, 25), redirected: links.redirected.slice(0, 25) },
+		notFound: notFoundPages(site, 28),
 		verifyMax: VERIFY_MAX,
 		labels: { status: STATUS_LABEL, advice: STATUS_ADVICE, fit: FIT_LABEL, verdict: VERDICT_LABEL }
 	};
