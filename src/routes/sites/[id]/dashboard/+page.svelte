@@ -4,6 +4,7 @@
 	import BarList from '$lib/components/viz/BarList.svelte';
 	import SegBar from '$lib/components/viz/SegBar.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
+	import SectionTabs from '$lib/components/SectionTabs.svelte';
 	import { fmtInt, fmtPct, fmtPos } from '$lib/format';
 	import { noKeyEventsText } from '$lib/keyeventtext';
 	let { data } = $props();
@@ -37,6 +38,7 @@
 			return u;
 		}
 	};
+	let view = $state('');
 </script>
 
 {#snippet connect(name: string)}
@@ -71,7 +73,14 @@
 	{#if c?.synced}{@render kpi('Real visitors', fmtInt(c.humans), undefined, `Clarity · ~24h to ${c.day} · ${fmtInt(c.bots)} bots left out`, 'clarity')}{:else}{@render kpi('Real visitors', '–', undefined, c ? 'Clarity: not synced yet' : 'Clarity: not linked')}{/if}
 </div>
 
-<!-- Where traffic comes from -->
+<SectionTabs bind:value={view} label="All sources details" tabs={[
+	{ id: 'traffic', label: 'Traffic' },
+	{ id: 'audience', label: 'Countries & devices' },
+	{ id: 'content', label: 'Pages & searches' },
+	{ id: 'conversions', label: 'Landing pages & key events' },
+	{ id: 'behaviour', label: 'Behaviour' }
+]} />
+{#if view === 'traffic'}
 <div class="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
 	<section class="card p-4">
 		<h2 class="mb-1 text-sm font-medium">Traffic by channel <span class="font-normal text-muted-foreground">· GA4</span></h2>
@@ -99,8 +108,7 @@
 		{/if}
 	</section>
 </div>
-
-<!-- Who: countries, devices, new vs returning -->
+{:else if view === 'audience'}
 <section class="card mb-4 p-4">
 	<h2 class="mb-3 text-sm font-medium">Top countries</h2>
 	<div class="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -146,8 +154,7 @@
 		</div>
 	</div>
 </section>
-
-<!-- What: pages and searches -->
+{:else if view === 'content'}
 <div class="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
 	<section class="card p-4">
 		<h2 class="mb-1 text-sm font-medium">Top pages <span class="font-normal text-muted-foreground">· Google clicks</span></h2>
@@ -165,8 +172,7 @@
 
 	</section>
 </div>
-
-<!-- Where visits land, and what they convert into (GA4) -->
+{:else if view === 'conversions'}
 <div class="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
 	<section class="card p-4">
 		<h2 class="mb-1 text-sm font-medium">Landing pages <span class="font-normal text-muted-foreground">· GA4 sessions, every channel</span></h2>
@@ -192,8 +198,7 @@
 		{/if}
 	</section>
 </div>
-
-<!-- How visitors behave -->
+{:else}
 <section class="card mb-4 p-4">
 	<h2 class="mb-1 text-sm font-medium">How visitors behave <span class="font-normal text-muted-foreground">· Clarity</span></h2>
 	{#if !c}{@render connect('Clarity')}
@@ -214,3 +219,4 @@
 		{/if}
 	{/if}
 </section>
+{/if}
