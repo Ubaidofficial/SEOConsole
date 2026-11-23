@@ -80,7 +80,7 @@ export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
 	'/profile': { name: 'viewer', email: 'viewer', password: 'viewer', linkGoogle: 'viewer', unlinkGoogle: 'viewer' },
 	'/sites/[id]': { addNote: E, makeTest: E, deleteNote: E, changelogAuto: E },
 	'/sites/[id]/actions': { state: E },
-	'/sites/[id]/bing': { refreshLinks: E },
+	'/sites/[id]/bing': { refreshLinks: E, pageQueries: 'viewer' },
 	'/sites/[id]/clarity': { check: E, plan: E, install: A },
 	'/sites/[id]/ai': { addPrompts: E, deletePrompt: E, competitors: E, run: E },
 	'/sites/[id]/links': { crawl: E, done: E },
@@ -95,7 +95,7 @@ export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
 	'/sites/[id]/queries': { oseoVolumes: E },
 	'/sites/[id]/opportunities': { oseoPreview: E, oseoTrack: E },
 	'/sites/[id]/analytics': { realtime: 'viewer' },
-	'/sites/[id]/tags': { repairPlan: E, repairApply: A, keyEventDiscover: E, keyEventPlan: E, keyEventApply: A },
+	'/sites/[id]/tags': { repairPlan: E, repairApply: A, keyEventDiscover: E, keyEventPlan: E, keyEventApply: A, duplicatePlan: E, duplicateApply: A },
 	'/sites/[id]/sitemaps': { lastmodCompare: E, check: E, robotsCheck: E, submit: E, delete: E },
 	'/sites/[id]/submit': { preset: E, submit: E, sitemapSubmit: E, sitemapResubmit: E, sitemapCheck: E, refreshQuota: E, clearQueue: E, check: E },
 	'/sites/[id]/tests': { create: E, remove: E }

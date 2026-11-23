@@ -19,7 +19,8 @@ import { actionsFor, actionStates, setActionState } from './actions';
 import { createTest, suggestControlMatched, testsByAnnotation } from './seotests';
 import { isAssistant } from './llmtests';
 import { AI_ASSISTANTS } from '../ai';
-import { afterSitemapRead, enqueueGa4Pages, enqueueSiteSync } from './jobs';
+import { afterSitemapRead, enqueueGa4Pages, enqueueLinkSync, enqueueSiteSync } from './jobs';
+import { pauseDuplicateTagsViaGtm, planDuplicateFix } from './gtmwrite';
 import { syncSitemapUrls } from './sitemapcov';
 import { submitUrls } from './indexnow';
 import { addWatch } from './indexmon';
@@ -504,6 +505,24 @@ const writeTools: Tool[] = [
 			const r = await applyKeyEvent(site.id, input, mode);
 			if (r.ok) enqueueSiteSync(site.id);
 			return { ...r, check: r.ok ? 'Trigger the event on the site, then look in GA4 Realtime; key events reach reports within a day.' : undefined };
+		}
+	}),
+	w({
+		name: 'fix_duplicate_google_tag',
+		description: 'Pause the extra Google tags when several active ones load GA4 for the same measurement ID (see get_tracking_health). Keeps the one on Initialization; pauses, never deletes, in a new workspace. mode as in setup_google_tag.',
+		schema: { ...siteArg, mode: { type: 'string', enum: ['preview', 'workspace', 'publish'] } },
+		run: async (a, sites) => {
+			const site = resolveSite(sites, a.site);
+			const mode = a.mode == null || a.mode === 'preview' ? 'preview' : a.mode === 'workspace' || a.mode === 'publish' ? a.mode : null;
+			if (!mode) throw new Error('`mode` must be preview, workspace or publish.');
+			if (mode === 'preview') {
+				const p = await planDuplicateFix(site.id);
+				if (!p.ok) return { ok: false, error: p.error, ...(p.needsGrant ? { fix: 'The owner must allow SEOConsole to edit Tag Manager once, on the site\'s Tag Manager tab.' } : {}) };
+				return { ok: true, container: p.container?.publicId, groups: p.groups, canPublish: p.canPublish, ...(p.publishBlocked ? { publishBlocked: p.publishBlocked } : {}), next: 'Call again with mode publish (or workspace) to pause the tags listed under pause.' };
+			}
+			const r = await pauseDuplicateTagsViaGtm(site.id, mode);
+			if (r.ok) enqueueLinkSync(site.id, 'gtm');
+			return { ...r, check: r.ok && r.published ? 'Open Preview in Tag Manager and confirm one Google tag fires per page; unpausing the tag undoes this.' : undefined };
 		}
 	}),
 	w({

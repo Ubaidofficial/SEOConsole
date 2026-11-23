@@ -1,5 +1,5 @@
-import type { BingClient, BingDay, BingLinksClient, BingSite, BingTermRow } from './bing';
-import type { Ga4Day, Ga4Dim, Ga4DimDay, Ga4EventDay, Ga4LandingChannel, Ga4Property, Ga4SourceRow } from './ga4';
+import type { BingClient, BingCrawlClient, BingCrawlDay, BingDay, BingFeed, BingLinksClient, BingSite, BingTermRow } from './bing';
+import type { Ga4Day, Ga4Dim, Ga4DimDay, Ga4EventDay, Ga4LandingChannel, Ga4Property, Ga4SearchTerm, Ga4SourceRow, Ga4ValueKind, Ga4ValueRow } from './ga4';
 import type { ClarityMetric } from './clarity';
 import type { GtmContainer, GtmLive } from './gtm';
 import { DEMO_ACCOUNTS, DEMO_HISTORY_DAYS, DemoClient, demoSearches, h01, plantedQuery } from './demo';
@@ -14,6 +14,8 @@ export const DEMO_CLARITY_ID = 'gl4demo7x2';
 export const demoInstalled = new Map<string, string>();
 /** Containers whose malformed Google tag the demo Tag ID repair has fixed, and the ID it was given. */
 export const demoRepaired = new Map<string, string>();
+/** Demo: tag IDs the duplicate-tag fix paused, per container, so the demo container shows them paused afterwards. */
+export const demoPaused = new Map<string, Set<string>>();
 /** The planted demo problem: a whole pasted gtag.js snippet where a Google tag's ID belongs (coffeelab). */
 export const DEMO_PASTED_TAG = `<!-- Google tag (gtag.js) --> <script async src="https://www.googletagmanager.com/gtag/js?id=G-DEMOCOFFEE1"></script> <script>   window.dataLayer = window.dataLayer || [];   function gtag(){dataLayer.push(arguments);}   gtag('js', new Date());    gtag('config', 'G-DEMOCOFFEE1'); </script>`;
 /** What the demo "Set up GA4 & Tag Manager" created, until the server restarts: properties, containers, and the GA4 tag put in a container (path -> measurement ID). */
@@ -28,7 +30,7 @@ const dayFactor = (date: string, end: string, seed: string) => {
 	return (dow === 0 || dow === 6 ? 0.72 : 1.05) * (0.85 + h01(seed, date) * 0.3) * (age === 17 ? 0.5 : 1);
 };
 
-export class DemoBing implements BingClient, BingLinksClient {
+export class DemoBing implements BingClient, BingLinksClient, BingCrawlClient {
 	/** Demo: Bing "accepts" every submission and keeps a small daily allowance so the quota message can be seen. */
 	async submitUrlBatch(): Promise<void> {}
 	async urlSubmissionQuota(): Promise<{ daily: number | null; monthly: number | null }> {
@@ -84,6 +86,33 @@ export class DemoBing implements BingClient, BingLinksClient {
 			});
 		}
 		return out;
+	}
+	/** Demo: six months of crawling, a slowly growing index, and a burst of 5xx errors two weeks ago so the chart has something to show. */
+	async crawlStats(siteUrl: string): Promise<BingCrawlDay[]> {
+		const s = siteOf(siteUrl);
+		const end = lastDay();
+		return eachDay(addDays(end, -180), end).map((date, i, all) => {
+			const crawled = Math.round(140 * s.scale * (0.6 + h01(s.brand, date, 'crawl') * 0.8));
+			const burst = i > all.length - 16 && i < all.length - 11;
+			const code5xx = burst ? Math.round(crawled * 0.2) : h01(date, 'e') < 0.1 ? 1 : 0;
+			const code4xx = Math.round(crawled * 0.03);
+			return { date, crawled, crawlErrors: code5xx + code4xx, inIndex: Math.round(900 * s.scale * (0.9 + (i / all.length) * 0.15)), inLinks: Math.round(400 * s.scale), code2xx: crawled - code4xx - code5xx - 2, code301: 2, code302: 0, code4xx, code5xx, otherCodes: 0, blockedByRobots: 3, malware: 0, dnsFailures: 0, timeouts: burst ? 2 : 0 };
+		});
+	}
+	async feeds(siteUrl: string): Promise<BingFeed[]> {
+		const s = siteOf(siteUrl);
+		const o = s.siteUrl.startsWith('sc-domain:') ? `https://${s.siteUrl.slice(10)}/` : s.siteUrl;
+		const end = lastDay();
+		return [
+			{ url: `${o}sitemap.xml`, type: 'Sitemap index', status: 'Success', urlCount: Math.round(300 * s.scale), submitted: addDays(end, -200), lastCrawled: addDays(end, -2), fileSize: 2048, compressed: false },
+			{ url: `${o}old-sitemap.xml`, type: 'Sitemap', status: 'Failed', urlCount: 0, submitted: addDays(end, -400), lastCrawled: addDays(end, -30), fileSize: null, compressed: false }
+		];
+	}
+	/** Demo: the searches behind one page, two of the site's queries weighted by the page. */
+	async pageQueryStats(siteUrl: string, page: string): Promise<BingTermRow[]> {
+		const s = siteOf(siteUrl);
+		const words = [`best ${s.topic}`, `${s.topic} guide`, `${s.topic} reviews`, `${s.brand} ${page.split('/').filter(Boolean).pop() ?? ''}`.trim()].filter((w, i) => h01(page, w) < 0.8 || i === 0);
+		return this.terms(siteUrl, words);
 	}
 	async queryStats(siteUrl: string) {
 		const s = siteOf(siteUrl);
@@ -171,7 +200,9 @@ export function demoGtmLive(containerPath: string): GtmLive | null {
 					tag('3', 'GA4 - lead form', 'gaawe', { firing: ['Form submit'], measurementId: mid, eventName: 'generate_lead' }),
 					...(brand === 'pixelforge' ? [tag('4', 'Old remarketing', 'sp', { paused: true })] : []),
 					// a Clarity tag someone added but never gave a trigger: the Clarity check flags it
-					...(brand === 'coffeelab' ? [tag('4', 'Heatmap script', 'html', { firing: [], clarity: true, clarityId: 'cf8demo3k1' })] : [])
+					...(brand === 'coffeelab' ? [tag('4', 'Heatmap script', 'html', { firing: [], clarity: true, clarityId: 'cf8demo3k1' })] : []),
+					// an old GA4 Configuration tag left next to the Google tag: both load GA4 for the same ID (the duplicate-tag fix pauses it)
+					...(brand === 'pixelforge' ? [tag('5', 'GA4 Configuration (old)', 'gaawc', { measurementId: mid, paused: !!demoPaused.get(containerPath)?.has('5') })] : [])
 				];
 	if (setupTag) tags.push(tag('98', 'Google tag (added by SEOConsole)', 'googtag', { measurementId: setupTag }));
 	const added = demoInstalled.get(containerPath);
@@ -292,6 +323,69 @@ export async function demoGa4LandingAll(property: string, startDate: string, end
 	return { rows, truncated: false };
 }
 
+/** Average engagement seconds per session and revenue per session for each demo channel: email and organic convert, social skims. */
+const DEMO_VALUE: Record<string, [number, number]> = { 'Organic Search': [74, 1.9], Direct: [96, 2.6], Referral: [58, 1.1], 'Organic Social': [31, 0.4], Email: [112, 4.2] };
+/** How each demo channel's sessions split into campaigns (GA4 names the unpaid ones in brackets). */
+const DEMO_CAMPAIGNS: Record<string, [string, number][]> = {
+	'Organic Search': [['(organic)', 1]],
+	Direct: [['(direct)', 1]],
+	Referral: [['(referral)', 0.8], ['partner_spring', 0.2]],
+	'Organic Social': [['(referral)', 0.55], ['social_launch', 0.45]],
+	Email: [['newsletter_weekly', 0.7], ['winback_nov', 0.3]]
+};
+const valueRow = (key: string, sessions: number, engaged: number, keyEvents: number, sec: number, revPerSession: number, seed: string): Ga4ValueRow => {
+	const wobble = 0.8 + h01(seed) * 0.4;
+	const revenue = Math.round(sessions * revPerSession * wobble * 100) / 100;
+	return { key, sessions, engagedSessions: engaged, keyEvents, engagementSec: Math.round(sessions * sec * wobble), revenue, transactions: Math.round(revenue / 48) };
+};
+
+/** Engagement time, revenue and transactions by channel, landing page or campaign, consistent with the demo sessions. */
+export async function demoGa4Values(property: string, kind: Ga4ValueKind, startDate: string, endDate: string): Promise<{ rows: Ga4ValueRow[]; currency: string | null; truncated: boolean }> {
+	const byChannel = new Map<string, { sessions: number; engaged: number; keyEvents: number }>();
+	for (const r of demoGa4Daily(property, startDate, endDate)) {
+		const cur = byChannel.get(r.channel) ?? { sessions: 0, engaged: 0, keyEvents: 0 };
+		cur.sessions += r.sessions;
+		cur.engaged += r.engagedSessions;
+		cur.keyEvents += r.keyEvents;
+		byChannel.set(r.channel, cur);
+	}
+	const rows: Ga4ValueRow[] = [];
+	if (kind === 'channel') {
+		for (const [ch, t] of byChannel) rows.push(valueRow(ch, t.sessions, t.engaged, Math.round(t.keyEvents * 10) / 10, DEMO_VALUE[ch]?.[0] ?? 60, DEMO_VALUE[ch]?.[1] ?? 1, property + ch));
+	} else if (kind === 'campaign') {
+		const merged = new Map<string, Ga4ValueRow>();
+		for (const [ch, t] of byChannel)
+			for (const [name, share] of DEMO_CAMPAIGNS[ch] ?? [['(not set)', 1]]) {
+				const r = valueRow(name, Math.round(t.sessions * share), Math.round(t.engaged * share), Math.round(t.keyEvents * share * 10) / 10, DEMO_VALUE[ch]?.[0] ?? 60, DEMO_VALUE[ch]?.[1] ?? 1, property + name);
+				const cur = merged.get(name);
+				if (!cur) merged.set(name, r);
+				else for (const k of ['sessions', 'engagedSessions', 'keyEvents', 'engagementSec', 'revenue', 'transactions'] as const) cur[k] += r[k];
+			}
+		rows.push(...[...merged.values()].filter((r) => r.sessions > 0));
+	} else {
+		const byPage = new Map<string, Ga4ValueRow>();
+		for (const l of (await demoGa4LandingAll(property, startDate, endDate)).rows) {
+			const r = valueRow(l.page, l.sessions, l.engagedSessions, l.keyEvents, 40 + h01(l.page) * 110, h01(l.page + 'rev') < 0.4 ? 0 : 0.5 + h01(l.page + 'r') * 4, property + l.page + l.channel);
+			const cur = byPage.get(l.page);
+			if (!cur) byPage.set(l.page, r);
+			else for (const k of ['sessions', 'engagedSessions', 'keyEvents', 'engagementSec', 'revenue', 'transactions'] as const) cur[k] += r[k];
+		}
+		rows.push(...byPage.values());
+	}
+	return { rows: rows.sort((a, b) => b.sessions - a.sessions), currency: 'USD', truncated: false };
+}
+
+/** What demo visitors typed into the site search: the site's topic words, scaled to the window. */
+export function demoGa4SearchTerms(property: string, startDate: string, endDate: string): Ga4SearchTerm[] {
+	const sessions = demoGa4Daily(property, startDate, endDate).reduce((a, r) => a + r.sessions, 0);
+	const terms = ['shipping', 'returns', 'gift card', 'size guide', 'discount code', 'care guide', 'wholesale', 'track order', 'reviews', 'warranty'];
+	return terms
+		.map((term, i) => ({ term, searches: Math.round((sessions * 0.02 * (0.4 + h01(property + term))) / (i + 1)), users: 0 }))
+		.map((t) => ({ ...t, users: Math.round(t.searches * 0.8) }))
+		.filter((t) => t.searches > 0)
+		.sort((a, b) => b.searches - a.searches);
+}
+
 /** A fetch stand-in so the real budget/sync code path runs against synthetic Clarity data. */
 export function demoClarityFetch(siteUrl?: string): typeof fetch {
 const s = siteUrl ? siteOf(siteUrl) : sites[0];
@@ -302,10 +396,11 @@ const slug = s.topic.replace(/\s+/g, '-');
 		const key = dim || null;
 		const row = (extra: Record<string, string | number>, i = 0) => ({ ...(key ? { [key]: String(extra._k ?? `v${i}`) } : {}), ...Object.fromEntries(Object.entries(extra).filter(([k]) => k !== '_k')) });
 		// By URL: the site's own pages. The products page is the planted problem: 19 of its 140 sessions had dead clicks.
-		const values = dim === 'URL' ? ['/', `/guides/${slug}-1`, `/products/${slug}-6`, `/blog/${slug}-10`] : dim === 'Device' ? ['Mobile', 'PC', 'Tablet'] : [null];
-		const sess = dim === 'URL' ? [3200, 900, 140, 600] : [3200, 2600, 2000];
-		const dead = dim === 'URL' ? [120, 30, 19, 14] : [120, 100, 80];
-		const rage = dim === 'URL' ? [36, 8, 11, 4] : [36, 30, 24];
+		// By channel: social visitors rage-click far more than searchers, so the comparison has something to show.
+		const values = dim === 'URL' ? ['/', `/guides/${slug}-1`, `/products/${slug}-6`, `/blog/${slug}-10`] : dim === 'Device' ? ['Mobile', 'PC', 'Tablet'] : dim === 'Channel' ? ['Organic search', 'Direct', 'Referral', 'Social'] : [null];
+		const sess = dim === 'URL' ? [3200, 900, 140, 600] : dim === 'Channel' ? [4100, 1900, 600, 1200] : [3200, 2600, 2000];
+		const dead = dim === 'URL' ? [120, 30, 19, 14] : dim === 'Channel' ? [110, 70, 20, 100] : [120, 100, 80];
+		const rage = dim === 'URL' ? [36, 8, 11, 4] : dim === 'Channel' ? [30, 20, 6, 34] : [36, 30, 24];
 		// pixelforge and northwind have no Clarity script (see demoPageFetch), so they record nothing until it is installed through Tag Manager
 		const container = demoGtmContainers().find((c) => c.name === hostOfDemo(s.siteUrl))?.path;
 		if ((s.brand === 'pixelforge' || s.brand === 'northwind') && !(container && demoInstalled.has(container))) {

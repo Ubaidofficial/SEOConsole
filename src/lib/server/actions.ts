@@ -335,7 +335,7 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 				title: `${n0(dead.length)} page${dead.length === 1 ? '' : 's'} with ${n0(links)} inbound link${links === 1 ? '' : 's'} no longer work${dead.length === 1 ? 's' : ''}`,
 				why: 'Bing found these addresses failing while links from other pages still point at them, so those links pass nothing to your site.',
 				how: 'Redirect each missing page to its closest live page (a permanent 301) and fix any server error. The Bing tab lists them with a suggested target.',
-				impact: null, confidence: 'medium', effort: 'low', blocking: false, href: `${base}/bing#links`,
+				impact: null, confidence: 'medium', effort: 'low', blocking: false, href: `${base}/bing?section=links#links`,
 				evidence: dead.slice(0, 5).map((d) => `${pathOf(d.url)} (${d.httpCode}), ${n0(d.inLinks)} link${d.inLinks === 1 ? '' : 's'}${d.redirectTo ? ` → ${pathOf(d.redirectTo)}` : ''}`)
 			});
 		}

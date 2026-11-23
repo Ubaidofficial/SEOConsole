@@ -30,6 +30,34 @@ export interface BingLinksClient {
 	crawlIssues(siteUrl: string): Promise<BingCrawlIssue[]>;
 }
 
+/** One day of Bing's crawl statistics (GetCrawlStats: the last six months, updated daily). Field names follow Microsoft's CrawlStats class. */
+export interface BingCrawlDay {
+	date: string;
+	crawled: number;
+	crawlErrors: number;
+	inIndex: number;
+	inLinks: number;
+	code2xx: number;
+	code301: number;
+	code302: number;
+	code4xx: number;
+	code5xx: number;
+	otherCodes: number;
+	blockedByRobots: number;
+	malware: number;
+	dnsFailures: number;
+	timeouts: number;
+}
+/** A sitemap or feed Bing knows for the site (GetFeeds: top-level feeds). Dates are null where Bing has none. */
+export interface BingFeed { url: string; type: string; status: string; urlCount: number | null; submitted: string | null; lastCrawled: string | null; fileSize: number | null; compressed: boolean }
+/** Crawl statistics, sitemaps and queries per page, apart from BingClient so earlier clients and fakes stay valid. Same API key, free. */
+export interface BingCrawlClient {
+	crawlStats(siteUrl: string): Promise<BingCrawlDay[]>;
+	feeds(siteUrl: string): Promise<BingFeed[]>;
+	/** The searches that showed one page (GetPageQueryStats, weekly rows). */
+	pageQueryStats(siteUrl: string, page: string): Promise<BingTermRow[]>;
+}
+
 export interface BingClient {
 	listSites(): Promise<BingSite[]>;
 	dailyStats(siteUrl: string): Promise<BingDay[]>;
@@ -94,7 +122,57 @@ export function friendlyBingError(message: string | undefined, code: number | un
 	return m || `Bing API ${status}`;
 }
 
-export class RealBingClient implements BingClient, BingLinksClient {
+/** A WCF date or null: missing, unparseable, or Bing's "never" (DateTime.MinValue, year 1). */
+export function optBingDate(v: unknown): string | null {
+	if (typeof v !== 'string' || !v) return null;
+	try {
+		const d = parseBingDate(v);
+		return d >= '2000-01-01' ? d : null;
+	} catch {
+		return null;
+	}
+}
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
+
+export function parseCrawlStats(r: Record<string, unknown>[] | null | undefined): BingCrawlDay[] {
+	return (r ?? [])
+		.map((x) => ({
+			date: optBingDate(x.Date) ?? '',
+			crawled: num(x.CrawledPages),
+			crawlErrors: num(x.CrawlErrors),
+			inIndex: num(x.InIndex),
+			inLinks: num(x.InLinks),
+			code2xx: num(x.Code2xx),
+			code301: num(x.Code301),
+			code302: num(x.Code302),
+			code4xx: num(x.Code4xx),
+			code5xx: num(x.Code5xx),
+			otherCodes: num(x.AllOtherCodes),
+			blockedByRobots: num(x.BlockedByRobotsTxt),
+			malware: num(x.ContainsMalware),
+			dnsFailures: num(x.DnsFailures),
+			timeouts: num(x.ConnectionTimeout)
+		}))
+		.filter((x) => x.date)
+		.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function parseFeeds(r: Record<string, unknown>[] | null | undefined): BingFeed[] {
+	return (r ?? [])
+		.filter((x) => typeof x.Url === 'string' && x.Url)
+		.map((x) => ({
+			url: String(x.Url),
+			type: String(x.Type ?? ''),
+			status: String(x.Status ?? ''),
+			urlCount: x.UrlCount == null ? null : num(x.UrlCount),
+			submitted: optBingDate(x.Submitted),
+			lastCrawled: optBingDate(x.LastCrawled),
+			fileSize: x.FileSize == null ? null : num(x.FileSize),
+			compressed: !!x.Compressed
+		}));
+}
+
+export class RealBingClient implements BingClient, BingLinksClient, BingCrawlClient {
 	constructor(
 		private integrationId: number,
 		private http: HttpOpts = {}
@@ -179,6 +257,17 @@ export class RealBingClient implements BingClient, BingLinksClient {
 			if (out.length) break;
 		}
 		return out;
+	}
+	// GetCrawlStats, GetFeeds and GetPageQueryStats follow Microsoft's reference (Microsoft Learn, read 2026-11-22) and have not been run
+	// against a live Bing account here.
+	async crawlStats(siteUrl: string) {
+		return parseCrawlStats(await this.call<Record<string, unknown>[]>('GetCrawlStats', { siteUrl }));
+	}
+	async feeds(siteUrl: string) {
+		return parseFeeds(await this.call<Record<string, unknown>[]>('GetFeeds', { siteUrl }));
+	}
+	async pageQueryStats(siteUrl: string, page: string) {
+		return this.terms((await this.call('GetPageQueryStats', { siteUrl, page })) ?? []);
 	}
 	async crawlIssues(siteUrl: string) {
 		return parseCrawlIssues(await this.call('GetCrawlIssues', { siteUrl }));

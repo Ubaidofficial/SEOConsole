@@ -1,6 +1,6 @@
 import { db } from './db';
-import { type PerfFilters, allSites, brandTerms, fittedCurve, historyCoversPrevious, performanceBy, periodFor, queryPageRows, siteEnd, summary, topPages, topQueries, pageTotals, dailySeries, anonymisedShare, typeBreakdown, appearanceFor } from './queries';
-import { ALL_TYPES } from '../searchTypes';
+import { type PerfFilters, allSites, brandTerms, fittedCurve, historyCoversPrevious, performanceBy, periodFor, queryPageRows, siteEnd, summary, topPages, topQueries, pageTotals, dailySeries, anonymisedShare, typeBreakdown, appearanceFor, typePagesFor } from './queries';
+import { ALL_TYPES, SEARCH_TYPES, type SearchType } from '../searchTypes';
 import { cruxIntegration, cruxLatest } from './crux';
 import { rate, VITALS } from '../vitals';
 import { clientForSite, displayName } from './clients';
@@ -22,6 +22,13 @@ import { gtmSnapshot, trackingHealth } from './tracking';
 import { tagTypeLabel } from './gtm';
 import { allLinks } from './links';
 import { realtimeFor } from './realtime';
+import { hourlyReport } from './hourly';
+import { clarityByDimension, clarityDashboardUrl } from '../claritydims';
+import { clarityInstallFor } from './clarityscan';
+import { bingCrawlReport, bingPageQueries } from './bingcrawl';
+import { bingClientFor } from './channels';
+import type { BingCrawlClient } from './bing';
+import { ga4ValuesReport, type ValueRow } from './ga4values';
 import { noKeyEventsText } from '../keyeventtext';
 import { aiTrafficReport, keyEventsReport, landingPagesReport, trafficSourcesReport, countryCannibalReport, forecastReport, groupsReport, heatmapReport, intentReport, localesReport, monthlyReport, queryCountReport, trajectories, trendsReport, urlClassesReport } from './insights';
 import { evaluateTestCached, listTests } from './seotests';
@@ -123,6 +130,7 @@ const reportJson = (rep: Awaited<ReturnType<typeof submitForIndexing>>) => ({
 	addedToWatchList: rep.watching,
 	note: rep.note
 });
+const pctOrNull = (n: number | null) => (n == null ? null : r2(n * 100) + '%');
 const isoOrNull = (t: number | null | undefined) => (t ? new Date(t).toISOString() : null);
 
 /** get_ga4_summary view=pages (landing pages, every channel) or view=events (key events by name). */
@@ -147,6 +155,24 @@ function ga4PagesOrEvents(site: Site, n: number, a: Record<string, unknown>) {
 		...(l.truncated ? { note: 'GA4 returned its row limit; very small pages may be missing.' } : {}),
 		pages: l.rows.slice(0, 50).map((r) => ({ page: r.page, sessions: r.sessions, previousSessions: r.prevSessions, change: r.sessionsDelta == null ? null : r2(r.sessionsDelta * 100) + '%', mainChannel: r.topChannel, fromOrganic: r2(r.organicShare * 100) + '%', engagementRate: r2(r.engagementRate * 100) + '%', keyEvents: r.keyEvents, channels: r.channels.slice(0, 4) }))
 	};
+}
+
+/** get_ga4_summary view=value, campaigns or site_search: engagement time, revenue and what visitors searched for, per stored window. */
+function ga4Values(site: Site, n: number, a: Record<string, unknown>) {
+	const v = ga4ValuesReport(site, n, { search: typeof a.search === 'string' ? a.search : undefined });
+	if (!v.linked) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
+	if (v.status === 'pending') return { connected: true, note: 'Engagement time, revenue, campaigns and site search appear after the next GA4 sync.' };
+	if (v.status === 'failed') return { connected: true, error: `GA4 could not return engagement time and revenue on the last sync; it will be retried. ${v.error}` };
+	if (v.status === 'no-window') return { connected: true, error: `Engagement time, revenue, campaigns and site search are stored for windows of ${v.periods.join(', ')} days; pass one of those as days.` };
+	const row = (r: ValueRow, label: string) => ({ [label]: r.key, sessions: r.sessions, engagementRate: r2(r.engagementRate * 100) + '%', avgEngagementSeconds: r.avgEngagementSec, keyEvents: r.keyEvents, keyEventRate: r2(r.keyEventRate * 100) + '%', ...(v.hasRevenue ? { revenue: r.revenue, transactions: r.transactions, revenuePerSession: r.revenuePerSession } : {}) });
+	const head = { window: v.window, currency: v.currency, ...(v.staleError ? { warning: `The last refresh failed, so this is from ${v.window.end}: ${v.staleError}` } : {}), ...(v.hasRevenue ? {} : { revenueNote: 'No revenue recorded in this window (no purchase events with a value), so revenue fields are left out.' }) };
+	const lim = limit(a, 50);
+	if (a.view === 'site_search')
+		return v.searchTerms.length
+			? { ...head, note: 'Terms typed into the site\'s own search box (GA4 view_search_results), lower-cased.', terms: v.searchTerms.slice(0, lim) }
+			: { ...head, terms: [], note: 'No site searches recorded. GA4 counts them when enhanced measurement site search is on and the results page keeps the term in its address (?q=, ?s=).' };
+	if (a.view === 'campaigns') return { ...head, note: 'By utm_campaign; untagged traffic shows as (organic), (direct), (referral).', ...(v.truncated.includes('campaign') ? { truncated: true } : {}), campaigns: v.campaigns.slice(0, lim).map((r) => row(r, 'campaign')) };
+	return { ...head, note: 'avgEngagementSeconds is GA4 average engagement time per session.', totals: v.totals, channels: v.channels.map((r) => row(r, 'channel')), landingPages: v.landing.slice(0, lim).map((r) => row(r, 'page')) };
 }
 
 /** get_ga4_summary view=sources: sessions by GA4 source / medium, optionally only those matching `search`. */
@@ -207,11 +233,46 @@ const TOOLS: Tool[] = [
 		}
 	},
 	{
-		name: 'get_search_types',
-		description: 'Google traffic split by search type (web, image, video, news, discover, googleNews) for a window vs the previous window, plus the search-appearance report (rich results and similar). The overview numbers are web only; this shows the rest.',
-		schema: { ...siteArg, ...daysArg },
+		name: 'get_last_24_hours',
+		description: 'Google clicks and impressions by hour (Search Console hourly data, preliminary): the newest 24 hours vs the 24 before, and their top pages. For "did today\'s post get picked up?"; daily data runs ~2 days behind.',
+		schema: { ...siteArg, limit: { type: 'integer' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
+			const h = hourlyReport(site.id, { pages: limit(a, 10) });
+			if (!h) return { fetched: false, note: 'Hourly data is read on every Search Console sync; it appears after the next one.' };
+			if (h.empty) return { fetched: true, fetchedAt: isoOrNull(h.fetchedAt), note: 'Google returned no hourly data for this property.' };
+			return {
+				site: displayName(site.site_url),
+				fetchedAt: isoOrNull(h.fetchedAt),
+				through: h.through,
+				timezone: 'Hours are on Google\'s clock (Pacific time), as Google sends them.',
+				last24Hours: { clicks: h.last24.clicks, impressions: h.last24.impressions, position: h.last24.position == null ? null : r2(h.last24.position), hoursWithData: h.last24.hours },
+				previous24Hours: h.prev24 ? { clicks: h.prev24.clicks, impressions: h.prev24.impressions } : null,
+				clicksChange: h.prev24?.clicks ? pctChange(h.last24.clicks, h.prev24.clicks) : null,
+				byHour: h.hours.filter((x) => x.recent).map((x) => ({ hour: x.hour || x.label, clicks: x.clicks, impressions: x.impressions })),
+				topPages: h.pages ?? 'Google did not return hourly data by page for this property.'
+			};
+		}
+	},
+	{
+		name: 'get_search_types',
+		description: 'Google traffic split by search type (web, image, video, news, discover, googleNews) for a window vs the previous window, plus the search-appearance report (rich results and similar). The overview numbers are web only; this shows the rest. view=pages: the pages behind one `type` (default discover) with their change.',
+		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['summary', 'pages'] }, type: { type: 'string', enum: [...SEARCH_TYPES] }, limit: { type: 'integer' } },
+		run: (a, sites) => {
+			const site = resolveSite(sites, a.site);
+			if (a.view === 'pages') {
+				const t = (SEARCH_TYPES as readonly string[]).includes(String(a.type)) ? (String(a.type) as SearchType) : 'discover';
+				const tp = typePagesFor(site.id, days(a));
+				const one = tp.types[t];
+				if (!tp.pulledOn) return { type: t, note: 'Pages per search type are read once a day for types with traffic; they appear after the next sync.' };
+				if (!one) return { type: t, endingOn: tp.pulledOn, pages: [], note: `No ${t} traffic stored for this window.` };
+				return {
+					type: t,
+					window: { days: days(a), endingOn: tp.pulledOn },
+					note: one.hasPrev ? 'change is against the equally long window before; null for a page with no clicks then.' : 'Google no longer keeps the whole previous window, so there are no change figures.',
+					pages: one.rows.slice(0, limit(a, 50)).map((r) => ({ page: r.page, clicks: r.clicks, previousClicks: r.prevClicks, change: r.clicksDelta == null ? null : r2(r.clicksDelta * 100) + '%', impressions: r.impressions, ctr: r2(r.ctr * 100) + '%', ...(t === 'discover' ? {} : { position: r2(r.position) }) }))
+				};
+			}
 			const p = periodFor(site, days(a));
 			const now = typeBreakdown(site.id, p.start, p.end);
 			const prev = typeBreakdown(site.id, p.prevStart, p.prevEnd);
@@ -383,11 +444,26 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_bing_performance',
-		description: 'Bing Webmaster data for a site: daily clicks/impressions plus top queries and pages (weekly buckets); view=links gives inbound links and failing pages that still have links.',
-		schema: { ...siteArg, ...daysArg, limit: { type: 'integer' }, view: { type: 'string', enum: ['performance', 'links'] } },
-		run: (a, sites) => {
+		description: 'Bing Webmaster data for a site: daily clicks/impressions plus top queries and pages (weekly buckets); view=links: inbound links and failing pages with links; crawl: crawl stats, index size, sitemaps; page_queries: searches for one `page` URL (live).',
+		schema: { ...siteArg, ...daysArg, limit: { type: 'integer' }, view: { type: 'string', enum: ['performance', 'links', 'crawl', 'page_queries'] }, page: { type: 'string' } },
+		run: async (a, sites) => {
 			const site = resolveSite(sites, a.site);
-			if (!linksFor(site.id).bing) return { connected: false, hint: 'Connect Bing Webmaster for this site on the Connect page.' };
+			const bingLink = linksFor(site.id).bing;
+			if (!bingLink) return { connected: false, hint: 'Connect Bing Webmaster for this site on the Connect page.' };
+			if (a.view === 'crawl') {
+				const p = periodFor(site, days(a));
+				const c = bingCrawlReport(site.id, p.start, p.end);
+				if (!c) return { fetched: false, hint: 'Crawl statistics are read on every Bing sync; they appear after the next one.' };
+				return { period: { start: p.start, end: p.end }, fetchedAt: isoOrNull(c.fetchedAt), ...(c.crawlError ? { crawlError: c.crawlError } : {}), ...(c.feedsError ? { sitemapsError: c.feedsError } : {}), note: 'Bing keeps about six months of crawl statistics.', totals: c.totals, daily: c.days.slice(-limit(a, 60)), sitemaps: c.feeds };
+			}
+			if (a.view === 'page_queries') {
+				const page = String(a.page ?? '').trim();
+				if (!/^https?:\/\//i.test(page)) throw new Error('`page` must be a full URL, e.g. one from topPages.');
+				if (!bingLink.integration_id) return { connected: false, hint: 'Reconnect Bing Webmaster on the Connect page.' };
+				const p = periodFor(site, days(a));
+				const r = await bingPageQueries(bingClientFor(bingLink.integration_id) as Partial<BingCrawlClient>, bingLink.external_id, page, p.start, p.end);
+				return { period: { start: p.start, end: p.end }, page: r.page, note: 'Read live from Bing (updated weekly), summed over the period.', queries: r.queries.slice(0, limit(a, 50)).map((q) => ({ ...q, ctr: r2(q.ctr * 100) + '%', position: q.position == null ? null : r2(q.position) })) };
+			}
 			if (a.view === 'links') {
 				const b = bingLinksFor(site);
 				return b?.report ? { fetchedAt: new Date(b.fetchedAt!).toISOString(), note: 'Bing\'s view only: small sites often have few links in it.', ...b.report } : { fetched: false, error: b?.error ?? null, hint: 'Read weekly after the Bing sync; open the Bing tab and press Refresh now.' };
@@ -400,13 +476,14 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_ga4_summary',
-		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events), realtime (last 30 min); `search` filters.',
-		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources', 'pages', 'events', 'realtime'] }, search: { type: 'string' } },
+		description: 'GA4 sessions, engaged sessions, users, key events by channel group (compare Organic Search to Google clicks) and organic landing pages. view: sources, pages (all channels), events (key events), value (engagement time, revenue), campaigns, site_search, realtime (last 30 min); `search` filters.',
+		schema: { ...siteArg, ...daysArg, view: { type: 'string', enum: ['sources', 'pages', 'events', 'value', 'campaigns', 'site_search', 'realtime'] }, search: { type: 'string' }, limit: { type: 'integer' } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			if (!linksFor(site.id).ga4) return { connected: false, hint: 'Link a GA4 property on the Connect page.' };
 			if (a.view === 'sources') return ga4Sources(site, days(a), a);
 			if (a.view === 'pages' || a.view === 'events') return ga4PagesOrEvents(site, days(a), a);
+			if (a.view === 'value' || a.view === 'campaigns' || a.view === 'site_search') return ga4Values(site, days(a), a);
 			if (a.view === 'realtime') return realtimeFor(site.id, { search: typeof a.search === 'string' ? a.search : undefined });
 			const p = periodFor(site, days(a));
 			const d = db();
@@ -469,7 +546,7 @@ const TOOLS: Tool[] = [
 			const total = sites.length;
 			return {
 				sites: total,
-				searchConsole: { connected: total, tools: ['get_overview', 'get_top_queries', 'get_top_pages', 'get_opportunities', 'get_search_types'] },
+				searchConsole: { connected: total, tools: ['get_overview', 'get_top_queries', 'get_top_pages', 'get_opportunities', 'get_search_types', 'get_last_24_hours'] },
 				ga4: { linkedSites: n('ga4'), tools: ['get_ga4_summary', 'get_tracking_health'] },
 				tagManager: { linkedSites: n('gtm'), tools: ['get_gtm_container', 'get_tracking_health'] },
 				bing: { linkedSites: n('bing'), tools: ['get_bing_performance'] },
@@ -681,13 +758,18 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_clarity_snapshot',
-		description: 'Latest stored Microsoft Clarity snapshot (last ~24h when it was taken; Clarity only exposes 1-3 days and 10 API calls/day/project, so SEOConsole refreshes the daily snapshot three times a day (every 8½ hours) and keeps one per day). dimension: "" (totals), URL or Device.',
-		schema: { ...siteArg, dimension: { type: 'string', enum: ['', 'URL', 'Device'] } },
+		description: 'Latest stored Microsoft Clarity snapshot (~24h; refreshed every 8½ hours within Clarity\'s 10 calls/day, one kept per day). dimension: "" (totals), URL, Device or Channel (adds byChannel). clarityUrl opens the project; recordings and heatmaps are only in Clarity.',
+		schema: { ...siteArg, dimension: { type: 'string', enum: ['', 'URL', 'Device', 'Channel'] } },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			if (!linksFor(site.id).clarity) return { connected: false, hint: 'Add a Clarity API token for this site on the Connect page.' };
-			const row = db().prepare('SELECT day, payload FROM clarity_snapshots WHERE site_id = ? AND dimension = ? ORDER BY day DESC LIMIT 1').get(site.id, String(a.dimension ?? '')) as { day: string; payload: string } | undefined;
-			return row ? { day: row.day, metrics: JSON.parse(row.payload) } : { connected: true, note: 'No snapshot stored yet.' };
+			const dim = String(a.dimension ?? '');
+			const clarityUrl = clarityDashboardUrl(clarityInstallFor(site.id).ids[0]);
+			const row = db().prepare('SELECT day, payload FROM clarity_snapshots WHERE site_id = ? AND dimension = ? ORDER BY day DESC LIMIT 1').get(site.id, dim) as { day: string; payload: string } | undefined;
+			if (!row) return { connected: true, clarityUrl, note: dim === 'Channel' ? 'The channel breakdown alternates with the device breakdown; it appears after the next Clarity refresh.' : 'No snapshot stored yet.' };
+			const metrics = JSON.parse(row.payload);
+			if (dim === 'Channel') return { day: row.day, clarityUrl, byChannel: clarityByDimension(metrics, 'Channel').map((c) => ({ channel: c.value, sessions: c.sessions, botSessions: c.botSessions, rageClicks: pctOrNull(c.rageClicks), deadClicks: pctOrNull(c.deadClicks), quickBacks: pctOrNull(c.quickBacks), scrollDepth: pctOrNull(c.scrollDepth), activeTimeSeconds: c.activeTime })), metrics };
+			return { day: row.day, clarityUrl, metrics };
 		}
 	},
 	{

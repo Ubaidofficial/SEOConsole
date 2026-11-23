@@ -8,6 +8,8 @@ import { callsLeft, type ClarityMetric } from '$lib/server/clarity';
 import { checkClarityNow, clarityInstallFor, storedClarityScan } from '$lib/server/clarityscan';
 import { hasGtmWrite, installClarityViaGtm, planClarityInstall } from '$lib/server/gtmwrite';
 import { enqueueLinkSync } from '$lib/server/jobs';
+import { clarityByDimension, clarityDashboardUrl } from '$lib/claritydims';
+import { clarityPages } from '$lib/pageinsights';
 
 /** Is Clarity's script on the pages, and can SEOConsole add it through Tag Manager? Shown whether or not a token is connected. */
 function installState(siteId: number) {
@@ -40,13 +42,31 @@ export const load: PageServerLoad = ({ params }) => {
 			return { day: r.day, sessions: sum('totalSessionCount'), botSessions: sum('totalBotSessionCount'), users: sum('distinctUserCount') || sum('distantUserCount') };
 		})
 		.reverse();
+	const totals = snap('');
+	const byUrl = snap('URL');
+	const byChannel = snap('Channel');
+	// The pages where the most sessions hit rage or dead clicks: the ones worth watching in Clarity's recordings.
+	const frustrated = byUrl
+		? clarityPages(byUrl.metrics)
+				.filter((p) => (p.sessions ?? 0) > 0 && ((p.rageClicks ?? 0) > 0 || (p.deadClicks ?? 0) > 0))
+				.map((p) => ({ url: p.url, sessions: p.sessions ?? 0, rageClicks: p.rageClicks ?? 0, deadClicks: p.deadClicks ?? 0, frustration: ((p.rageClicks ?? 0) + (p.deadClicks ?? 0)) / (p.sessions || 1) }))
+				.sort((a, b) => b.frustration - a.frustration)
+				.slice(0, 10)
+		: [];
 	return {
 		linked: true as const,
 		...install,
+		clarityUrl: clarityDashboardUrl(install.install.ids[0]),
+		channels: byChannel ? { day: byChannel.day, rows: clarityByDimension(byChannel.metrics, 'Channel') } : null,
+		devices: (() => {
+			const dev = snap('Device');
+			return dev ? { day: dev.day, rows: clarityByDimension(dev.metrics, 'Device') } : null;
+		})(),
+		frustrated,
 		status: { state: link.sync_status, message: link.sync_message, lastSync: link.last_sync_at },
 		callsLeft: callsLeft(link.integration_id!),
-		totals: snap(''),
-		byUrl: snap('URL'),
+		totals,
+		byUrl,
 		byDevice: snap('Device'),
 		history
 	};

@@ -5,7 +5,7 @@
 	import { toast } from 'svelte-sonner';
 	import { ChevronDown, RefreshCw, Sparkles } from '@lucide/svelte';
 	import PeriodPicker from '$lib/components/PeriodPicker.svelte';
-	import { SITE_PRIMARY_TABS, SITE_TABS, SITE_TAB_GROUPS } from '$lib/explain';
+	import { SITE_PRIMARY_TABS, SITE_SOURCE_TABS, SITE_TABS, SITE_TAB_GROUPS, SOURCE_LINK } from '$lib/explain';
 	const tabOf = (t: string) => SITE_TABS.find(([p]) => p === t)!;
 	import Delta from '$lib/components/Delta.svelte';
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
@@ -31,7 +31,11 @@
 	const base = $derived(`/sites/${data.site.id}`);
 	const isActive = (t: string) => (t === '' ? page.url.pathname === base : page.url.pathname.startsWith(base + t));
 	/** A tab from under More that is open right now is shown in the row too, so you can always see where you are. */
-	const activeExtra = $derived(SITE_TABS.map(([t]) => t as string).find((t) => t !== '' && isActive(t) && !(SITE_PRIMARY_TABS as readonly string[]).includes(t)) ?? null);
+	const sourceTabs = SITE_SOURCE_TABS as readonly string[];
+	const inRow = [...(SITE_PRIMARY_TABS as readonly string[]), ...sourceTabs];
+	const activeExtra = $derived(SITE_TABS.map(([t]) => t as string).find((t) => t !== '' && isActive(t) && !inRow.includes(t)) ?? null);
+	/** A source tab whose source is not connected for this site: a hollow dot, and the tab opens on its Connect prompt. */
+	const unlinked = (t: string) => !!SOURCE_LINK[t] && !data.linked[SOURCE_LINK[t]];
 	/**
 	 * Sync is a plain endpoint (POST, then a redirect back), not a form action, so `use:enhance` cannot read its answer (it expects a form
 	 * action's JSON and got the HTML page: "Unexpected token '<'"). Post it directly and reload the data; the layout then shows the sync
@@ -105,7 +109,7 @@
 
 <!-- A short row of the tabs people use most; the rest are one click away under More, grouped, each with a line on what it is for. -->
 {#snippet tabLogo(t: string)}{#if SRC_LOGO[t]}<img src="/logos/{SRC_LOGO[t]}" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />{/if}{/snippet}
-{#snippet tabBadges(t: string)}{#if t === '/actions' && data.actionBadge.open}<span class="ml-1.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.actionBadge.blocking ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.actionBadge.open} open{data.actionBadge.blocking ? ', ' + data.actionBadge.blocking + ' blocking' : ''}">{data.actionBadge.open}</span>{/if}{#if (t === '/bing' && data.linked.bing) || (t === '/analytics' && data.linked.ga4) || (t === '/tags' && data.linked.gtm) || (t === '/clarity' && data.linked.clarity)}<span class="ml-1 text-good" title="connected">●</span>{/if}{/snippet}
+{#snippet tabBadges(t: string)}{#if t === '/actions' && data.actionBadge.open}<span class="ml-1.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.actionBadge.blocking ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.actionBadge.open} open{data.actionBadge.blocking ? ', ' + data.actionBadge.blocking + ' blocking' : ''}">{data.actionBadge.open}</span>{/if}{#if SOURCE_LINK[t]}{#if unlinked(t)}<span class="ml-1 text-muted-foreground" title="Not connected: open the tab to connect it">○</span>{:else}<span class="ml-1 text-good" title="connected">●</span>{/if}{/if}{/snippet}
 {#snippet tab(t: string)}
 	{@const [, label, about] = tabOf(t)}
 	<a href="{base}{t}?days={data.days}" title={about} aria-current={isActive(t) ? 'page' : undefined} class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors duration-150 {isActive(t) ? 'border-[color:var(--link)] font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}">{@render tabLogo(t)}{label}{@render tabBadges(t)}</a>
@@ -114,13 +118,15 @@
 	<!-- one line on every screen: the tabs scroll sideways on a phone, and More stays put outside the scrolling part -->
 	<div class="-mb-px flex min-w-0 flex-1 items-end overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 		{#each SITE_PRIMARY_TABS as t}{@render tab(t)}{/each}
+		<span class="mx-1 mb-2.5 h-4 w-px shrink-0 self-end bg-[color:var(--border)]" aria-hidden="true"></span>
+		{#each sourceTabs as t}{@render tab(t)}{/each}
 		{#if activeExtra}{@render tab(activeExtra)}{/if}
 	</div>
 	<details class="group shrink-0" bind:open={moreOpen}>
 		<summary class="-mb-px flex cursor-pointer list-none items-center gap-1 border-b-2 border-transparent bg-background px-3 py-2 text-[13px] text-muted-foreground select-none hover:text-foreground [&::-webkit-details-marker]:hidden">More<ChevronDown class="size-3.5 transition-transform group-open:rotate-180" /></summary>
 		<div class="absolute top-full right-0 left-0 z-30 mt-2 grid gap-x-6 gap-y-4 rounded-xl border bg-card p-4 shadow-lg sm:grid-cols-2 lg:grid-cols-4">
 			{#each SITE_TAB_GROUPS as [caption, paths]}
-				{@const rest = paths.filter((t) => !(SITE_PRIMARY_TABS as readonly string[]).includes(t))}
+				{@const rest = paths.filter((t) => !inRow.includes(t))}
 				{#if rest.length}
 					<div role="group" aria-label={caption}>
 						<div class="mb-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{caption}</div>

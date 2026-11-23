@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { firstStep, planFrom, PLAN_SIZES } from '../src/lib/plan';
-import { SITE_PRIMARY_TABS, SITE_TAB_GROUPS, SITE_TABS } from '../src/lib/explain';
+import { SITE_PRIMARY_TABS, SITE_SOURCE_TABS, SITE_TAB_GROUPS, SITE_TABS, SOURCE_LINK } from '../src/lib/explain';
 import type { ActionItem } from '../src/lib/actions';
 
 let n = 0;
@@ -46,8 +46,13 @@ describe('the site tab bar', () => {
 		for (const t of SITE_PRIMARY_TABS) expect(all, t).toContain(t);
 		const grouped = SITE_TAB_GROUPS.flatMap(([, paths]) => [...paths] as string[]);
 		for (const t of all) expect(grouped, t).toContain(t); // the More menu is built from the groups
-		// the findings people act on, every source on one screen, and GA4; Opportunities and Tests are reached through Quick wins / Actions and More
-		for (const t of ['/quickwins', '/actions', '/dashboard', '/analytics', '/queries', '/pages']) expect(SITE_PRIMARY_TABS, t).toContain(t);
+		// the findings people act on and the two tables; Opportunities and Tests are reached through Quick wins / Actions and More
+		for (const t of ['/quickwins', '/actions', '/queries', '/pages']) expect(SITE_PRIMARY_TABS, t).toContain(t);
+	});
+	it('every source is on the row, after the work tabs, and each one but All sources says whether it is connected', () => {
+		expect(SITE_SOURCE_TABS).toEqual(['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai']);
+		for (const t of SITE_SOURCE_TABS.slice(1)) expect(SOURCE_LINK[t], t).toBeTruthy();
+		for (const t of SITE_SOURCE_TABS) expect(SITE_PRIMARY_TABS as readonly string[], t).not.toContain(t);
 	});
 });
 

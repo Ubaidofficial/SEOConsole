@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { getSite } from '$lib/server/clients';
-import { appearanceFor, periodFor, typeBreakdown, typeSeries } from '$lib/server/queries';
+import { appearanceFor, periodFor, typeBreakdown, typePagesFor, typeSeries } from '$lib/server/queries';
+import { PERIODS } from '$lib/periods';
 import { ctrOf, pctChangeMin } from '$lib/analytics';
 import { ALL_TYPES } from '$lib/searchTypes';
 
@@ -28,5 +29,5 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		};
 	});
 	const appearance = appearanceFor(site.id, days);
-	return { types, appearance, typesPulled: !!site.types_synced_at };
+	return { types, appearance, typesPulled: !!site.types_synced_at, typePages: typePagesFor(site.id, days), pageWindows: (PERIODS as readonly number[]).includes(days) };
 };

@@ -116,7 +116,7 @@ export const SITE_TABS = [
 	['/analytics', 'GA4', 'Google Analytics 4 organic sessions beside Search Console clicks, once GA4 is linked.'],
 	['/tags', 'Tag Manager', 'What is in your Google Tag Manager container, checked against GA4 and Search Console, once it is linked.'],
 	['/ai', 'AI answers', 'What ChatGPT, Gemini, Claude and Perplexity answer to the questions you track: whether they mention your brand, cite your pages, and which sites they cite instead. Needs their API keys or DataForSEO.'],
-	['/clarity', 'Clarity', 'Microsoft Clarity snapshot, once linked. Clarity only exposes the last 1 to 3 days and 10 API calls a day, so the daily snapshot is refreshed three times a day (every 8½ hours) (9 calls) and kept.'],
+	['/clarity', 'Clarity', 'Microsoft Clarity snapshot, once linked. Clarity only exposes the last 1 to 3 days and 10 API calls a day, so the daily snapshot is refreshed every 8½ hours (9 calls a day), alternating the device and channel breakdowns, and kept.'],
 	['/settings', 'Settings', 'Site preferences such as label, tags and brand terms, and what data is stored.']
 ] as const;
 
@@ -125,20 +125,24 @@ export const SYNC_MODE_LABEL: Record<string, string> = { auto: 'Sync + backfill'
 export const syncModeLabel = (mode: string) => SYNC_MODE_LABEL[mode] ?? mode;
 export const SYNC_RUNS_EXPLAIN = 'Every run re-pulls the newest few days, because Google revises recent figures. Until your history is complete (up to the 16 months Google keeps), a run also pulls one more chunk of 45 days further back, so a new site shows a string of "Sync + backfill" rows within the first minutes. Days is how many days were pulled in that run.';
 
-/** How the site tabs are grouped in the tab bar: a caption and the tab paths under it. Every tab appears in exactly one group (a test checks it). */
 /**
- * The tabs always on show, in this order: the plan, every source on one screen, the findings people act on, the two tables they look
- * things up in, GA4 (users, conversions, referrers) and indexing. Everything else sits under "More" (grouped as below), so a site opens on
- * a short row instead of 27 tabs. Opportunities and Tests sit under More: Quick wins and Actions already carry their best findings and
- * finished tests, and a tab opened from More still shows in the row while it is open.
+ * The tab row has two parts. First the work tabs: the plan, the findings people act on, the two tables they look things up in, and
+ * indexing. Then every source, each with its logo: "All sources" (all of them on one screen), GA4, Bing, Tag Manager, Clarity and AI
+ * answers. A connected source shows a green dot; one that is not shows a hollow dot and opens on its Connect prompt. Everything else sits
+ * under "More" (grouped as below). A tab opened from More still shows in the row while it is open.
  */
-export const SITE_PRIMARY_TABS = ['', '/dashboard', '/actions', '/quickwins', '/queries', '/pages', '/analytics', '/indexing'] as const;
+export const SITE_PRIMARY_TABS = ['', '/actions', '/quickwins', '/queries', '/pages', '/indexing'] as const;
+/** Source tabs in row order, all always shown. */
+export const SITE_SOURCE_TABS = ['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai'] as const;
+/** What makes a source tab "connected" (All sources has no link of its own). AI answers is connected once an AI provider key is set up. */
+export const SOURCE_LINK: Record<string, 'ga4' | 'bing' | 'gtm' | 'clarity' | 'ai'> = { '/analytics': 'ga4', '/bing': 'bing', '/tags': 'gtm', '/clarity': 'clarity', '/ai': 'ai' };
 
+/** How the site tabs are grouped under More: a caption and the tab paths under it. Every tab appears in exactly one group (a test checks it). */
 export const SITE_TAB_GROUPS = [
-	['Traffic', ['', '/dashboard', '/queries', '/pages', '/trends', '/groups', '/segments', '/types']],
+	['Traffic', ['', '/queries', '/pages', '/trends', '/groups', '/segments', '/types']],
 	['Findings', ['/quickwins', '/actions', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests']],
 	['Indexing', ['/submit', '/request', '/indexing', '/indexnow', '/sitemaps', '/inspect']],
-	['Other sources', ['/bing', '/analytics', '/tags', '/clarity', '/ai']],
+	['Sources', ['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai']],
 	['Site', ['/settings']]
 ] as const;
 

@@ -14,6 +14,8 @@ export interface Finding {
 }
 
 export interface TrackingTag {
+	/** Tag Manager's own ID for the tag; absent in callers that do not need it. */
+	id?: string;
 	name: string;
 	type: string;
 	paused: boolean;
@@ -39,38 +41,37 @@ export interface TrackingInput {
 	clarity?: ClarityInstallInput | null;
 }
 
-// dest_ga is the "Google Analytics destination" tag Tag Manager's Google tag consolidation puts in place of a Google tag (see GA4_TAG_TYPES in server/gtm.ts).
 const GA4_TYPES = new Set(['googtag', 'gaawc', 'gaawe', 'dest_ga']);
-/**
- * Tag types that load the Google tag for their ID on the page (a Google tag, a GA4 configuration tag, a Google Analytics destination tag).
- * GA4 event tags (gaawe) are left out: they send events to an ID rather than set it up.
- */
+/** Tags that load GA4 for a measurement ID and send its page_view: a Google tag, a GA4 Configuration tag, a Google Analytics destination. (GA4 Event tags only send their event.) */
 export const GOOGLE_TAG_TYPES = new Set(['googtag', 'gaawc', 'dest_ga']);
-const GOOGLE_TAG_LABEL: Record<string, string> = { googtag: 'Google tag', gaawc: 'GA4 configuration', dest_ga: 'Google Analytics destination' };
 
-/**
- * Tag Manager's built-in triggers are not in a container version's trigger list, so a tag that fires on one names only its ID. The IDs are
- * from third-party code that drives the Tag Manager API (Google does not document them); 2147479553 matches ALL_PAGES_TRIGGER, which installs use.
- */
-export const BUILTIN_TRIGGERS: Record<string, string> = { '2147479553': 'All Pages', '2147479573': 'Initialization - All Pages', '2147479572': 'Consent Initialization - All Pages' };
-/** A firing-trigger name as stored, with "trigger 2147479553" (an older snapshot, or a built-in) turned into its name. */
-export const triggerLabel = (name: string) => BUILTIN_TRIGGERS[/^trigger (\d+)$/.exec(name)?.[1] ?? ''] ?? name;
-
-/** Unpaused tags in a live container that each load the Google tag, grouped by the measurement ID they target; only IDs with two or more. */
-export function duplicateGoogleTags<T extends Pick<TrackingTag, 'type' | 'paused' | 'measurementId'>>(tags: T[]): { measurementId: string; tags: T[] }[] {
-	const by = new Map<string, T[]>();
-	for (const t of tags) {
-		if (t.paused || !GOOGLE_TAG_TYPES.has(t.type) || !t.measurementId) continue;
-		const id = t.measurementId.toUpperCase();
-		by.set(id, [...(by.get(id) ?? []), t]);
-	}
-	return [...by].filter(([, ts]) => ts.length > 1).map(([measurementId, ts]) => ({ measurementId, tags: ts }));
+export interface DuplicateGroup {
+	measurementId: string;
+	keep: TrackingTag;
+	pause: TrackingTag[];
 }
 
-/** “Name” (Google Analytics destination, fires on All Pages): how findings and the install refusal name a Google tag. */
-export function describeGoogleTag(t: Pick<TrackingTag, 'name' | 'type' | 'firing'>): string {
-	const fires = t.firing.length ? `fires on ${t.firing.map(triggerLabel).join(' and ')}` : 'no firing trigger';
-	return `“${t.name}” (${GOOGLE_TAG_LABEL[t.type] ?? t.type}, ${fires})`;
+/** Earliest first: a Google tag belongs on the Initialization trigger. Old snapshots name built-in triggers by ID only. */
+const INIT = /^(consent )?initialization - all pages$|^trigger 214747957[23]$/i;
+const rankOf = (t: TrackingTag) => [t.firing.some((f) => INIT.test(f)) ? 0 : 1, /added by seoconsole/i.test(t.name) ? 1 : 0, Number(t.id) || Number.MAX_SAFE_INTEGER] as const;
+
+/**
+ * Two or more unpaused tags that each load GA4 for the same measurement ID: the tag can load twice and page views can be counted twice.
+ * Keeps one per ID (the one on an Initialization trigger, else one SEOConsole did not add, else the oldest) and lists the rest to pause.
+ */
+export function duplicateGoogleTags(tags: TrackingTag[]): DuplicateGroup[] {
+	const by = new Map<string, TrackingTag[]>();
+	for (const t of tags) if (GOOGLE_TAG_TYPES.has(t.type) && !t.paused && t.measurementId && t.firing.length) by.set(t.measurementId, [...(by.get(t.measurementId) ?? []), t]);
+	const out: DuplicateGroup[] = [];
+	for (const [measurementId, group] of by) {
+		if (group.length < 2) continue;
+		const sorted = [...group].sort((a, b) => {
+			const x = rankOf(a), y = rankOf(b);
+			return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+		});
+		out.push({ measurementId, keep: sorted[0], pause: sorted.slice(1) });
+	}
+	return out;
 }
 const list = (xs: string[], n = 5) => xs.slice(0, n).join(', ') + (xs.length > n ? ` and ${xs.length - n} more` : '');
 
@@ -112,19 +113,24 @@ export function auditTracking(input: TrackingInput): Finding[] {
 			out.push({ id: 'ga4-id-hidden', severity: 'info', title: 'GA4 tag IDs could not be read', detail: 'The container has GA4 tags, but their measurement IDs are not literal values or constant variables, so the match could not be checked.' });
 		}
 
-		for (const d of duplicateGoogleTags(gtm.tags)) {
-			const named = d.tags.map(describeGoogleTag);
+		for (const g of duplicateGoogleTags(gtm.tags)) {
+			const fires = (t: TrackingTag) => `“${t.name}” (on ${t.firing.join(', ')})`;
 			out.push({
-				id: 'gtm-duplicate-google-tag', severity: 'warning', title: `${d.tags.length} Google tags load ${d.measurementId}`,
-				detail: `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]} are ${d.tags.length === 2 ? 'both' : 'all'} unpaused in the live container and target ${d.measurementId}. Two Google tags for one ID can load it twice and may count each page_view twice. In Tag Manager, pause or delete all but one, then Submit and Publish.`
+				id: 'gtm-duplicate-google-tag', severity: 'warning', title: `${g.pause.length + 1} tags load GA4 for ${g.measurementId}`,
+				detail: `${list([g.keep, ...g.pause].map(fires))} all send to ${g.measurementId}, so the tag can load twice and page views may be counted twice. Keep ${fires(g.keep)} and pause the other${g.pause.length > 1 ? 's' : ''}, then publish.`
 			});
 		}
 
 		const ua = gtm.tags.filter((t) => t.type === 'ua');
 		if (ua.length) out.push({ id: 'gtm-ua', severity: 'warning', title: 'Universal Analytics tags are still in the container', detail: `${list(ua.map((t) => t.name))}. Universal Analytics no longer processes data; these tags do nothing useful.` });
 
-		const paused = gtm.tags.filter((t) => t.paused);
+		// A paused Google tag whose ID an active Google tag still loads is a duplicate put to rest (the duplicate fix does exactly this): a note, not a warning.
+		const loaded = new Set(gtm.tags.filter((t) => GOOGLE_TAG_TYPES.has(t.type) && !t.paused && t.firing.length && t.measurementId).map((t) => t.measurementId));
+		const restingDup = (t: TrackingTag) => t.paused && GOOGLE_TAG_TYPES.has(t.type) && !!t.measurementId && loaded.has(t.measurementId);
+		const paused = gtm.tags.filter((t) => t.paused && !restingDup(t));
 		if (paused.length) out.push({ id: 'gtm-paused', severity: 'warning', title: `${paused.length} paused tag${paused.length > 1 ? 's' : ''}`, detail: `${list(paused.map((t) => t.name))}. Paused tags are published but never fire.` });
+		const resting = gtm.tags.filter(restingDup);
+		if (resting.length) out.push({ id: 'gtm-paused-duplicate', severity: 'info', title: `${resting.length} duplicate Google tag${resting.length > 1 ? 's' : ''} paused`, detail: `${list(resting.map((t) => t.name))}: another active tag already loads ${list([...new Set(resting.map((t) => t.measurementId!))])}. Delete it in Tag Manager whenever you like, or leave it paused.` });
 
 		const idle = gtm.tags.filter((t) => !t.paused && !t.firing.length);
 		if (idle.length) out.push({ id: 'gtm-no-trigger', severity: 'info', title: `${idle.length} tag${idle.length > 1 ? 's' : ''} with no firing trigger`, detail: `${list(idle.map((t) => t.name))}. They never fire on their own; that is fine only if they run through tag sequencing.` });

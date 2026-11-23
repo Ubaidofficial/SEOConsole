@@ -1,9 +1,10 @@
 import { db } from './db';
 import { config } from './config';
-import { RealBingClient, type BingClient, type BingLinksClient } from './bing';
+import { RealBingClient, type BingClient, type BingCrawlClient, type BingLinksClient } from './bing';
+import { syncBingExtras } from './bingcrawl';
 import { bingLinksDue, syncBingLinks } from './binglinks';
-import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGa4KeyEvents, demoGa4LandingAll, demoGa4PageViews, demoGa4PageTitles, demoGa4UsersTotal, demoGtmContainers, demoGtmLive } from './demo-channels';
-import { callsLeft, CLARITY_FRESH_MS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
+import { DemoBing, DEMO_GA4_PROPERTIES, demoClarityFetch, demoGa4Daily, demoGa4Landing, demoGa4UsersByChannel, demoGa4MeasurementId, demoGa4AiTraffic, demoGa4AiDaily, demoGa4OrganicDaily, demoGa4Sources, demoGa4DimDaily, demoGa4KeyEvents, demoGa4LandingAll, demoGa4PageViews, demoGa4PageTitles, demoGa4UsersTotal, demoGa4Values, demoGa4SearchTerms, demoGtmContainers, demoGtmLive } from './demo-channels';
+import { callsLeft, CLARITY_FRESH_MS, CLARITY_ROTATING_DIMENSIONS, CLARITY_SYNC_DIMENSIONS, fetchInsights, utcDay } from './clarity';
 import * as ga4 from './ga4';
 import * as gtm from './gtm';
 import { addDays, pacificToday, retentionHorizon } from './dates';
@@ -11,6 +12,7 @@ import { getIntegration, integrationSecret, linksFor, markLink } from './links';
 import { getSite } from './clients';
 import { logGtmVersion } from './autolog';
 import { PERIODS } from '../periods';
+import { pullGa4Values } from './ga4values';
 
 // ── factories (real vs demo) ─────────────────────────────────────────────────
 export function bingClientFor(integrationId: number): BingClient {
@@ -49,6 +51,10 @@ export interface Ga4Source {
 	pageTitles?(property: string, start: string, end: string): Promise<{ page: string; title: string }[]>;
 	/** Unique active and new users over one whole window. Optional so a test double can leave it out. */
 	usersTotal?(property: string, start: string, end: string): Promise<{ activeUsers: number; newUsers: number }>;
+	/** Engagement time, revenue and transactions over a whole window by channel, landing page or campaign. Optional so a test double can leave it out. */
+	values?(property: string, kind: ga4.Ga4ValueKind, start: string, end: string): Promise<{ rows: ga4.Ga4ValueRow[]; currency: string | null; truncated: boolean }>;
+	/** What visitors typed into the site's own search over a whole window. Optional so a test double can leave it out. */
+	searchTerms?(property: string, start: string, end: string): Promise<ga4.Ga4SearchTerm[]>;
 }
 
 export function ga4SourceFor(accountId: number): Ga4Source {
@@ -72,7 +78,9 @@ export function ga4SourceFor(accountId: number): Ga4Source {
 			landingAll: (property, s, e) => demoGa4LandingAll(property, s, e),
 			pageViews: (property, s, e) => demoGa4PageViews(property, s, e),
 			pageTitles: (property, s, e) => demoGa4PageTitles(property, s, e),
-			usersTotal: async (property, s, e) => demoGa4UsersTotal(property, s, e)
+			usersTotal: async (property, s, e) => demoGa4UsersTotal(property, s, e),
+			values: async (property, kind, s, e) => demoGa4Values(property, kind, s, e),
+			searchTerms: async (property, s, e) => demoGa4SearchTerms(property, s, e)
 		};
 	}
 	return {
@@ -91,7 +99,9 @@ export function ga4SourceFor(accountId: number): Ga4Source {
 		landingAll: (p, s, e) => ga4.landingAllChannels(accountId, p, s, e),
 		pageViews: (p, s, e) => ga4.pageViewsDaily(accountId, p, s, e),
 		pageTitles: (p, s, e) => ga4.pageTitles(accountId, p, s, e),
-		usersTotal: (p, s, e) => ga4.usersTotal(accountId, p, s, e)
+		usersTotal: (p, s, e) => ga4.usersTotal(accountId, p, s, e),
+		values: (p, kind, s, e) => ga4.valueReport(accountId, p, kind, s, e),
+		searchTerms: (p, s, e) => ga4.siteSearchTerms(accountId, p, s, e)
 	};
 }
 
@@ -122,6 +132,8 @@ export async function syncBing(siteId: number, client?: BingClient) {
 		markLink(siteId, 'bing', 'idle', null, true);
 		// Inbound links and crawl issues: weekly, extra data, so a failure is recorded inside syncBingLinks and never fails this sync.
 		if (bingLinksDue(siteId)) await syncBingLinks(siteId, c as Partial<BingLinksClient>);
+		// Crawl statistics and sitemaps: daily data, also extra, also never fails this sync.
+		await syncBingExtras(siteId, link.external_id, c as Partial<BingCrawlClient>);
 		return { days: daily.length, queries: queries.length, pages: pages.length };
 	} catch (e) {
 		markLink(siteId, 'bing', 'error', e instanceof Error ? e.message : String(e));
@@ -355,6 +367,7 @@ export async function syncGa4(siteId: number, source?: Ga4Source, today = pacifi
 		await pullGa4Sources(siteId, link.external_id, src, today);
 		await pullGa4Dims(siteId, link.external_id, src, today);
 		await pullGa4PageViews(siteId, link.external_id, src, today);
+		await pullGa4Values(siteId, link.external_id, src, today);
 		markLink(siteId, 'ga4', 'idle', periods.ok ? null : 'Daily data synced; user and landing-page reports could not be fetched (will retry).', true);
 		return { rows: rows.length };
 	} catch (e) {
@@ -417,8 +430,14 @@ export async function syncClarity(siteId: number, o: { force?: boolean; fetchImp
 	try {
 		const day = utcDay();
 		let calls = 0;
-		for (const dim of CLARITY_SYNC_DIMENSIONS) {
-			const have = db().prepare('SELECT fetched_at FROM clarity_snapshots WHERE site_id = ? AND day = ? AND dimension = ?').get(siteId, day, dim) as { fetched_at: number } | undefined;
+		// The rotating breakdown read longest ago (never read counts as oldest; Device first on a tie, as before rotation existed).
+		const lastRead = (dim: string) => (db().prepare('SELECT MAX(fetched_at) t FROM clarity_snapshots WHERE site_id = ? AND dimension = ?').get(siteId, dim) as { t: number | null }).t ?? 0;
+		const rotating = [...CLARITY_ROTATING_DIMENSIONS].sort((a, b) => lastRead(a) - lastRead(b))[0];
+		const dims = [...CLARITY_SYNC_DIMENSIONS.filter((x) => !(CLARITY_ROTATING_DIMENSIONS as readonly string[]).includes(x)), rotating];
+		for (const dim of dims) {
+			// The rotating slot is one call: it is fresh when either of its breakdowns was read today within the window.
+			const slot = dim === rotating ? [...CLARITY_ROTATING_DIMENSIONS] : [dim];
+			const have = db().prepare(`SELECT MAX(fetched_at) fetched_at FROM clarity_snapshots WHERE site_id = ? AND day = ? AND dimension IN (${slot.map(() => '?').join(',')}) HAVING fetched_at IS NOT NULL`).get(siteId, day, ...slot) as { fetched_at: number } | undefined;
 			// fresh enough: skip (the scheduler comes back every 8.5 hours); "refresh now" forces it
 			if (have && !o.force && Date.now() - have.fetched_at < CLARITY_FRESH_MS) continue;
 			if (callsLeft(integ.id) <= 1) break; // always leave one call for the user

@@ -7,6 +7,7 @@ import { db } from '$lib/server/db';
 import { ctrOf, pctChangeMin, positionShift } from '$lib/analytics';
 import { config } from '$lib/server/config';
 import { linksFor } from '$lib/server/links';
+import { enabledEngines } from '$lib/server/aiengines';
 import { openSeoProjectUrl } from '$lib/server/connect';
 import { queueFor } from '$lib/server/actions';
 import { authorityOf } from '$lib/server/authority';
@@ -38,7 +39,7 @@ export const load: LayoutServerLoad = ({ params, url }) => {
 	}
 	return {
 		actionBadge,
-		linked: { bing: !!links.bing, ga4: !!links.ga4, gtm: !!links.gtm, clarity: !!links.clarity },
+		linked: { bing: !!links.bing, ga4: !!links.ga4, gtm: !!links.gtm, clarity: !!links.clarity, ai: enabledEngines().length > 0 },
 		openseo: links.openseo ? { name: links.openseo.label, url: openSeoProjectUrl(links.openseo.integration_id, links.openseo.external_id) } : null,
 		site: {
 			id: site.id,

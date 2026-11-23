@@ -2,6 +2,7 @@
 	import Explainer from '$lib/components/Explainer.svelte';
 	import AreaSpark from '$lib/components/AreaSpark.svelte';
 	import Delta from '$lib/components/Delta.svelte';
+	import DataTable from '$lib/components/DataTable.svelte';
 	import { trendOf } from '$lib/trend';
 	import { fmtInt, fmtPct, fmtPos } from '$lib/format';
 	import { TYPE_HINT, TYPE_LABEL, appearanceLabel } from '$lib/searchTypes';
@@ -9,6 +10,7 @@
 	let { data } = $props();
 	const active = $derived(data.types.filter((t) => t.has));
 	const empty = $derived(data.types.filter((t) => !t.has));
+	const pageTypes = $derived(active.filter((t) => t.type !== 'web' && data.typePages.types[t.type]?.rows.length));
 </script>
 
 <Explainer lead="Google reports each kind of search separately; the numbers are not added up.">
@@ -49,6 +51,34 @@
 			No traffic in this period from: {empty.map((t) => TYPE_LABEL[t.type]).join(', ')}.
 			If you expect Discover, News or Image traffic and it is missing here, check that this property receives it in Search Console itself.
 		</p>
+	{/if}
+
+	{#if active.some((t) => t.type !== 'web')}
+		<h2 class="mt-8 mb-1 text-base font-semibold">Pages by search type</h2>
+		{#if !data.pageWindows}
+			<p class="text-sm text-muted-foreground">Pages per search type are kept for the 7d, 28d, 3m, 6m and 16m periods. Pick one of those to see them.</p>
+		{:else if !pageTypes.length}
+			<p class="text-sm text-muted-foreground">Which pages earn this traffic is read once a day; it appears after the next sync.</p>
+		{:else}
+			<p class="mb-3 text-sm text-muted-foreground">The articles behind each type, for the {data.days} days ending {data.typePages.pulledOn}. A Discover rise or drop is usually a few pages: sort by Δ to find them.</p>
+			{#each pageTypes as t (t.type)}
+				{@const tp = data.typePages.types[t.type]!}
+				<h3 class="mt-4 mb-1 text-sm font-medium">{TYPE_LABEL[t.type]}</h3>
+				<DataTable
+					rows={tp.rows}
+					cols={[
+						{ key: 'page', label: 'Page', type: 'link', href: (r) => r.page },
+						{ key: 'clicks', label: 'Clicks', type: 'int', bar: true },
+						...(tp.hasPrev ? [{ key: 'clicksDelta', label: 'Δ clicks', title: 'Against the same number of days just before. Empty for a page with no clicks then.', type: 'delta' as const }, { key: 'prevClicks', label: 'Before', type: 'int' as const }] : []),
+						{ key: 'impressions', label: 'Impressions', type: 'int' },
+						{ key: 'ctr', label: 'CTR', type: 'pct' },
+						...(t.type === 'discover' ? [] : [{ key: 'position', label: 'Position', type: 'pos' as const }])
+					]}
+					sortKey="clicks"
+					pageSize={10}
+				/>
+			{/each}
+		{/if}
 	{/if}
 
 	<h2 class="mt-8 mb-1 text-base font-semibold">Search appearance</h2>
