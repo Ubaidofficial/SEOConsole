@@ -56,6 +56,8 @@ export interface BingCrawlClient {
 	feeds(siteUrl: string): Promise<BingFeed[]>;
 	/** The searches that showed one page (GetPageQueryStats, weekly rows). */
 	pageQueryStats(siteUrl: string, page: string): Promise<BingTermRow[]>;
+	/** Submit a sitemap or feed (SubmitFeed). Throws BingApiError when Bing refuses. */
+	submitFeed(siteUrl: string, feedUrl: string): Promise<void>;
 }
 
 export interface BingClient {
@@ -268,6 +270,10 @@ export class RealBingClient implements BingClient, BingLinksClient, BingCrawlCli
 	}
 	async pageQueryStats(siteUrl: string, page: string) {
 		return this.terms((await this.call('GetPageQueryStats', { siteUrl, page })) ?? []);
+	}
+	// SubmitFeed follows Microsoft's reference (Microsoft Learn: POST with siteUrl and feedUrl in the JSON body, like SubmitUrlBatch).
+	async submitFeed(siteUrl: string, feedUrl: string) {
+		await this.call('SubmitFeed', {}, { siteUrl, feedUrl });
 	}
 	async crawlIssues(siteUrl: string) {
 		return parseCrawlIssues(await this.call('GetCrawlIssues', { siteUrl }));

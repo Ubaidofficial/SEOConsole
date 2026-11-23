@@ -103,6 +103,13 @@
 			{@const c = data.crawl}
 			<h2 class="sr-only">Sitemaps Bing knows</h2>
 			{#if c.feedsError}<p class="mb-2 text-xs text-warn">Bing's sitemap list could not be read on the last sync: {c.feedsError}</p>{/if}
+			{#if c.sentBySeoConsole}
+				{@const m = c.sentBySeoConsole}
+				<p class="mb-2 text-xs {m.failed.length ? 'text-warn' : 'text-muted-foreground'}">
+					{#if m.submitted.length}Sent to Bing by SEOConsole on {m.day}: {m.submitted.map(path).join(', ')}.{/if}
+					{#if m.failed.length}Bing refused {m.failed.map((f) => path(f.path)).join(', ')} on {m.day}: {m.failed[0].error} It is tried again tomorrow.{/if}
+				</p>
+			{/if}
 			{#if c.feeds.length}
 				<div class="card overflow-x-auto"><table class="w-full text-sm">
 					<thead><tr class="text-left text-xs text-muted-foreground"><th class="p-2">Sitemap</th><th class="p-2">Status</th><th class="p-2 text-right">URLs</th><th class="p-2">Last read by Bing</th><th class="p-2">Submitted</th></tr></thead>
@@ -111,7 +118,7 @@
 					{/each}</tbody>
 				</table></div>
 			{:else if !c.feedsError}
-				<p class="card p-3 text-sm text-muted-foreground">Bing lists no sitemaps for this site. Submit one in Bing Webmaster Tools under Sitemaps.</p>
+				<p class="card p-3 text-sm text-muted-foreground">Bing lists no sitemaps for this site yet. SEOConsole sends it the sitemaps Search Console has on each Bing sync.</p>
 			{/if}
 		{:else}
 			<p class="card p-4 text-sm text-muted-foreground">Read on the next Bing sync.</p>

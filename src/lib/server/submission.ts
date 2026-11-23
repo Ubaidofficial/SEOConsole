@@ -2,7 +2,8 @@ import { audit, db } from './db';
 import { config } from './config';
 import { clientForSite, type SiteRow } from './clients';
 import { bingClientFor } from './channels';
-import { BING_MAX_URLS_PER_CALL, BingApiError, type BingClient } from './bing';
+import { BING_MAX_URLS_PER_CALL, BingApiError, type BingClient, type BingCrawlClient } from './bing';
+import { sendFeeds } from './bingcrawl';
 import { getKey, indexNowStatus, recentSitemapUrls, removedUrls, submitUrls as indexNowSubmit, backoffUntil } from './indexnow';
 import { indexingApiDailyCap, indexingApiEnabled, indexingApiUsed, pageEligibility, publishUrls } from './indexingapi';
 import { flatten, addWatch } from './indexmon';
@@ -322,6 +323,32 @@ export async function resubmitSitemaps(site: SiteRow, source: 'app' | 'mcp' | 'a
 	}
 	audit('sitemap.resubmitted', { siteId: site.id, detail: `${submitted.length} of ${list.length} (${source})` });
 	return { submitted, failed };
+}
+
+/**
+ * Send sitemaps to Bing too (SubmitFeed) when the site has Bing linked. Called after Search Console took them, so one Submit reaches
+ * both. Never throws: Bing's refusals come back in `failed`; `linked` is false when the site has no Bing connection.
+ */
+export async function submitSitemapsToBing(site: SiteRow, feeds: string[], source: 'app' | 'mcp', client?: Partial<BingCrawlClient>): Promise<{ linked: boolean; submitted: string[]; failed: { path: string; error: string }[] }> {
+	const link = linksFor(site.id).bing;
+	if (!link?.integration_id) return { linked: false, submitted: [], failed: [] };
+	if (!feeds.length || config.readOnly) return { linked: true, submitted: [], failed: [] };
+	let c = client;
+	try {
+		c ??= bingClientFor(link.integration_id) as Partial<BingCrawlClient>;
+	} catch (e) {
+		return { linked: true, submitted: [], failed: feeds.map((path) => ({ path, error: e instanceof Error ? e.message : 'Bing connection unavailable' })) };
+	}
+	const r = await sendFeeds(c, link.external_id, feeds);
+	if (r.submitted.length) audit('sitemap.bing', { siteId: site.id, detail: `${r.submitted.join(', ')} (${source})` });
+	return { linked: true, ...r };
+}
+
+/** One line for the app and MCP answers about what Bing did with the sitemaps. */
+export function bingSitemapNote(b: { linked: boolean; submitted: string[]; failed: { path: string; error: string }[] }): string {
+	if (!b.linked) return 'Bing is not linked for this site, so only Search Console got it.';
+	if (b.failed.length) return `Bing refused ${b.failed.length}: ${b.failed[0].error}`;
+	return b.submitted.length ? `Bing took ${b.submitted.length} too.` : '';
 }
 
 /**
