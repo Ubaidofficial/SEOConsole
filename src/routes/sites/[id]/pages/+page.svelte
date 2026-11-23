@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import Chart from '$lib/components/Chart.svelte';
+	import SectionTabs from '$lib/components/SectionTabs.svelte';
 	let { data } = $props();
 	let open = $state<string | null>(null);
 	let history = $state<any[]>([]);
@@ -20,7 +21,8 @@
 	const A = { group: 'GA4 · Google organic', groupColor: '#ea580c' };
 	const AI = { group: 'AI assistants · GA4', groupColor: '#6366f1' };
 	const C = { group: 'Clarity · last 24 h', groupColor: '#7c3aed' };
-	const cols = $derived([
+	let view = $state('');
+	const allCols = $derived([
 		{ key: 'path', label: 'Page', type: 'link' as const, href: (r: { url: string }) => r.url, display: (r: { path: string }) => r.path },
 		// Views work for any period (stored by day); sessions and top channel only for the preset lengths GA4 landing pages are pulled for.
 		...(data.sources.views.hasData
@@ -68,6 +70,30 @@
 				]
 			: [])
 	]);
+	/** One source's columns at a time (plus a cross-source overview), instead of one table too wide to read. */
+	type Col = (typeof allCols)[number];
+	const has = $derived({ ga4: data.sources.views.hasData || data.sources.all.hasData || data.sources.ga4.hasData, bing: data.sources.bing.hasData, ai: data.sources.ai.hasData, clarity: data.sources.clarity.hasData });
+	const views = $derived([
+		{ id: 'overview', label: 'Overview' },
+		{ id: 'google', label: 'Google' },
+		...(has.ga4 ? [{ id: 'ga4', label: 'GA4' }] : []),
+		...(has.bing ? [{ id: 'bing', label: 'Bing' }] : []),
+		...(has.ai ? [{ id: 'ai', label: 'AI assistants' }] : []),
+		...(has.clarity ? [{ id: 'clarity', label: 'Clarity' }] : [])
+	]);
+	const pick = (keys: string[]) => keys.map((k) => allCols.find((c: Col) => c.key === k)).filter((c): c is Col => !!c);
+	const cols = $derived.by(() => {
+		const page = ['path'];
+		switch (view) {
+			case 'google': return pick([...page, 'gClicks', 'gImpr', 'gCtr', 'gPos']);
+			case 'ga4': return pick([...page, 'tViews', 'title', 'tSessions', 'tTop', 'aSessions', 'aEngaged', 'aKeyEvents']);
+			case 'bing': return pick([...page, 'bClicks', 'bImpr', 'bPos']);
+			case 'ai': return pick([...page, 'aiSessions', 'aiEngaged', 'aiTop']);
+			case 'clarity': return pick([...page, 'cSessions', 'cRage', 'cDead']);
+			default: return pick([...page, 'tViews', 'tSessions', 'gClicks', 'gPos', 'bClicks', 'aKeyEvents', 'aiSessions']);
+		}
+	});
+	const sortFor = $derived(view === 'google' ? 'gClicks' : view === 'bing' ? 'bClicks' : view === 'ai' ? 'aiSessions' : view === 'clarity' ? 'cSessions' : data.sources.views.hasData ? 'tViews' : 'gClicks');
 	const notes = $derived(
 		[
 			!data.sources.google.comparable ? 'Google: the previous period is still downloading, so no changes are shown.' : '',
@@ -83,13 +109,17 @@
 	);
 </script>
 
-<div class="mb-3 flex"><a class="btn ml-auto" href="/sites/{page.params.id}/export?dim=page&days={page.url.searchParams.get('days') ?? 28}">Export CSV</a></div>
 <Explainer lead="Every source side by side, joined on the page. Arrows show the change against the previous period; a dash means no data.">
 	<p>Every source side by side, joined on the page's path (so www, http and https variants count as one page). Arrows show the change against the previous period; a dash means that source has nothing for the page. The first group, GA4 all traffic, shows page views (every view of the page from any channel, for any period) with the page's title in GA4, and, for the 7, 28, 90, 180 and 480-day periods, the sessions that landed on the page and the channel that sent most of them. The second GA4 group counts Google-organic sessions only: sessions and clicks are different measurements, so expect them close, not equal. The AI group counts GA4 sessions whose referrer is an AI assistant; an assistant that sends no referrer shows up as Direct and is not counted, so treat it as a floor. It does not include citations or bot crawls.</p>
 </Explainer>
-{#each notes as n}<p class="mb-1 text-xs text-muted-foreground">{n}</p>{/each}
-<div class="mt-2"></div>
-<DataTable rows={data.rows} {cols} sortKey={data.sources.views.hasData ? 'tViews' : 'gClicks'} onRowClick={toggle} empty="No page data yet." />
+{#if notes.length}
+	<details class="mb-3 text-xs text-muted-foreground">
+		<summary class="cursor-pointer select-none hover:text-foreground">Date ranges and data notes ({notes.length})</summary>
+		{#each notes as n}<p class="mt-1">{n}</p>{/each}
+	</details>
+{/if}
+<div class="flex flex-wrap items-start justify-between gap-2"><SectionTabs bind:value={view} label="Columns" tabs={views} /><a class="btn" href="/sites/{page.params.id}/export?dim=page&days={page.url.searchParams.get('days') ?? 28}">Export CSV</a></div>
+{#key view}<DataTable rows={data.rows} {cols} sortKey={sortFor} onRowClick={toggle} empty="No page data yet." />{/key}
 {#if open}
 	<div class="card mt-3 p-4">
 		<div class="pii mb-2 truncate font-medium">{open}</div>
