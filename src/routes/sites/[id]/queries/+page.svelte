@@ -6,6 +6,9 @@
 	import { POSITION_BUCKETS } from '$lib/plan';
 	import BarList from '$lib/components/viz/BarList.svelte';
 	import SavedViews from '$lib/components/SavedViews.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { Download, Funnel, Trash2, X } from '@lucide/svelte';
+	import { TEXT_OPS, describePattern, textFilter, type TextOp } from '$lib/textfilter';
 
 	import { enhance } from '$app/forms';
 	import { ago } from '$lib/format';
@@ -34,6 +37,35 @@
 	/** Filters besides the query type, so the Filters button can say how many are on. */
 	const activeFilters = $derived([data.pos, data.filters.country, data.filters.device, data.re, data.nre].filter(Boolean).length);
 	const canEdit = $derived(page.data.user?.role !== 'viewer');
+	let op = $state<TextOp>('contains');
+	let text = $state('');
+	function applyText(e: SubmitEvent) {
+		e.preventDefault();
+		const f = textFilter(op, text);
+		if (!f) return;
+		const u = new URL(page.url);
+		u.searchParams.set(f.key, f.pattern);
+		text = '';
+		goto(u.pathname + u.search, { keepFocus: true });
+	}
+	/** Every filter that is on, as a chip you can remove on its own (as Plausible does), so what the table shows is never a mystery. */
+	const chips = $derived.by(() => {
+		const out: { key: string; field: string; value: string }[] = [];
+		if (data.b !== 'all') out.push({ key: 'b', field: 'Query', value: data.b === 'brand' ? 'is branded' : 'is not branded' });
+		if (data.qf) out.push({ key: 'qf', field: 'Quick filter', value: data.quickFilters.find((f) => f.key === data.qf)?.label ?? data.qf });
+		if (data.pos) out.push({ key: 'pos', field: 'Position', value: POSITION_BUCKETS.find((b) => b.key === data.pos)?.label ?? data.pos });
+		if (data.filters.country) out.push({ key: 'country', field: 'Country', value: `is ${data.filters.country.toUpperCase()}` });
+		if (data.filters.device) out.push({ key: 'device', field: 'Device', value: `is ${data.filters.device}` });
+		if (data.re) out.push({ key: 're', field: 'Query', value: describePattern(data.re, false) });
+		if (data.nre) out.push({ key: 'nre', field: 'Query', value: describePattern(data.nre, true) });
+		if (data.bucket) out.push({ key: 'bucket', field: 'Bucket', value: `is ${data.buckets.find((b) => b.id === data.bucket)?.name ?? data.bucket}` });
+		return out;
+	});
+	function drop(keys: string[]) {
+		const u = new URL(page.url);
+		for (const k of keys) u.searchParams.delete(k);
+		goto(u.pathname + u.search, { keepFocus: true, noScroll: true });
+	}
 	let detail: HTMLElement | undefined = $state();
 	const cols = $derived([
 		{ key: 'query', label: 'Query', type: 'text' as const, pii: (r: { branded: boolean }) => r.branded },
@@ -47,12 +79,15 @@
 	]);
 </script>
 
+<PageHeader tab="/queries" title="Queries" lead="Every search you were shown for, with quick filters, keyword buckets and saved views. Click a row for its full history.">
+	{#snippet actions()}<a class="btn btn-sm" href="/sites/{page.params.id}/export?dim=query&days={page.url.searchParams.get('days') ?? 28}"><Download class="size-3.5" />Export CSV</a>{/snippet}
+</PageHeader>
 <div class="mb-2 flex flex-wrap items-center gap-2">
 	<select class="input" aria-label="Query type" value={data.b} onchange={(e) => setParam('b', e.currentTarget.value)}>
 		<option value="all">All queries</option><option value="nonbrand">Non-branded</option><option value="brand">Branded</option>
 	</select>
-	<details class="group relative" open={activeFilters > 0}>
-		<summary class="btn cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden">Filters{#if activeFilters}<span class="ml-1.5 rounded-full bg-[color:var(--link)] px-1.5 text-[10px] text-white">{activeFilters}</span>{/if}</summary>
+	<details class="group relative">
+		<summary class="btn cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden"><Funnel class="size-3.5" />Filters{#if activeFilters}<span class="ml-1.5 rounded-full bg-[color:var(--link)] px-1.5 text-[10px] text-white">{activeFilters}</span>{/if}</summary>
 		<div class="card absolute left-0 z-20 mt-1 w-[min(44rem,90vw)] p-3 shadow-lg">
 			<div class="mb-2 flex flex-wrap items-center gap-2">
 	<select class="input" aria-label="Position" value={data.pos} onchange={(e) => setParam('pos', e.currentTarget.value)}>
@@ -65,14 +100,13 @@
 		<option value="">All devices</option>{#each data.devices as d}<option value={d}>{d}</option>{/each}
 	</select>
 			</div>
-			<div class="text-xs font-medium text-muted-foreground">Text filter: regular expressions, case-insensitive, like Search Console's custom filter</div>
-	<form class="mt-1 flex flex-wrap items-center gap-2" onsubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); const u = new URL(page.url); for (const k of ['re', 'nre']) { const v = String(f.get(k) ?? '').trim(); v ? u.searchParams.set(k, v) : u.searchParams.delete(k); } goto(u.pathname + u.search, { keepFocus: true }); }}>
-		<input class="input w-64 font-mono text-xs" name="re" value={data.re} placeholder="Include, e.g. ^how|best .* tools" aria-label="Include searches matching (regular expression)" />
-		<input class="input w-64 font-mono text-xs" name="nre" value={data.nre} placeholder="Exclude, e.g. free|cheap" aria-label="Exclude searches matching (regular expression)" />
-		<button class="btn">Apply</button>
-		{#if data.re || data.nre}<button type="button" class="btn text-muted-foreground" onclick={() => { const u = new URL(page.url); u.searchParams.delete('re'); u.searchParams.delete('nre'); goto(u.pathname + u.search); }}>Clear</button>{/if}
-		
+			<div class="text-xs font-medium text-muted-foreground">Query text</div>
+	<form class="mt-1 flex flex-wrap items-center gap-2" onsubmit={applyText}>
+		<select class="input" bind:value={op} aria-label="How to match">{#each TEXT_OPS as [k, l]}<option value={k}>{l}</option>{/each}</select>
+		<input class="input w-72 {op === 'regex' ? 'font-mono text-xs' : ''}" bind:value={text} placeholder={op === 'any' ? 'shoes, boots, sandals' : op === 'regex' ? '^how|best .* tools' : 'running shoes'} aria-label="Text to match" />
+		<button class="btn btn-primary">Add filter</button>
 	</form>
+	<p class="mt-1 text-[11px] text-muted-foreground">Case-insensitive. "Matches regex" works like Search Console's custom filter; "matches any of" takes a list split by commas.</p>
 	{#if data.regexError}<p class="mt-1 text-xs text-bad">{data.regexError}</p>{/if}
 		</div>
 	</details>
@@ -81,8 +115,18 @@
 			<option value="">All buckets</option>{#each data.buckets as b}<option value={String(b.id)}>{b.name}</option>{/each}
 		</select>
 	{/if}
-	<a class="btn ml-auto" href="/sites/{page.params.id}/export?dim=query&days={page.url.searchParams.get('days') ?? 28}">Export CSV</a>
 </div>
+{#if chips.length}
+	<div class="mb-2 flex flex-wrap items-center gap-1.5" aria-label="Filters on">
+		{#each chips as c}
+			<span class="inline-flex items-center overflow-hidden rounded-md border bg-card text-xs shadow-xs">
+				<span class="bg-muted px-2 py-1 text-muted-foreground">{c.field}</span><span class="px-2 py-1 {c.key === 're' || c.key === 'nre' ? 'pii' : ''}">{c.value}</span>
+				<button type="button" class="tap grid h-full place-items-center border-l px-1.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Remove filter: {c.field} {c.value}" onclick={() => drop(c.key === 'qf' ? ['qf', 'q'] : [c.key])}><X class="size-3" /></button>
+			</span>
+		{/each}
+		{#if chips.length > 1}<button type="button" class="btn btn-ghost btn-xs" onclick={() => drop(['b', 'qf', 'q', 'pos', 'country', 'device', 're', 'nre', 'bucket'])}><Trash2 class="size-3" />Clear all</button>{/if}
+	</div>
+{/if}
 <nav class="mb-2 flex flex-wrap items-center gap-1.5" aria-label="Quick filters">
 	{#each data.quickFilters as f}<button type="button" class="chip {data.qf === f.key ? 'chip-on' : ''}" title={f.hint} aria-pressed={data.qf === f.key} onclick={() => { const u = new URL(page.url); u.searchParams.delete('q'); data.qf === f.key ? u.searchParams.delete('qf') : u.searchParams.set('qf', f.key); goto(u.pathname + u.search, { keepFocus: true, noScroll: true }); }}>{f.label}</button>{/each}
 </nav>

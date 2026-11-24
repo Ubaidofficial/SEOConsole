@@ -1,6 +1,8 @@
 <script lang="ts">
 	import ActionCard from '$lib/components/ActionCard.svelte';
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import { CircleCheck, FunnelX, ScanSearch, Plug, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { TYPE_LABEL } from '$lib/explain';
 	let { data } = $props();
 	let type = $state('all');
@@ -23,12 +25,15 @@
 	const quick = $derived(count((a) => a.effort === 'low' && !a.blocking));
 </script>
 
-<Explainer lead="Everything found for this site, in the order to do it: blocking items first, then by estimated gain.">
+<PageHeader tab="/actions" title="Actions" lead="Everything found for this site, in the order to do it: blocking items first, then by estimated gain.">
 	<p><b>Blocking</b> items stop the site earning or stop you measuring it. The rest are ranked by estimated clicks per 28 days weighted by confidence. The estimates come from this site's own click-through curve and history; they are model figures, not promises, and are <b>not added up</b> because findings overlap (one page can be a CTR gap and a decay at once).</p>
-</Explainer>
+</PageHeader>
 
 {#if data.open.length === 0}
-	<div class="card p-6 text-center text-sm"><p class="mb-1 font-medium text-good">Nothing to do right now.</p><p class="text-muted-foreground">Either the site is healthy, or there is not enough data yet. Connect GA4 and Tag Manager, read the sitemaps and run the on-page check to widen what is looked at.</p></div>
+	<EmptyState icon={CircleCheck} tone="green" title="Nothing to do right now." text="Either the site is healthy, or there is not enough data yet. Connect GA4 and Tag Manager, read the sitemaps and run the on-page check to widen what is looked at.">
+		<a class="btn btn-primary btn-sm" href="/sites/{data.site.id}/onpage"><ScanSearch class="size-3.5" />Run the on-page check</a>
+		<a class="btn btn-sm" href="/connect"><Plug class="size-3.5" />Connect GA4 and Tag Manager</a>
+	</EmptyState>
 {:else}
 	<div class="mb-3 flex flex-wrap items-center gap-1.5">
 		<span class="mr-1 text-sm"><b>{data.open.length}</b> open {#if blocking}· <b class="text-bad">{blocking} blocking</b>{/if}</span>
@@ -43,11 +48,11 @@
 			</label>
 		{/if}
 	</div>
-	{#if rows.length === 0}<div class="card p-6 text-center text-sm text-muted-foreground">Nothing matches these filters. <button class="underline" onclick={() => ((type = 'all'), (only = 'all'))}>Clear them</button></div>{/if}
+	{#if rows.length === 0}<EmptyState icon={FunnelX} title="Nothing matches these filters."><button class="btn btn-sm" onclick={() => ((type = 'all'), (only = 'all'))}><FunnelX class="size-3.5" />Clear them</button></EmptyState>{/if}
 	<div class="stagger space-y-3">
 		{#each shown as a, i (a.key)}<ActionCard {a} rank={i + 1} sameAs={sameAs[i]} />{/each}
 	</div>
-	{#if rows.length > 10}<button class="btn mt-3" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${rows.length}`}</button>{/if}
+	{#if rows.length > 10}<button class="btn btn-sm mt-3" onclick={() => (showAll = !showAll)}>{#if showAll}<ChevronUp class="size-3.5" />Show fewer{:else}<ChevronDown class="size-3.5" />Show all {rows.length}{/if}</button>{/if}
 {/if}
 
 {#if data.hidden.length}

@@ -2,6 +2,9 @@
 	import { enhance } from '$app/forms';
 	import { tick } from 'svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import { ChartScatter, ChartSpline, Lightbulb, Target, Send, Eye } from '@lucide/svelte';
 	import OppScatter from '$lib/components/viz/OppScatter.svelte';
 	import CtrCurve from '$lib/components/viz/CtrCurve.svelte';
 	import Dumbbell from '$lib/components/viz/Dumbbell.svelte';
@@ -82,26 +85,30 @@
 	const SRC_LABEL: Record<string, string> = { previousPeriod: 'the previous period', bing: 'Bing', ga4: 'GA4', clarity: 'Clarity' };
 </script>
 
-<div class="mb-4 flex flex-wrap items-end gap-x-4 gap-y-1">
-	<div>
-		<h2 class="text-lg font-semibold tracking-tight">{found.length} kinds of opportunity found</h2>
-		<p class="text-sm text-muted-foreground">Pick a kind to see its list. Estimates use this site's own click curve: model figures, not promises.</p>
-	</div>
-</div>
+<PageHeader tab="/opportunities" title="Opportunities" lead="Pick a kind to see its list. Estimates use this site's own click curve: model figures, not promises.">
+	<p>{HIDDEN_INTRO}</p>
+	{#snippet meta()}<span class="chip">{found.length} kinds found</span>{/snippet}
+	{#snippet actions()}
+		{#if data.openseo}<a class="btn btn-sm" href="#openseo-track"><Send class="size-3.5" aria-hidden="true" />Track in OpenSEO</a>{/if}
+	{/snippet}
+</PageHeader>
 
 <div class="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-5">
 	<section class="card p-4 xl:col-span-3" aria-labelledby="scatter-h">
-		<h3 id="scatter-h" class="text-sm font-medium">Where the opportunities are</h3>
+		<h3 id="scatter-h" class="flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><ChartScatter class="size-3.5" /></span>Where the opportunities are</h3>
 		<p class="mb-2 text-xs text-muted-foreground">Each dot is a search: further left ranks higher, higher up is seen more, bigger is worth more. Hover for details.</p>
 		<OppScatter points={data.striking.slice(0, 60).map((r) => ({ label: r.query, position: r.position, impressions: r.impressions, gain: r.expectedGain }))} />
 	</section>
 	<section class="card p-4 xl:col-span-2" aria-labelledby="curve-h">
-		<h3 id="curve-h" class="text-sm font-medium">Is your click rate normal for the position? <span class="chip ml-1 font-normal">{data.curve.source === 'fitted' ? 'fitted to your data' : data.curve.source === 'mixed' ? 'partly fitted' : 'industry default'}</span></h3>
+		<h3 id="curve-h" class="flex flex-wrap items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><ChartSpline class="size-3.5" /></span>Is your click rate normal for the position? <span class="chip ml-1 font-normal">{data.curve.source === 'fitted' ? 'fitted to your data' : data.curve.source === 'mixed' ? 'partly fitted' : 'industry default'}</span></h3>
 		<p class="mb-2 text-xs text-muted-foreground">Non-branded searches only. Dots below the line are snippets that earn fewer clicks than your site normally does there.</p>
 		<CtrCurve values={data.curve.values} fitted={data.curve.fitted} points={data.ctrGaps.slice(0, 20).map((g) => ({ label: g.query, position: g.position, ctr: g.ctr }))} />
 	</section>
 </div>
 
+{#if !found.length}
+	<div class="mb-6"><EmptyState icon={Lightbulb} tone="amber" title="No opportunities found this period." text="Try a longer period, or link more sources (see below)." /></div>
+{/if}
 <div class="stagger mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 	{#each found as t (t.id)}
 		<button type="button" onclick={() => pick(t.id)} aria-pressed={sel?.id === t.id} aria-controls="op-list" class="card block p-4 text-left transition-colors hover:border-[color:var(--link)] {sel?.id === t.id ? 'border-[color:var(--link)] ring-1 ring-[color:var(--link)]' : ''}">
@@ -114,7 +121,7 @@
 
 {#if sel}
 	<section id="op-list" class="card mb-6 scroll-mt-20 p-4" aria-live="polite">
-		<div class="mb-1 flex flex-wrap items-baseline gap-2"><h3 class="font-medium">{sel.title}</h3><span class="chip">{fmtInt(sel.rows.length)}</span>{#if sel.best != null}<span class="tnum ml-auto text-xs text-muted-foreground">biggest ≈ {fmtInt(Math.round(sel.best))} {sel.unit}</span>{/if}</div>
+		<div class="mb-1 flex flex-wrap items-baseline gap-2"><h3 class="flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><Lightbulb class="size-3.5" /></span>{sel.title}</h3><span class="chip">{fmtInt(sel.rows.length)}</span>{#if sel.best != null}<span class="tnum ml-auto text-xs text-muted-foreground">biggest ≈ {fmtInt(Math.round(sel.best))} {sel.unit}</span>{/if}</div>
 		<p class="mb-3 max-w-3xl text-xs text-muted-foreground">{sel.blurb}</p>
 		{#if bell}<div class="mb-4 max-w-3xl">{#key sel.id}<Dumbbell rows={bell.rows} better={bell.better} beforeLabel={bell.before} afterLabel={bell.after} format={bell.format} change={bell.change} unit={bell.unit} />{/key}</div>{/if}
 		{#key sel.id}<DataTable rows={sel.rows} cols={sel.cols} sortKey={sel.sort} pageSize={15} />{/key}
@@ -122,14 +129,14 @@
 {/if}
 {#if data.openseo}
 	<section id="openseo-track" class="card mb-6 scroll-mt-20 p-4 text-sm">
-		<h3 class="mb-1 font-medium">Track striking-distance searches in OpenSEO</h3>
+		<h3 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-violet" aria-hidden="true"><Target class="size-3.5" /></span>Track striking-distance searches in OpenSEO</h3>
 		<p class="mb-2 text-xs text-muted-foreground">Sends your best non-brand searches at positions 4 to 20 to the rank tracker of <span class="pii">{data.openseo.project ?? 'the linked project'}</span>, for daily positions and competitors. {data.openseo.tracked ? `${data.openseo.tracked} sent so far; they are not sent again.` : ''} Preview first: it shows OpenSEO's own cost estimate and changes nothing.</p>
 		{#if data.openseo.candidates}
 			<form method="POST" action="?/oseoPreview" use:enhance class="flex flex-wrap items-center gap-2 text-xs">
 				<label class="flex items-center gap-1.5">Top <input class="input w-20" type="number" name="n" min="1" max={data.openseo.max} value="25" /> searches</label>
-				<button class="btn btn-sm">Preview</button>
+				<button class="btn btn-sm"><Eye class="size-3.5" aria-hidden="true" />Preview</button>
 			</form>
-		{:else}<p class="text-xs text-muted-foreground">No striking-distance searches left to send.</p>{/if}
+		{:else}<EmptyState compact icon={Target} title="No striking-distance searches left to send." />{/if}
 		{#if form?.plan}
 			{@const p = form.plan}
 			<div class="mt-3 rounded border p-3 text-xs" style="border-color:var(--border)">
@@ -139,7 +146,7 @@
 				<form method="POST" action="?/oseoTrack" use:enhance>
 					<input type="hidden" name="keywords" value={p.keywords.join('\n')} />
 					{#if p.estimate?.scheduled}<input type="hidden" name="credits" value={p.estimate.scheduled.costCredits} />{/if}
-					<button class="btn btn-sm btn-primary">Send {p.keywords.length} searches{p.estimate?.scheduled ? `, up to ${p.estimate.scheduled.costCredits} credits per check` : ''}</button>
+					<button class="btn btn-sm btn-primary"><Send class="size-3.5" aria-hidden="true" />Send {p.keywords.length} searches{p.estimate?.scheduled ? `, up to ${p.estimate.scheduled.costCredits} credits per check` : ''}</button>
 				</form>
 			</div>
 		{/if}
@@ -157,5 +164,3 @@
 	</div>
 {/if}
 
-
-<p class="mt-6 max-w-3xl text-xs text-muted-foreground">{HIDDEN_INTRO}</p>

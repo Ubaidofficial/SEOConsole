@@ -1,5 +1,6 @@
 <script lang="ts">
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { ChartNoAxesGantt, CalendarRange } from '@lucide/svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import Dumbbell from '$lib/components/viz/Dumbbell.svelte';
 	import DecayMap from '$lib/components/viz/DecayMap.svelte';
@@ -26,21 +27,23 @@
 	]);
 </script>
 
-<div class="seg mb-3">
-	<a class="seg-item {yoy ? '' : 'seg-on'}" aria-current={yoy ? undefined : 'page'} href={link('period')}>vs the previous period</a>
-	<a class="seg-item {yoy ? 'seg-on' : ''}" aria-current={yoy ? 'page' : undefined} href={link('yoy')} title="The same weekdays one year earlier: catches the slow slide a month-on-month view misses">vs the same time last year</a>
-</div>
-<Explainer lead="Pages that lost clicks, and passed a significance test.">
+<PageHeader tab="/decay" title="Decay" lead="Pages that lost clicks, and passed a significance test.">
 	<p>Pages that lost 25%+ of clicks versus the {yoy ? 'same period a year earlier' : 'previous period'} <i>and</i> pass a significance test (a ±2σ Poisson check), so ordinary noise on low-traffic pages is ignored.
 	Whole-site change over the period: <b class="text-[color:var(--foreground)]">{fmtSigned(data.siteDelta)}</b>.
 	“site-wide” means the page fell with the whole site (look at seasonality or a site-level issue); “page-specific” means it fell more than the site did.
 	{#if !data.hasYear}{yoy ? 'The year view' : 'Year-over-year'} needs 12+ months of stored history; it will appear once the backfill reaches that far.{/if}</p>
-</Explainer>
+	{#snippet actions()}
+		<div class="seg">
+			<a class="seg-item {yoy ? '' : 'seg-on'}" aria-current={yoy ? undefined : 'page'} href={link('period')}>vs the previous period</a>
+			<a class="seg-item {yoy ? 'seg-on' : ''}" aria-current={yoy ? 'page' : undefined} href={link('yoy')} title="The same weekdays one year earlier: catches the slow slide a month-on-month view misses">vs the same time last year</a>
+		</div>
+	{/snippet}
+</PageHeader>
 <p class="mb-2 text-sm"><b>{data.rows.length}</b> decaying pages · <b>{specific}</b> page-specific</p>
-{#if bells.length}<section class="card mb-4 p-4"><h2 class="mb-3 text-sm font-medium">Clicks {yoy ? 'a year ago' : 'before'} and now, biggest losses first</h2><Dumbbell rows={bells} better="up" beforeLabel={yoy ? 'a year ago' : 'before'} afterLabel="now" /></section>{/if}
+{#if bells.length}<section class="card mb-4 p-4"><h3 class="mb-3 flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><ChartNoAxesGantt class="size-3.5" /></span>Clicks {yoy ? 'a year ago' : 'before'} and now, biggest losses first</h3><Dumbbell rows={bells} better="up" beforeLabel={yoy ? 'a year ago' : 'before'} afterLabel="now" /></section>{/if}
 {#if data.map.rows.length}
 <details class="card mb-4 p-4" open={!data.rows.length}>
-	<summary class="cursor-pointer text-sm font-medium select-none">Decay map: your biggest pages, week by week <span class="font-normal text-muted-foreground">· last {data.map.weeks.length} weeks</span></summary>
+	<summary class="cursor-pointer text-sm font-medium select-none"><span class="ibadge ibadge-sm tone-amber mr-1.5 align-middle" aria-hidden="true"><CalendarRange class="size-3.5" /></span>Decay map: your biggest pages, week by week <span class="font-normal text-muted-foreground">· last {data.map.weeks.length} weeks</span></summary>
 	<p class="mt-1 mb-3 text-xs text-muted-foreground">Each row is shaded against that page's own best week, so a slow slide shows as a row fading to the right, even on pages too small to pass the significance test above.</p>
 	<DecayMap weeks={data.map.weeks} rows={data.map.rows} />
 </details>

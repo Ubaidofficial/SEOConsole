@@ -1,5 +1,9 @@
 <script lang="ts">
 	import DataTable from '$lib/components/DataTable.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { TrendingUp, TrendingDown, Sparkle, Ghost, ChartLine } from '@lucide/svelte';
 	import LineChart from '$lib/components/LineChart.svelte';
 	import { fmtInt, fmtSigned } from '$lib/format';
 	import { isBranded } from '$lib/analytics';
@@ -17,31 +21,33 @@
 	];
 	const shape = (rows: { key: string }[], name: 'query' | 'page') => rows.map((r) => ({ ...r, [name]: r.key }));
 	const dir: Record<string, string> = { rising: '▲ rising', falling: '▼ falling', flat: '– flat', volatile: '≈ volatile', 'too-little-data': 'too little data' };
-	const dirTone: Record<string, string> = { rising: 'text-good', falling: 'text-bad', flat: 'text-muted-foreground', volatile: 'text-warn', 'too-little-data': 'text-muted-foreground' };
+	const dirTone: Record<string, 'good' | 'bad' | 'muted' | 'warn'> = { rising: 'good', falling: 'bad', flat: 'muted', volatile: 'warn', 'too-little-data': 'muted' };
 	const bandRows = $derived(data.bands ? data.bands.now.map((b, i) => ({ band: b.label, queries: b.queries, prevQueries: data.bands!.prev ? data.bands!.prev[i].queries : null, qDelta: data.bands!.prev ? b.queries - data.bands!.prev[i].queries : null, clicks: b.clicks, impressions: b.impressions })) : []);
 	const fc = $derived(data.forecast);
 	const xs = $derived(fc?.projection ? [...fc.weekly.slice(-12).map((w) => w.weekEnd), ...fc.projection.points.map((p) => p.weekEnd)] : []);
 </script>
+
+<PageHeader tab="/trends" title="Trends" lead="Queries and pages whose clicks changed by more than normal day-to-day noise, against the previous period." />
 
 <nav class="seg mb-4" aria-label="Trend views">
 	{#each views as [v, label]}<a class="seg-item {data.view === v ? 'seg-on' : ''}" aria-current={data.view === v ? 'page' : undefined} href={href(v)} data-sveltekit-noscroll>{label}</a>{/each}
 </nav>
 
 {#if (data.view === 'movers' || data.view === 'new') && data.comparable === false}
-	<div class="card p-6 text-sm"><p class="mb-1 font-medium text-warn">No comparison yet</p><p class="text-muted-foreground">{data.reason}</p></div>
+	<EmptyState icon={ChartLine} tone="amber" title="No comparison yet" text={data.reason ?? ''} />
 {:else if data.view === 'movers' && data.movers}
 	<p class="mb-3 text-xs text-muted-foreground">Compared with the previous {data.days} days. A row appears only if clicks changed by at least 10 and by more than normal day-to-day noise (a Poisson test, the same one the Decay tab uses), so a handful of clicks either way never shows.</p>
 	<div class="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-		<section><h2 class="mb-1 font-medium text-good">Query winners</h2><DataTable rows={shape(data.movers.queries.winners, 'query')} cols={moverCols('query')} sortKey="change" filterable={false} pageSize={15} empty="No query moved by more than noise." /></section>
-		<section><h2 class="mb-1 font-medium text-bad">Query losers</h2><DataTable rows={shape(data.movers.queries.losers, 'query')} cols={moverCols('query')} sortKey="change" sortDir="asc" filterable={false} pageSize={15} empty="No query moved by more than noise." /></section>
-		<section><h2 class="mb-1 font-medium text-good">Page winners</h2><DataTable rows={shape(data.movers.pages.winners, 'page')} cols={moverCols('page')} sortKey="change" filterable={false} pageSize={15} empty="No page moved by more than noise." /></section>
-		<section><h2 class="mb-1 font-medium text-bad">Page losers</h2><DataTable rows={shape(data.movers.pages.losers, 'page')} cols={moverCols('page')} sortKey="change" sortDir="asc" filterable={false} pageSize={15} empty="No page moved by more than noise." /></section>
+		<section><h3 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-green" aria-hidden="true"><TrendingUp class="size-3.5" /></span>Query winners</h3><DataTable rows={shape(data.movers.queries.winners, 'query')} cols={moverCols('query')} sortKey="change" filterable={false} pageSize={15} empty="No query moved by more than noise." /></section>
+		<section><h3 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-red" aria-hidden="true"><TrendingDown class="size-3.5" /></span>Query losers</h3><DataTable rows={shape(data.movers.queries.losers, 'query')} cols={moverCols('query')} sortKey="change" sortDir="asc" filterable={false} pageSize={15} empty="No query moved by more than noise." /></section>
+		<section><h3 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-green" aria-hidden="true"><TrendingUp class="size-3.5" /></span>Page winners</h3><DataTable rows={shape(data.movers.pages.winners, 'page')} cols={moverCols('page')} sortKey="change" filterable={false} pageSize={15} empty="No page moved by more than noise." /></section>
+		<section><h3 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-red" aria-hidden="true"><TrendingDown class="size-3.5" /></span>Page losers</h3><DataTable rows={shape(data.movers.pages.losers, 'page')} cols={moverCols('page')} sortKey="change" sortDir="asc" filterable={false} pageSize={15} empty="No page moved by more than noise." /></section>
 	</div>
 {:else if data.view === 'new' && data.added}
 	<p class="mb-3 text-xs text-muted-foreground">Queries with at least 10 impressions in one period and none at all in the other. Google hides some queries entirely, so a query can appear here without being truly new.</p>
 	<div class="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-		<section><h2 class="mb-1 font-medium">New queries</h2><DataTable rows={data.added.map((r) => ({ query: r.key, clicks: r.clicks, impressions: r.impressions, position: r.position }))} cols={[{ key: 'query', label: 'Query', type: 'text', pii: (r: { query: string }) => brand(r.query) }, { key: 'clicks', label: 'Clicks', type: 'int' }, { key: 'impressions', label: 'Impressions', type: 'int' }, { key: 'position', label: 'Position', type: 'pos' }]} sortKey="clicks" filterable={false} pageSize={15} empty="No new queries this period." /></section>
-		<section><h2 class="mb-1 font-medium">Lost queries</h2><DataTable rows={data.lost.map((r) => ({ query: r.key, clicks: r.clicks, impressions: r.impressions, position: r.position }))} cols={[{ key: 'query', label: 'Query', type: 'text', pii: (r: { query: string }) => brand(r.query) }, { key: 'clicks', label: 'Clicks before', type: 'int' }, { key: 'impressions', label: 'Impressions before', type: 'int' }, { key: 'position', label: 'Position before', type: 'pos' }]} sortKey="clicks" filterable={false} pageSize={15} empty="No queries disappeared." /></section>
+		<section><h3 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-green" aria-hidden="true"><Sparkle class="size-3.5" /></span>New queries</h3><DataTable rows={data.added.map((r) => ({ query: r.key, clicks: r.clicks, impressions: r.impressions, position: r.position }))} cols={[{ key: 'query', label: 'Query', type: 'text', pii: (r: { query: string }) => brand(r.query) }, { key: 'clicks', label: 'Clicks', type: 'int' }, { key: 'impressions', label: 'Impressions', type: 'int' }, { key: 'position', label: 'Position', type: 'pos' }]} sortKey="clicks" filterable={false} pageSize={15} empty="No new queries this period." /></section>
+		<section><h3 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-gray" aria-hidden="true"><Ghost class="size-3.5" /></span>Lost queries</h3><DataTable rows={data.lost.map((r) => ({ query: r.key, clicks: r.clicks, impressions: r.impressions, position: r.position }))} cols={[{ key: 'query', label: 'Query', type: 'text', pii: (r: { query: string }) => brand(r.query) }, { key: 'clicks', label: 'Clicks before', type: 'int' }, { key: 'impressions', label: 'Impressions before', type: 'int' }, { key: 'position', label: 'Position before', type: 'pos' }]} sortKey="clicks" filterable={false} pageSize={15} empty="No queries disappeared." /></section>
 	</div>
 {:else if data.view === 'bands'}
 	{#if data.comparable === false}<p class="mb-3 text-xs text-warn">Comparison with the previous period is hidden: {data.reason}</p>{/if}
@@ -62,16 +68,16 @@
 					{@const max = Math.max(1, ...t.weekly)}
 					<tr>
 						<td class="td" class:pii={brand(t.query)}>{t.query}</td><td class="td tnum text-right">{fmtInt(t.clicks)}</td>
-						<td class="td text-xs {dirTone[t.direction]}">{dir[t.direction]}</td>
+						<td class="td text-xs"><StatusPill tone={dirTone[t.direction] ?? 'muted'}>{dir[t.direction]}</StatusPill></td>
 						<td class="td tnum text-right text-xs">{t.weeklyChangePct == null ? '–' : fmtSigned(t.weeklyChangePct / 100)}</td>
 						<td class="td"><svg width="96" height="22" role="img" aria-label="weekly clicks">{#each t.weekly as v, i}<rect class="grow-bar" style="--i:{i}" x={i * 8} y={22 - (v / max) * 20} width="6" height={Math.max(1, (v / max) * 20)} fill="var(--c-clicks)" opacity="0.7" />{/each}</svg></td>
 					</tr>
-				{:else}<tr><td class="td text-muted-foreground" colspan="5">No query data yet.</td></tr>{/each}
+				{:else}<tr><td class="td" colspan="5"><EmptyState compact icon={ChartLine} title="No query data yet." /></td></tr>{/each}
 			</tbody></table>
 	</div>
 {:else if data.view === 'forecast' && fc}
 	{#if !fc.projection}
-		<div class="card p-6 text-center text-sm text-muted-foreground">A projection needs at least 8 complete weeks of stored history. This site has fewer so far.</div>
+		<EmptyState icon={ChartLine} title="A projection needs at least 8 complete weeks of stored history." text="This site has fewer so far." />
 	{:else}
 		{@const h = fc.weekly.slice(-12)}
 		{@const last = h[h.length - 1].clicks}

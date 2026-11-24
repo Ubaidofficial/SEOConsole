@@ -1,5 +1,8 @@
 <script lang="ts">
 	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { CalendarClock } from '@lucide/svelte';
 	import ShowMore from '$lib/components/ShowMore.svelte';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -29,30 +32,26 @@
 	const TIER = ['', 'new or changed', 'pinned', 'never shown', 'sent, not indexed'];
 </script>
 
-<section class="card mb-4 p-4">
-	<h2 class="mb-1 font-medium">Request indexing: the one fast, official way to ask Google</h2>
-	<Explainer lead="Search Console's Request Indexing button has no API, so no tool can press it. This page prepares the list and tracks the result.">
+<PageHeader tab="/request" title="Request indexing" lead="Search Console's Request Indexing button has no API, so no tool can press it. This page prepares the list and tracks the result.">
+	{#snippet meta()}<StatusPill tone={data.auto ? 'good' : 'muted'}>{data.auto ? 'Daily list: on' : 'Daily list: off'}</StatusPill><StatusPill tone={q.budget.left === 0 ? 'warn' : 'info'}>{q.budget.left} of about {q.budget.perDay} left today</StatusPill>{/snippet}
+	{#snippet actions()}<form method="POST" action="?/auto" use:enhance><input type="hidden" name="on" value={data.auto ? '0' : '1'} /><button class="btn btn-sm"><CalendarClock class="size-3.5" />{data.auto ? 'Switch off' : 'Build it every morning'}</button></form>{/snippet}
 	<p>Search Console's <b class="text-foreground">Request Indexing</b> button is the one official way to ask Google to look at a page soon, and it has <b class="text-foreground">no API</b>, so no tool can press it for you. What this page does is the slow part: it picks the few pages worth asking about,
 		skips what Google already has, sets aside pages where asking is pointless, links you straight to each, and keeps track of what you asked and whether it worked. It asks Google about the candidates first, which uses URL Inspection quota.</p>
-</Explainer>
-	<form method="POST" action="?/auto" use:enhance class="mt-2 flex flex-wrap items-center gap-2 text-sm">
-		<input type="hidden" name="on" value={data.auto ? '0' : '1'} />
-		<span class="chip {data.auto ? 'chip-on' : ''}">{data.auto ? 'Daily list: on' : 'Daily list: off'}</span>
-		<button class="btn btn-sm {data.auto ? '' : 'btn-primary'}">{data.auto ? 'Switch off' : 'Build it every morning'}</button>
-		<span class="text-xs text-muted-foreground">Builds the list for you each day (it spends URL Inspection quota){data.webhookSet ? ' and posts to your webhook when pages are ready' : '; set DIGEST_WEBHOOK_URL to also get a message'}. It never presses the button for you.</span>
-	</form>
-	<p class="mt-2 text-sm">
+	<p>The daily list is built for you each morning (it spends URL Inspection quota){data.webhookSet ? ' and posted to your webhook when pages are ready' : '; set DIGEST_WEBHOOK_URL to also get a message'}. It never presses the button for you.</p>
+</PageHeader>
+<div class="mb-4 text-sm">
+	<p>
 		<b>{q.budget.usedLast24h}</b> asked in the last 24 hours of about <b>{q.budget.perDay}</b> a day.
 		{#if q.budget.left === 0}<span class="text-warn"> Allowance used up{q.budget.nextSlotAt ? `: next slot ${until(q.budget.nextSlotAt)}` : ''}.</span>{:else}<span class="text-good"> {q.budget.left} left.</span>{/if}
 		<span class="text-xs text-muted-foreground"> <span title="Google does not publish its limit. Third-party sources say about 10 to 12 a day, which is unverified. Change it with REQUEST_INDEXING_PER_DAY.">(Google does not publish its limit)</span></span>
 	</p>
-</section>
+</div>
 
 {#if form?.ok}<p class="mb-3 text-sm text-good">{form.ok}</p>{/if}{#if form?.error}<p class="mb-3 text-sm text-bad">{form.error}</p>{/if}
 
 <section class="card mb-4 p-4">
 	<div class="mb-2 flex flex-wrap items-center gap-3">
-		<h2 class="font-medium">Today's list</h2>
+		<h3 class="flex items-center gap-2 font-medium"><span class="step-n !static {q.pending.length ? 'border-primary !bg-primary !text-primary-foreground' : ''}" aria-hidden="true">1</span>Today's list</h3>
 		{#if q.builtAt}<span class="text-xs text-muted-foreground">built {ago(q.builtAt)}</span>{/if}
 		{#if q.pending.length && !focus}<button class="btn" type="button" onclick={start}>Go through them one by one</button>{/if}
 		<form method="POST" action="?/build" use:enhance={run} class="ml-auto"><button class="btn btn-primary" disabled={busy || q.budget.left === 0}>{busy ? 'Asking Google…' : q.pending.length ? 'Rebuild the list' : 'Build today\'s list'}</button></form>
@@ -103,7 +102,7 @@
 
 {#if q.problems.length}
 	<section class="card mb-4 p-4">
-		<h2 class="mb-1 font-medium">Fix these first ({q.problems.length})</h2>
+		<h3 class="mb-1 flex items-center gap-2 font-medium"><span class="step-n !static !border-[color:var(--warn)] !text-warn" aria-hidden="true">!</span>Fix these first ({q.problems.length})</h3>
 		<p class="mb-2 text-xs text-muted-foreground">Asking Google about these would not help: something stops them being indexed.</p>
 		<ShowMore items={q.problems} limit={5} noun="URLs">
 			{#snippet children(rows)}
@@ -114,7 +113,7 @@
 {/if}
 
 <section class="card p-4">
-	<h2 class="mb-2 font-medium">Asked in the last {data.cooldownDays} days</h2>
+	<h3 class="mb-2 flex items-center gap-2 font-medium"><span class="step-n !static" aria-hidden="true">2</span>Asked in the last {data.cooldownDays} days <span class="font-normal text-muted-foreground">· re-checked with Google</span></h3>
 	<ShowMore items={q.recent} limit={10} noun="URLs">
 	{#snippet children(rows)}
 	<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th class="th">URL</th><th class="th">Asked</th><th class="th">Result</th><th class="th">Next check</th></tr></thead><tbody>

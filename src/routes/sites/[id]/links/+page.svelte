@@ -1,10 +1,12 @@
 <script lang="ts">
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
 	import ShowMore from '$lib/components/ShowMore.svelte';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
-	import { Copy } from '@lucide/svelte';
+	import { Copy, Check, Undo2, Network, LoaderCircle, Unlink, Link } from '@lucide/svelte';
 	import { ago, fmtInt, shortUrl } from '$lib/format';
 	let { data, form } = $props();
 
@@ -28,6 +30,7 @@
 		const i = snippet.indexOf(anchor);
 		return i < 0 ? [snippet, '', ''] : [snippet.slice(0, i), anchor, snippet.slice(i + anchor.length)];
 	};
+	const maxOrphanImpr = $derived(Math.max(1, ...data.orphans.map((o) => o.impressions)));
 	const tiles = $derived([
 		{ l: 'Pages crawled', v: data.summary.pagesCrawled, n: data.summary.pagesFailed ? `${fmtInt(data.summary.pagesFailed)} could not be read` : '' },
 		{ l: 'Internal links found', v: data.summary.linksFound, n: 'same-site links on the crawled pages' },
@@ -36,24 +39,27 @@
 	]);
 </script>
 
-<Explainer lead="Which of your pages should link to a page that is close to ranking better, and with which words.">
+<PageHeader tab="/links" title="Internal links" lead="Which of your pages should link to a page that is close to ranking better, and with which words.">
 	<p>The crawl fetches up to {data.maxPages} pages that Search Console showed in the last 90 days (most impressions first), four at a time, from this site only, and reads the main text and the links of each. It runs weekly, or when you press Crawl now. Free, with no credits.</p>
 	<p>Targets are pages with searches at positions 4 to 20, ordered by the extra clicks reaching position 3 would bring on this site's own click curve (the same estimate as Opportunities). For each, the crawled pages that mention one of its searches (whole words, any case; the exact phrase first, or all its main words close together) and do not link to it yet are listed, best first: the prize, how exact the mention is, and the linking page's own clicks and impressions.</p>
 	<p>The anchor is the words exactly as the page writes them. A link helps Google find a page and understand it; it does not guarantee the prize. JavaScript is not run, so a page that builds its text in the browser reads as empty.</p>
-</Explainer>
+	{#snippet meta()}
+		{#if running}<StatusPill tone="info" pulse>Crawling up to {data.maxPages} pages…</StatusPill>
+		{:else if data.crawl?.error}<StatusPill tone="bad" title={data.crawl.error}>last crawl failed</StatusPill>
+		{:else if data.crawl?.finishedAt}<span class="text-xs text-muted-foreground">Crawled {ago(data.crawl.finishedAt)}</span>
+		{:else}<StatusPill tone="muted">Not crawled yet</StatusPill>{/if}
+	{/snippet}
+	{#snippet actions()}
+		<form method="POST" action="?/crawl" use:enhance><button class="btn btn-primary btn-sm" disabled={running}>{#if running}<LoaderCircle class="size-3.5 animate-spin" />Crawling…{:else}<Network class="size-3.5" />Crawl now{/if}</button></form>
+	{/snippet}
+</PageHeader>
 
-<section class="card mb-4 p-4">
-	<div class="flex flex-wrap items-center gap-3">
-		<h2 class="font-medium">Internal links</h2>
-		<span class="text-xs text-muted-foreground">
-			{#if running}Crawling up to {data.maxPages} pages…{:else if data.crawl?.finishedAt}Crawled {ago(data.crawl.finishedAt)}{:else}Not crawled yet{/if}
-			{#if data.crawl?.error && !running} · {data.crawl.error}{/if}
-		</span>
-		<form method="POST" action="?/crawl" use:enhance class="ml-auto"><button class="btn btn-primary" disabled={running}>{running ? 'Crawling…' : 'Crawl now'}</button></form>
-	</div>
-	{#if form?.error}<p class="mt-2 text-sm text-bad">{form.error}</p>{/if}
-	{#if data.crawl?.finishedAt || data.summary.pagesCrawled}
-		<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+{#if form?.error}<p class="mb-3 text-sm text-bad">{form.error}</p>{/if}
+{#if data.crawl?.error && !running}<p class="mb-3 text-xs text-bad">{data.crawl.error}</p>{/if}
+{#if data.crawl?.finishedAt || data.summary.pagesCrawled}
+	<section class="card mb-4 p-4">
+		<h3 class="sr-only">Crawl summary</h3>
+		<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
 			{#each tiles as t}
 				<div class="rounded-lg border px-3 py-2" style="border-color:var(--border)">
 					<div class="text-xs text-muted-foreground">{t.l}</div>
@@ -62,8 +68,8 @@
 				</div>
 			{/each}
 		</div>
-	{/if}
-</section>
+	</section>
+{/if}
 
 {#if data.groups.length}
 	<ShowMore items={data.groups} limit={4} step={1} noun="pages to link to">
@@ -93,7 +99,7 @@
 									</td>
 									<td class="td pii align-top text-xs">{s.query}<div class="text-[11px] text-muted-foreground">position {s.position.toFixed(1)} · ≈ {fmtInt(Math.round(s.prize))} clicks</div></td>
 									<td class="td align-top text-right">
-										<form method="POST" action="?/done" use:enhance><input type="hidden" name="key" value={s.key} /><button class="btn btn-xs !px-2.5" title="Hide it: the link is in place (the next crawl will see it too)">Done</button></form>
+										<form method="POST" action="?/done" use:enhance><input type="hidden" name="key" value={s.key} /><button class="btn btn-xs !px-2.5" title="Hide it: the link is in place (the next crawl will see it too)"><Check class="size-3" />Done</button></form>
 									</td>
 								</tr>
 							{/each}
@@ -106,9 +112,11 @@
 	{/snippet}
 	</ShowMore>
 {:else if data.summary.pagesCrawled}
-	<div class="card p-6 text-center text-sm text-muted-foreground">No suggestions: none of the crawled pages mentions the searches of pages at positions 4 to 20 without already linking to them.</div>
+	<EmptyState icon={Link} tone="green" title="No suggestions" text="None of the crawled pages mentions the searches of pages at positions 4 to 20 without already linking to them." />
 {:else if !running}
-	<div class="card p-6 text-center text-sm text-muted-foreground">Nothing crawled yet. Press “Crawl now” to read up to {data.maxPages} of your pages.</div>
+	<EmptyState icon={Network} tone="amber" title="Nothing crawled yet." text="Press “Crawl now” to read up to {data.maxPages} of your pages.">
+		<form method="POST" action="?/crawl" use:enhance><button class="btn btn-primary btn-sm"><Network class="size-3.5" />Crawl now</button></form>
+	</EmptyState>
 {/if}
 
 {#if data.done.length}
@@ -117,7 +125,7 @@
 		<p class="mt-1 text-xs text-muted-foreground">The next crawl drops a suggestion for good once it sees the link.</p>
 		<ul class="mt-2 space-y-1">
 			{#each data.done as s (s.key)}
-				<li class="flex flex-wrap items-center gap-2 text-xs"><span class="pii min-w-0 flex-1 truncate">{path(s.source)} → {path(s.target)}: “{s.anchor}”</span><form method="POST" action="?/done" use:enhance><input type="hidden" name="key" value={s.key} /><input type="hidden" name="undo" value="1" /><button class="btn !h-6 !px-2 text-[11px]">Undo</button></form></li>
+				<li class="flex flex-wrap items-center gap-2 text-xs"><span class="pii min-w-0 flex-1 truncate">{path(s.source)} → {path(s.target)}: “{s.anchor}”</span><form method="POST" action="?/done" use:enhance><input type="hidden" name="key" value={s.key} /><input type="hidden" name="undo" value="1" /><button class="btn !h-6 !px-2 text-[11px]"><Undo2 class="size-3" />Undo</button></form></li>
 			{/each}
 		</ul>
 	</details>
@@ -125,7 +133,7 @@
 
 {#if data.orphans.length}
 	<section class="card mt-4 p-4">
-		<h2 class="font-medium">Pages nothing links to</h2>
+		<h3 class="flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><Unlink class="size-3.5" /></span>Pages nothing links to</h3>
 		<p class="mt-1 text-xs text-muted-foreground">They earn impressions, but none of the {fmtInt(data.summary.pagesCrawled)} crawled pages links to them. Link to them from a related page, or check they are meant to exist.</p>
 		<ShowMore items={data.orphans} limit={10} noun="pages">
 		{#snippet children(rows)}
@@ -134,7 +142,7 @@
 				<thead><tr><th class="th">Page</th><th class="th text-right">Impressions</th><th class="th text-right">Clicks</th><th class="th">Crawled</th></tr></thead>
 				<tbody>
 					{#each rows as o (o.page)}
-						<tr><td class="td pii max-w-96 truncate" title={o.page}>{shortUrl(o.page)}</td><td class="td tnum text-right">{fmtInt(o.impressions)}</td><td class="td tnum text-right">{fmtInt(o.clicks)}</td><td class="td text-xs text-muted-foreground">{o.crawled ? 'yes' : 'no'}</td></tr>
+						<tr><td class="td pii max-w-96 truncate" title={o.page}>{shortUrl(o.page)}</td><td class="td tnum cellbar text-right" style="--w:{o.impressions / maxOrphanImpr}">{fmtInt(o.impressions)}</td><td class="td tnum text-right">{fmtInt(o.clicks)}</td><td class="td text-xs text-muted-foreground">{o.crawled ? 'yes' : 'no'}</td></tr>
 					{/each}
 				</tbody>
 			</table>

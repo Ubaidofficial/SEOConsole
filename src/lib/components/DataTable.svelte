@@ -1,10 +1,11 @@
 <script lang="ts" generics="Row extends Record<string, any>">
-	import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Inbox, Search } from '@lucide/svelte';
+	import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Download, Inbox, Maximize2, Minimize2, Search } from '@lucide/svelte';
 	import { fmtDur, fmtInt, fmtMoney, fmtPct, fmtPos, fmtSigned } from '$lib/format';
 	import { privacy } from '$lib/privacy.svelte';
 	import { Tip } from '$lib/components/ui/tooltip';
 	import { COLUMN_HINT } from '$lib/explain';
 	import Sparkline from '$lib/components/Sparkline.svelte';
+	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
 
 	interface Col {
 		key: string;
@@ -26,6 +27,8 @@
 		groupColor?: string;
 		/** Row key holding this metric's change as a fraction: shown as a small coloured arrow and percent next to the value. */
 		deltaKey?: string;
+		/** A site column: the site's id for this row, to show its logo (or letter) before the name. */
+		siteId?: (row: Row) => number | null | undefined;
 		/** Text to show for a link column instead of the address (the link still goes to the address). */
 		display?: (row: Row) => string;
 	}
@@ -38,7 +41,9 @@
 		pageSize = 50,
 		onRowClick,
 		empty = 'Nothing to show for this period.',
-		filterable = true
+		filterable = true,
+		tools = true,
+		name = 'table'
 	}: {
 		rows: Row[];
 		cols: Col[];
@@ -48,7 +53,52 @@
 		onRowClick?: (row: Row) => void;
 		empty?: string;
 		filterable?: boolean;
+		/** The copy, download and full-screen buttons above the table. */
+		tools?: boolean;
+		/** The file name of a download, without .csv. */
+		name?: string;
 	} = $props();
+
+	/**
+	 * Full screen: the same table over the page, with more rows per page and "/" to jump to the filter (as Plausible's details view).
+	 * Copy puts the rows as they are sorted and filtered on the clipboard, tab-separated so they paste into a spreadsheet as columns;
+	 * Download saves the same rows as CSV. Both use the raw numbers, not the formatted text.
+	 */
+	let big = $state(false);
+	let copied = $state(false);
+	let filterBox = $state<HTMLInputElement>();
+	const flat = (c: Col, v: unknown) => (c.type === 'spark' ? (Array.isArray(v) ? v.reduce((a: number, x) => a + (Number(x) || 0), 0) : '') : v ?? '');
+	function lines(sep: string) {
+		const esc = (v: unknown) => {
+			const t = String(v ?? '');
+			return sep === ',' && /[",\n]/.test(t) ? `"${t.replaceAll('"', '""')}"` : t.replace(/[\t\n]/g, ' ');
+		};
+		return [cols.map((c) => esc(c.label)).join(sep), ...sorted.map((r) => cols.map((c) => esc(flat(c, r[c.key]))).join(sep))].join('\n');
+	}
+	async function copy() {
+		try {
+			await navigator.clipboard.writeText(lines('\t'));
+			copied = true;
+			setTimeout(() => (copied = false), 1500);
+		} catch {
+			/* the browser refused the clipboard (not a secure page, or no permission): nothing to undo */
+		}
+	}
+	function download() {
+		const url = URL.createObjectURL(new Blob([lines(',')], { type: 'text/csv;charset=utf-8' }));
+		const a = Object.assign(document.createElement('a'), { href: url, download: `${name.replace(/[^\w.-]+/g, '-')}.csv` });
+		a.click();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+	function keys(e: KeyboardEvent) {
+		if (!big) return;
+		if (e.key === 'Escape') big = false;
+		else if (e.key === '/' && document.activeElement !== filterBox && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+			e.preventDefault();
+			filterBox?.focus();
+		}
+	}
+	const size = $derived(big ? Math.max(pageSize, 200) : pageSize);
 
 	let page = $state(0);
 	let filter = $state('');
@@ -67,13 +117,14 @@
 			return sortDir === 'asc' ? r : -r;
 		})
 	);
-	const pages = $derived(Math.max(1, Math.ceil(sorted.length / pageSize)));
-	const view = $derived(sorted.slice(page * pageSize, page * pageSize + pageSize));
+	const pages = $derived(Math.max(1, Math.ceil(sorted.length / size)));
+	const view = $derived(sorted.slice(page * size, page * size + size));
 	const maxOf = $derived(Object.fromEntries(cols.filter((c) => c.bar).map((c) => [c.key, Math.max(1, ...rows.map((r) => Number(r[c.key]) || 0))])));
 
 	$effect(() => {
 		filter;
 		sortKey;
+		big;
 		page = 0;
 	});
 
@@ -120,16 +171,28 @@
 	};
 </script>
 
-{#if filterable && rows.length > 15}
-	<div class="mb-3 flex items-center gap-3">
-		<div class="relative">
-			<Search class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-			<input class="input w-72 pl-8" placeholder="Filter…" bind:value={filter} aria-label="Filter rows" />
-		</div>
+<svelte:window onkeydown={keys} />
+{#if big}<div class="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" aria-hidden="true" onclick={() => (big = false)}></div>{/if}
+<div class={big ? 'fixed inset-3 z-50 flex flex-col overflow-hidden rounded-2xl border bg-background p-4 shadow-2xl sm:inset-8' : ''} role={big ? 'dialog' : undefined} aria-modal={big ? 'true' : undefined} aria-label={big ? 'Full table' : undefined}>
+{#if (filterable && (rows.length > 15 || big)) || (tools && rows.length)}
+	<div class="mb-3 flex flex-wrap items-center gap-3">
+		{#if filterable && (rows.length > 15 || big)}
+			<div class="relative">
+				<Search class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+				<input class="input w-72 max-w-full pl-8" placeholder={big ? 'Filter… (press / )' : 'Filter…'} bind:value={filter} bind:this={filterBox} aria-label="Filter rows" />
+			</div>
+		{/if}
 		{#if filter}<span class="text-xs text-muted-foreground tnum">{fmtInt(sorted.length)} of {fmtInt(rows.length)}</span>{/if}
+		{#if tools && rows.length}
+			<div class="ml-auto flex items-center gap-1">
+				<button type="button" class="btn btn-ghost btn-xs" onclick={copy} title="Copy these rows, to paste into a spreadsheet" aria-label="Copy rows">{#if copied}<Check class="size-3.5 text-good" />{:else}<Copy class="size-3.5" />{/if}</button>
+				<button type="button" class="btn btn-ghost btn-xs" onclick={download} title="Download these rows as CSV" aria-label="Download CSV"><Download class="size-3.5" /></button>
+				<button type="button" class="btn btn-ghost btn-xs" onclick={() => (big = !big)} title={big ? 'Close (Esc)' : 'Open full screen'} aria-label={big ? 'Close full screen' : 'Open full screen'}>{#if big}<Minimize2 class="size-3.5" />{:else}<Maximize2 class="size-3.5" />{/if}</button>
+			</div>
+		{/if}
 	</div>
 {/if}
-<div class="overflow-x-auto rounded-xl border bg-card shadow-xs">
+<div class="overflow-x-auto rounded-xl border bg-card shadow-xs {big ? 'min-h-0 flex-1 overflow-y-auto' : ''}">
 	<table class="w-full border-collapse">
 		<thead class="bg-muted/40">
 			{#if grouped}
@@ -170,6 +233,8 @@
 									<span>{cell(c, row[c.key])}</span>
 									<span class="w-12 text-left text-[11px]" class:text-good={(row[c.deltaKey] ?? 0) > 0.005} class:text-bad={(row[c.deltaKey] ?? 0) < -0.005} class:text-muted-foreground={Math.abs(row[c.deltaKey] ?? 0) <= 0.005}>{deltaText(row[c.deltaKey])}</span>
 								</span>
+							{:else if c.siteId}
+								<span class="flex max-w-[34rem] items-center gap-2"><SiteAvatar name={String(row[c.key] ?? '')} siteId={c.siteId(row) ?? null} class="!size-5 !rounded-md !text-[10px]" /><span class="truncate" title={tip(c, row, String(row[c.key] ?? ''))}>{cell(c, row[c.key])}</span></span>
 							{:else}
 								<span class="block max-w-[34rem] truncate" title={tip(c, row, String(row[c.key] ?? ''))}>{cell(c, row[c.key])}</span>
 							{/if}
@@ -193,3 +258,4 @@
 		<button class="btn btn-sm !px-2" disabled={page >= pages - 1} onclick={() => page++} aria-label="Next page"><ChevronRight class="size-4" /></button>
 	</div>
 {/if}
+</div>

@@ -12,6 +12,10 @@ export const MAX_DAYS = 1100;
 /** "24h" is the newest day of data, not the last 24 hours: Search Console reports whole days and runs about two days behind. */
 export const periodLabel = (d: number) => (d === 1 ? '24h' : d === 480 ? '16m' : d === 180 ? '6m' : d === 90 ? '3m' : `${d}d`);
 
+/** One-key shortcuts for the period picker (as Plausible's date menu): pressed anywhere outside a text field, with no modifier. */
+export const PERIOD_KEYS: Record<string, number> = { d: 1, t: 3, w: 7, m: 28, q: 90, h: 180, y: 480 };
+export const periodKey = (d: number) => Object.entries(PERIOD_KEYS).find(([, n]) => n === d)?.[0]?.toUpperCase() ?? '';
+
 const DAY = 86_400_000;
 const utc = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
 export const isIsoDay = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(utc(s)).toISOString().slice(0, 10) === s;

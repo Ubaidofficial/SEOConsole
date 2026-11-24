@@ -12,6 +12,8 @@
 	import AuthorityBadges from '$lib/components/AuthorityBadges.svelte';
 	import AuthorityCredit from '$lib/components/AuthorityCredit.svelte';
 	import { fmtInt, fmtPct, fmtPos, fmtStat, ago } from '$lib/format';
+	import { TAB_ICON, TAB_TONE } from '$lib/icons';
+	import InfoTip from '$lib/components/InfoTip.svelte';
 
 	let { data, children } = $props();
 	const syncing = $derived(data.site.syncStatus === 'running' || data.site.syncStatus === 'queued');
@@ -87,7 +89,7 @@
 		{#if data.site.authority.dr || data.site.authority.da}<div class="text-[11px] text-muted-foreground"><AuthorityCredit dr={!!data.site.authority.dr} da={!!data.site.authority.da} /></div>{/if}
 	</div>
 	<div class="ml-auto flex flex-wrap items-center gap-3">
-		<PeriodPicker days={data.days} latest={data.latest} />
+		<span class="inline-flex items-center gap-1"><PeriodPicker days={data.days} latest={data.latest} /><InfoTip label="Data delay" text="Search Console reports whole days and runs about two days behind, so the newest day here is {data.latest ?? 'the newest it has'}. GA4 and Bing can be a day fresher." /></span>
 		{#if data.openseo?.url}<a class="btn" href={data.openseo.url} target="_blank" rel="noreferrer noopener" title={privacy.on ? undefined : `OpenSEO project: ${data.openseo.name}`}>OpenSEO ↗</a>{/if}
 		<a class="btn" href="/chat?draft={encodeURIComponent(`About ${data.site.name}: `)}" title="Open the chat with this site named in the question"><Sparkles class="size-3.5" />Ask about this site</a>
 		<!-- one glance at whether the numbers are current: synced in the last 7 hours, behind, syncing, or failed -->
@@ -105,7 +107,7 @@
 		<div class="card px-3 py-2" title={k.title}>
 			<div class="flex items-center gap-1.5 text-xs text-muted-foreground">{#if k.color}<span class="size-2 shrink-0 rounded-full" style="background:{k.color}" aria-hidden="true"></span>{/if}{k.l}</div>
 			<div class="tnum text-xl font-semibold" title={k.exact}>{k.v}</div>
-			<Delta value={k.d} invert={k.inv} mode={k.pos ? 'pos' : 'pct'} why={k.why ?? (data.kpis.comparable ? 'Too little data for a reliable comparison' : 'Previous period still downloading')} />{#if k.d != null && k.pos}<span class="ml-1 text-xs text-muted-foreground">places</span>{/if}
+			<Delta pill value={k.d} invert={k.inv} mode={k.pos ? 'pos' : 'pct'} why={k.why ?? (data.kpis.comparable ? 'Too little data for a reliable comparison' : 'Previous period still downloading')} />{#if k.d != null && k.pos}<span class="ml-1 text-xs text-muted-foreground">places</span>{/if}
 			{#if k.sub}<div class="tnum text-[11px] text-muted-foreground">{k.sub}</div>{/if}
 		</div>
 	{/each}
@@ -113,7 +115,7 @@
 {/if}
 
 <!-- A short row of the tabs people use most; the rest are one click away under More, grouped, each with a line on what it is for. -->
-{#snippet tabLogo(t: string)}{#if SRC_LOGO[t]}<img src="/logos/{SRC_LOGO[t]}" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />{/if}{/snippet}
+{#snippet tabLogo(t: string)}{#if SRC_LOGO[t]}<img src="/logos/{SRC_LOGO[t]}" alt="" width="14" height="14" class="mr-1.5 inline-block size-3.5 align-[-2px] object-contain" />{:else if TAB_ICON[t]}{@const I = TAB_ICON[t]}<I class="mr-1.5 inline-block size-3.5 align-[-2px] opacity-75" aria-hidden="true" />{/if}{/snippet}
 {#snippet tabBadges(t: string)}{#if t === '/actions' && data.actionBadge.open}<span class="ml-1.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.actionBadge.blocking ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.actionBadge.open} open{data.actionBadge.blocking ? ', ' + data.actionBadge.blocking + ' blocking' : ''}">{data.actionBadge.open}</span>{/if}{#if SOURCE_LINK[t]}{#if unlinked(t)}<span class="ml-1 text-muted-foreground" title="Not connected: open the tab to connect it">○</span>{:else}<span class="ml-1 text-good" title="connected">●</span>{/if}{/if}{/snippet}
 {#snippet tab(t: string)}
 	{@const [, label, about] = tabOf(t)}
@@ -134,7 +136,7 @@
 				{@const rest = paths.filter((t) => !inRow.includes(t))}
 				{#if rest.length}
 					<div role="group" aria-label={caption}>
-						<div class="mb-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{caption}</div>
+						<div class="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase"><span class="size-1.5 rounded-full tone-{TAB_TONE[caption]}" style="background:var(--tone)" aria-hidden="true"></span>{caption}</div>
 						<ul class="space-y-0.5">
 							{#each rest as t}
 								{@const [, label, about] = tabOf(t)}

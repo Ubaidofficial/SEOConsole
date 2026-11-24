@@ -20,6 +20,7 @@
 	import { isBranded } from '$lib/analytics';
 	import { fmtCompact } from '$lib/format';
 
+	import { Activity, Blocks, Bot, CalendarCheck, ChartLine, FolderTree, Globe, History, MousePointerClick, Smartphone, Sparkles, Tag, Target } from '@lucide/svelte';
 	let { data, form } = $props();
 	const markers = $derived([
 		...data.annotations.map((a) => ({ date: a.date, label: `${a.title}`, color: a.kind === 'experiment' ? 'var(--c-impr)' : 'var(--warn)' }))
@@ -77,7 +78,7 @@
 <section class="mb-8" aria-labelledby="plan-h">
 	<div class="mb-3 flex flex-wrap items-end gap-x-4 gap-y-1">
 		<div>
-			<h2 id="plan-h" class="text-lg font-semibold tracking-tight">Your next two weeks</h2>
+			<h2 id="plan-h" class="text-lg font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><CalendarCheck class="size-3.5" /></span>Your next two weeks</h2>
 			<p class="text-sm text-muted-foreground">The most valuable things to do on this site now, picked from {data.plan.total} open findings. Tick one off when it is done.</p>
 		</div>
 		<div class="ml-auto flex gap-2 text-sm">
@@ -111,7 +112,7 @@
 {#if chartView === 'all' && hasAll && data.allTraffic}
 <section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs">
 	<div class="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-		<h2 class="text-base font-semibold tracking-tight">All traffic</h2>
+		<h2 class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-violet mr-1.5 align-[-6px]" aria-hidden="true"><Blocks class="size-3.5" /></span>All traffic</h2>
 		<p class="text-xs text-muted-foreground" title="Each source keeps its own newest days, so a line can stop a day early. GA4 sessions already include most Google clicks: the lines overlap, they do not add up.">One scale · {data.allTraffic.chart.dates[0]} → {data.allTraffic.chart.dates.at(-1)} · dashed = days still being revised</p>
 	</div>
 	<SourceSpark series={allSeries} height={150} />
@@ -124,7 +125,7 @@
 {:else}
 <section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs">
 	<div class="mb-3 flex items-baseline justify-between gap-3">
-		<h2 class="text-base font-semibold tracking-tight">{data.allTraffic ? 'Search Console' : 'Traffic'}</h2>
+		<h2 class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><ChartLine class="size-3.5" /></span>{data.allTraffic ? 'Search Console' : 'Traffic'}</h2>
 		<p class="text-xs text-muted-foreground">Dashed line = {data.compare.mode === 'year' ? 'the same weekdays last year' : 'the period before'} · G = a Google update · dots = your change log · shaded = unusual days</p>
 	</div>
 	<nav class="seg mb-3" aria-label="Compare with">
@@ -138,13 +139,13 @@
 	<div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
 	<section class="rounded-2xl border bg-card p-5 shadow-xs lg:col-span-2" aria-labelledby="rank-h">
 		<div class="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-			<h2 id="rank-h" class="text-base font-semibold tracking-tight">Where your searches rank</h2>
+			<h2 id="rank-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><Target class="size-3.5" /></span>Where your searches rank</h2>
 			<p class="text-xs text-muted-foreground">Searches with at least a few impressions this period, by average position{data.positions.prev ? '; the change is against the previous period' : ''}.</p>
 		</div>
 		<RankMix now={data.positions.now} prev={data.positions.prev} weeks={data.positions.weeks} hrefFor={(i) => `/sites/${page.params.id}/queries?days=${data.days}&pos=${POSITION_BUCKETS[i].key}`} />
 	</section>
 	<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="brand-h">
-		<h2 id="brand-h" class="mb-1 text-base font-semibold tracking-tight">Brand vs non-brand</h2>
+		<h2 id="brand-h" class="mb-1 text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><Tag class="size-3.5" /></span>Brand vs non-brand</h2>
 		{#if data.brand}
 			{@const b = data.brand}
 			{@const total = b.now.brand + b.now.other}
@@ -174,13 +175,13 @@
 	{@const nl = P.newLost}
 	<div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
 		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="new-h">
-			<div class="mb-2 flex flex-wrap items-baseline gap-x-3"><h2 id="new-h" class="text-base font-semibold tracking-tight">New searches</h2><span class="text-xs text-muted-foreground">shown this period, not in the one before</span></div>
+			<div class="mb-2 flex flex-wrap items-baseline gap-x-3"><h2 id="new-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-green mr-1.5 align-[-6px]" aria-hidden="true"><Sparkles class="size-3.5" /></span>New searches</h2><span class="text-xs text-muted-foreground">shown this period, not in the one before</span></div>
 			<div class="mb-3 flex items-baseline gap-4"><span class="tnum text-3xl font-semibold tracking-tight {nl.added.count ? 'text-good' : ''}">{fmtInt(nl.added.count)}</span><span class="tnum text-xs text-muted-foreground"><b class="text-foreground">{nl.added.top10}</b> of them in the top 10</span></div>
 			{#if nl.added.count}<DayBars days={nl.added.byDay.days} series={[{ label: 'New searches', color: 'var(--good)', values: nl.added.byDay.counts }]} height={64} />{:else}<p class="text-sm text-muted-foreground">Every search shown this period was shown in the one before too.</p>{/if}
 			{#if nl.added.top.length}<ul class="mt-3 space-y-1 text-[13px]">{#each nl.added.top as r}<li class="flex gap-3"><span class="min-w-0 flex-1 truncate {branded(r.query) ? 'pii' : ''}">{r.query}</span><span class="tnum text-xs text-muted-foreground">pos {fmtPos(r.position)} · {fmtCompact(r.impressions)} impr.</span></li>{/each}</ul>{/if}
 		</section>
 		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="lost-h">
-			<div class="mb-2 flex flex-wrap items-baseline gap-x-3"><h2 id="lost-h" class="text-base font-semibold tracking-tight">Lost searches</h2><span class="text-xs text-muted-foreground">shown in the period before, not in this one</span></div>
+			<div class="mb-2 flex flex-wrap items-baseline gap-x-3"><h2 id="lost-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-red mr-1.5 align-[-6px]" aria-hidden="true"><TrendingDown class="size-3.5" /></span>Lost searches</h2><span class="text-xs text-muted-foreground">shown in the period before, not in this one</span></div>
 			<div class="mb-3 flex items-baseline gap-4"><span class="tnum text-3xl font-semibold tracking-tight {nl.lost.count ? 'text-bad' : ''}">{fmtInt(nl.lost.count)}</span><span class="tnum text-xs text-muted-foreground"><b class="text-foreground">{nl.lost.top10}</b> had been in the top 10 · {fmtInt(nl.lost.clicks)} clicks before</span></div>
 			{#if nl.lost.count}<DayBars days={nl.lost.byDay.days} series={[{ label: 'Last seen', color: 'var(--bad)', values: nl.lost.byDay.counts }]} height={64} />{:else}<p class="text-sm text-muted-foreground">No search from the period before has disappeared.</p>{/if}
 			{#if nl.lost.top.length}<ul class="mt-3 space-y-1 text-[13px]">{#each nl.lost.top as r}<li class="flex gap-3"><span class="min-w-0 flex-1 truncate {branded(r.query) ? 'pii' : ''}">{r.query}</span><span class="tnum text-xs text-muted-foreground">was pos {fmtPos(r.position)} · {fmtInt(r.clicks)} clicks</span></li>{/each}</ul>{/if}
@@ -190,14 +191,14 @@
 
 <div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
 	<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="dev-h">
-		<h2 id="dev-h" class="mb-3 text-base font-semibold tracking-tight">Devices</h2>
+		<h2 id="dev-h" class="mb-3 text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><Smartphone class="size-3.5" /></span>Devices</h2>
 		{#if P.devices.length}
 			{@const total = P.devices.reduce((a, d) => a + d.clicks, 0)}
 			<Donut center={fmtCompact(total)} sub="clicks" parts={P.devices.map((d, i) => ({ label: d.device.toLowerCase(), value: d.clicks, color: ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)'][i % 3], note: d.prev ? fmtSigned(d.clicks / d.prev - 1, 0) : undefined }))} />
 		{:else}<p class="text-sm text-muted-foreground">No data in this period yet.</p>{/if}
 	</section>
 	<section class="rounded-2xl border bg-card p-5 shadow-xs lg:col-span-2" aria-labelledby="bkt-h">
-		<div class="mb-3 flex flex-wrap items-baseline gap-x-3"><h2 id="bkt-h" class="text-base font-semibold tracking-tight"><a class="hover:underline" href="/sites/{page.params.id}/groups?view=buckets&days={data.days}">Keyword buckets</a></h2>{#if P.buckets.count}<span class="text-xs text-muted-foreground">{P.buckets.count} bucket{P.buckets.count === 1 ? '' : 's'}</span>{/if}</div>
+		<div class="mb-3 flex flex-wrap items-baseline gap-x-3"><h2 id="bkt-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><FolderTree class="size-3.5" /></span><a class="hover:underline" href="/sites/{page.params.id}/groups?view=buckets&days={data.days}">Keyword buckets</a></h2>{#if P.buckets.count}<span class="text-xs text-muted-foreground">{P.buckets.count} bucket{P.buckets.count === 1 ? '' : 's'}</span>{/if}</div>
 		{#if P.buckets.rows.length}
 			{@const bmax = Math.max(1, ...P.buckets.rows.map((r) => r.clicks))}
 			<ul class="space-y-2.5">
@@ -217,7 +218,7 @@
 
 
 <section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="geo-h">
-	<div class="mb-3 flex flex-wrap items-baseline gap-x-3"><h2 id="geo-h" class="text-base font-semibold tracking-tight">Countries</h2><span class="text-xs text-muted-foreground">Google clicks by searcher's country, this period</span></div>
+	<div class="mb-3 flex flex-wrap items-baseline gap-x-3"><h2 id="geo-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><Globe class="size-3.5" /></span>Countries</h2><span class="text-xs text-muted-foreground">Google clicks by searcher's country, this period</span></div>
 	{#if P.countries.length}<CountryMap rows={P.countries} />{:else}<p class="text-sm text-muted-foreground">No data in this period yet.</p>{/if}
 </section>
 
@@ -226,7 +227,7 @@
 	{@const AI_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--ord-3)', 'var(--ord-4)']}
 	<div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
 		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="ai-h">
-			<div class="mb-2 flex flex-wrap items-baseline gap-x-2"><h2 id="ai-h" class="text-base font-semibold tracking-tight">Visits from AI assistants</h2><img src="/logos/ga4.svg" alt="" width="14" height="14" class="size-3.5" /></div>
+			<div class="mb-2 flex flex-wrap items-baseline gap-x-2"><h2 id="ai-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-violet mr-1.5 align-[-6px]" aria-hidden="true"><Bot class="size-3.5" /></span>Visits from AI assistants</h2><img src="/logos/ga4.svg" alt="" width="14" height="14" class="size-3.5" /></div>
 			{#if g.ai && g.ai.total}
 				<div class="mb-3 flex items-baseline gap-2"><span class="tnum text-3xl font-semibold tracking-tight">{fmtInt(g.ai.total)}</span><span class="text-xs text-muted-foreground">sessions</span>{#if g.ai.prev}<span class="tnum text-xs font-medium {g.ai.total >= g.ai.prev ? 'text-good' : 'text-bad'}">{fmtSigned(g.ai.total / g.ai.prev - 1, 0)}</span>{/if}</div>
 				<DayBars days={g.ai.days} series={g.ai.assistants.map((a, i) => ({ label: a.name, color: AI_COLORS[i % AI_COLORS.length], values: a.values }))} height={64} unit=" sessions" />
@@ -234,14 +235,14 @@
 			{:else}<p class="text-sm text-muted-foreground">GA4 recorded no sessions from ChatGPT, Perplexity, Gemini, Claude or Copilot in this period.</p>{/if}
 		</section>
 		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="ch-h">
-			<div class="mb-3 flex flex-wrap items-baseline gap-x-2"><h2 id="ch-h" class="text-base font-semibold tracking-tight"><a class="hover:underline" href="/sites/{page.params.id}/dashboard?days={data.days}">Traffic by channel</a></h2><span class="tnum text-xs text-muted-foreground">{fmtCompact(g.sessions)} sessions</span></div>
+			<div class="mb-3 flex flex-wrap items-baseline gap-x-2"><h2 id="ch-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-violet mr-1.5 align-[-6px]" aria-hidden="true"><Blocks class="size-3.5" /></span><a class="hover:underline" href="/sites/{page.params.id}/dashboard?days={data.days}">Traffic by channel</a></h2><span class="tnum text-xs text-muted-foreground">{fmtCompact(g.sessions)} sessions</span></div>
 			{#if g.channels.length}
 				<SegBar title="Sessions by channel" format={(v) => `${fmtInt(v)} sessions`} legend={false} parts={g.channels.map((c, i) => ({ label: c.key, value: c.sessions, color: ['var(--ord-1)', 'var(--ord-2)', 'var(--ord-3)', 'var(--ord-4)', 'var(--chart-2)', 'var(--chart-3)'][i % 6] }))} />
 				<ul class="mt-3 space-y-1.5 text-[13px]">{#each g.channels as c, i}<li class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-sm" style="background:{['var(--ord-1)', 'var(--ord-2)', 'var(--ord-3)', 'var(--ord-4)', 'var(--chart-2)', 'var(--chart-3)'][i % 6]}"></span><span class="min-w-0 flex-1 truncate">{c.key}</span><span class="tnum text-xs text-muted-foreground">{Math.round(c.share * 100)}%</span><span class="tnum w-12 text-right text-xs {c.sessionsDelta == null ? 'text-muted-foreground' : c.sessionsDelta >= 0 ? 'text-good' : 'text-bad'}">{fmtSigned(c.sessionsDelta, 0)}</span></li>{/each}</ul>
 			{:else}<p class="text-sm text-muted-foreground">No sessions in this period.</p>{/if}
 		</section>
 		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="ke-h">
-			<h2 id="ke-h" class="mb-3 text-base font-semibold tracking-tight"><a class="hover:underline" href="/sites/{page.params.id}/analytics?days={data.days}">Key events</a></h2>
+			<h2 id="ke-h" class="mb-3 text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-violet mr-1.5 align-[-6px]" aria-hidden="true"><MousePointerClick class="size-3.5" /></span><a class="hover:underline" href="/sites/{page.params.id}/analytics?days={data.days}">Key events</a></h2>
 			{#if g.keyEvents && g.keyEvents.status === 'ok' && g.keyEvents.events.length}
 				{@const ke = g.keyEvents}
 				{@const kmax = Math.max(1, ...ke.events.map((e) => e.keyEvents))}
@@ -256,7 +257,7 @@
 
 <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
 	<section>
-		<h2 class="mb-2 text-base font-semibold tracking-tight">Anomalies <span class="text-sm font-normal text-muted-foreground">in this period</span></h2>
+		<h2 class="mb-2 text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-amber mr-1.5 align-[-6px]" aria-hidden="true"><Activity class="size-3.5" /></span>Anomalies <span class="text-sm font-normal text-muted-foreground">in this period</span></h2>
 		<div class="overflow-hidden rounded-xl border bg-card shadow-xs">
 			{#each data.anomalies as a}
 				<div class="flex items-center gap-3 border-b px-4 py-3 last:border-b-0">
@@ -279,7 +280,7 @@
 	</section>
 
 	<section>
-		<div class="mb-2 flex items-center gap-2"><h2 class="text-base font-semibold tracking-tight">Change log</h2>
+		<div class="mb-2 flex items-center gap-2"><h2 class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-gray mr-1.5 align-[-6px]" aria-hidden="true"><History class="size-3.5" /></span>Change log</h2>
 				<form method="POST" action="?/changelogAuto" use:enhance class="ml-auto"><input type="hidden" name="on" value={data.changelogAuto ? '0' : '1'} /><button class="btn btn-xs {data.changelogAuto ? '' : 'btn-ghost'}" aria-pressed={data.changelogAuto} title="robots.txt changes, new Tag Manager versions, and pages appearing in or leaving the sitemaps are logged here by the app ('detected'). Delete any you do not want: a deleted one does not come back.">Detected changes: {data.changelogAuto ? 'on' : 'off'}</button></form>
 				<details class="group" bind:open={logOpen}><summary class="btn btn-sm cursor-pointer list-none [&::-webkit-details-marker]:hidden"><Plus class="size-3.5" />Log a change</summary></details></div>
 				{#if logOpen}

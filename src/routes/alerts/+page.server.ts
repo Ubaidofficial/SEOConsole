@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { closeAlerts, listAlerts, reopenAlert, runAlertRules } from '$lib/server/alerts';
+import { alertTrends, closeAlerts, listAlerts, reopenAlert, runAlertRules } from '$lib/server/alerts';
 import { requireRole } from '$lib/server/roles';
 import { config } from '$lib/server/config';
 
@@ -12,7 +12,7 @@ export const load: PageServerLoad = ({ locals, url }) => {
 	const alerts = listAlerts({ siteIds: scope, status: show, siteId: site, limit: 300 });
 	const all = listAlerts({ siteIds: scope, status: 'all', limit: 2000 });
 	const sites = [...new Map(all.map((a) => [a.siteId, a.site])).entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-	return { alerts, show, site: site ?? null, sites, counts: { open: all.filter((a) => a.status === 'open').length, closed: all.filter((a) => a.status !== 'open').length } };
+	return { alerts, trends: alertTrends(alerts), show, site: site ?? null, sites, counts: { open: all.filter((a) => a.status === 'open').length, closed: all.filter((a) => a.status !== 'open').length } };
 };
 
 const ids = async (request: Request) => (await request.formData()).getAll('id').map(Number).filter((n) => n > 0);

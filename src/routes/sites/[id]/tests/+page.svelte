@@ -1,5 +1,8 @@
 <script lang="ts">
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { FlaskConical, Plus, X } from '@lucide/svelte';
 	import { enhance } from '$app/forms';
 	import { ConfirmButton } from '$lib/components/ui/confirm';
 	import LineChart from '$lib/components/LineChart.svelte';
@@ -19,15 +22,24 @@
 	};
 	const aiVerdictText: Record<string, [string, string]> = { ...verdictText, 'too-little-ai-traffic': ['Too little AI traffic to tell', 'text-warn'] };
 	const perDay = (v: number) => (v >= 10 ? String(Math.round(v)) : v.toFixed(1));
+	/** The verdict as a pill on each test card, so the list reads at a glance (as SEOTesting's "Finished" and SEO Gets' "Change positive"). */
+	const TONE: Record<string, 'good' | 'bad' | 'muted' | 'warn'> = { positive: 'good', negative: 'bad', inconclusive: 'muted', 'too-little-data': 'warn', 'estimate-only': 'warn', 'too-little-ai-traffic': 'warn' };
+	const verdictOf = (t: (typeof data.tests)[number]) => (t.outcome ? (t.metric === 'ai_sessions' ? (t.outcome.ai?.verdict ?? 'too-little-data') : t.outcome.clicks.verdict) : null);
+	const tally = $derived(data.tests.reduce((m, t) => { const v = verdictOf(t); if (v) m[v] = (m[v] ?? 0) + 1; return m; }, {} as Record<string, number>));
+	let adding = $state(false);
+	const showForm = $derived(adding || data.tests.length === 0);
 </script>
 
-<Explainer lead="Did a change move the pages it touched? Each test compares them with control pages over the same days.">
+<PageHeader tab="/tests" title="Tests" lead="Did a change move the pages it touched? Each test compares them with control pages over the same days.">
+	{#snippet meta()}{#if data.tests.length}<span class="text-xs text-muted-foreground">{data.tests.length} test{data.tests.length === 1 ? '' : 's'}</span>{#each Object.entries(tally) as [v, n]}<StatusPill tone={TONE[v] ?? 'muted'}>{n} {aiVerdictText[v]?.[0].toLowerCase() ?? v}</StatusPill>{/each}{/if}{/snippet}
+	{#snippet actions()}{#if data.tests.length}<button type="button" class="btn btn-primary btn-sm" aria-expanded={showForm} onclick={() => (adding = !adding)}>{#if adding}<X class="size-3.5" />Close{:else}<Plus class="size-3.5" />New test{/if}</button>{/if}{/snippet}
 	<p>A test can be measured on search clicks, or on visits from AI assistants (an LLM test: ChatGPT, Perplexity, Gemini, Claude and Copilot sessions from GA4), for changes such as rewriting pages for AI answers or adding FAQs and schema. GA4 only sees assistants that send a referrer; visits from the rest land in Direct and are not counted.</p>
 	<p>It is observational, not randomised: a significant result means “unlikely to be noise given the control”, not proof that the change caused it. Traffic drifts on its own, so the noise level is measured on this site's own earlier windows of the same length; that takes at least four windows of history before the change (112 days for 28-day windows, 56 for 14-day ones). With less, you get an estimate and no verdict. Real changes of around 40% are detectable on steady sites; on very drifty traffic only larger ones are.</p>
-</Explainer>
+</PageHeader>
 
+{#if showForm}
 <section class="card mb-5 p-4">
-	<h2 class="mb-2 font-medium">New test</h2>
+	<h3 class="mb-2 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><FlaskConical class="size-3.5" /></span>New test</h3>
 	<form method="POST" action="?/create" use:enhance class="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
 		<input class="input" name="name" aria-label="Name" placeholder="Name, e.g. New titles on /guides/" required />
 		<select class="input" name="kind" aria-label="Kind of test" bind:value={kind}>{#each Object.entries(kinds) as [k, l]}<option value={k}>{l}</option>{/each}</select>
@@ -58,19 +70,22 @@
 			{#if form?.ok}<span class="ml-3 text-sm text-good">{form.ok}</span>{/if}{#if form?.error}<span class="ml-3 text-sm text-bad">{form.error}</span>{/if}</div>
 	</form>
 </section>
+{/if}
 
 {#each data.tests as t (t.id)}
 	{#if !t.outcome}
-		<article class="card mb-4 p-4"><div class="flex items-center gap-2"><h3 class="font-medium">{t.name}</h3><span class="text-xs text-bad">Could not be evaluated: {t.error}</span>
+		<article class="card mb-4 p-4"><div class="flex items-center gap-2"><span class="ibadge ibadge-sm tone-red" aria-hidden="true"><FlaskConical class="size-3.5" /></span><h3 class="font-medium">{t.name}</h3><StatusPill tone="bad">could not be evaluated</StatusPill><span class="text-xs text-bad">{t.error}</span>
 			<form method="POST" action="?/remove" use:enhance class="ml-auto"><input type="hidden" name="id" value={t.id} /><ConfirmButton title="Delete this test?" description="Only the test definition is removed; your Search Console data is untouched." confirmLabel="Delete test">Delete</ConfirmButton></form></div></article>
 	{:else}
 	{@const o = t.outcome}
+	{@const tv = verdictOf(t) ?? 'too-little-data'}
 	{@const v = verdictText[o.clicks.verdict]}
 	{@const cv = o.conversions}
 	{@const ai = t.metric === 'ai_sessions' ? o.ai : null}
 	<article class="rise card mb-4 p-4">
 		<div class="mb-2 flex flex-wrap items-center gap-2">
-			<h3 class="font-medium">{t.name}</h3><span class="chip">{kinds[t.kind]}</span>{#if t.metric === 'ai_sessions'}<span class="chip">LLM test{t.assistant ? `: ${t.assistant}` : ''}</span>{/if}{#if t.fromChangeLog}<span class="chip">from change log</span>{/if}
+			<span class="ibadge ibadge-sm tone-{TONE[tv] === 'good' ? 'green' : TONE[tv] === 'bad' ? 'red' : TONE[tv] === 'warn' ? 'amber' : 'gray'}" aria-hidden="true"><FlaskConical class="size-3.5" /></span>
+			<h3 class="font-medium">{t.name}</h3><StatusPill tone={TONE[tv] ?? 'muted'}>{aiVerdictText[tv]?.[0] ?? tv}</StatusPill><span class="chip">{kinds[t.kind]}</span>{#if t.metric === 'ai_sessions'}<span class="chip">LLM test{t.assistant ? `: ${t.assistant}` : ''}</span>{/if}{#if t.fromChangeLog}<span class="chip">from change log</span>{/if}
 			<span class="text-xs text-muted-foreground">change on {t.startDate} · {o.postDays} day{o.postDays === 1 ? '' : 's'} of data after it · {ai ? ai.treatmentPages : o.treatmentPages} test pages vs {ai ? ai.controlPages : o.controlPages} control pages{t.restControl || ai?.controlFallback ? ' (rest of site)' : t.controlMethod === 'sections' ? ' (matched sections)' : t.controlMethod === 'traffic' ? ' (matched on traffic)' : ''}</span>
 			<form method="POST" action="?/remove" use:enhance class="ml-auto"><input type="hidden" name="id" value={t.id} /><ConfirmButton title="Delete this test?" description="Only the test definition is removed; your Search Console data is untouched." confirmLabel="Delete test">Delete</ConfirmButton></form>
 		</div>
@@ -141,5 +156,5 @@
 	</article>
 	{/if}
 {:else}
-	<div class="card p-6 text-center text-sm text-muted-foreground">No tests yet. Save one above after you change a group of pages, then come back once a couple of weeks have passed.</div>
+	<EmptyState icon={FlaskConical} tone="amber" title="No tests yet." text="Save one above after you change a group of pages, then come back once a couple of weeks have passed." />
 {/each}

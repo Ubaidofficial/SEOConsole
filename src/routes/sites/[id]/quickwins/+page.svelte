@@ -1,5 +1,7 @@
 <script lang="ts">
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import { Zap } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { fmtInt } from '$lib/format';
 	let { data } = $props();
@@ -7,12 +9,14 @@
 	const tabLabel: Record<string, string> = { opportunities: 'Opportunities', queries: 'Queries', sitemaps: 'Sitemaps', onpage: 'On-page', request: 'Request' };
 </script>
 
-<Explainer lead="The easiest improvements first, with an estimate of the extra clicks.">
+<PageHeader tab="/quickwins" title="Quick wins" lead="The easiest improvements first, with an estimate of the extra clicks.">
 	<p>The easiest improvements first: the cheapest part of each finding, grouped by what you would actually do. Gains are estimated extra clicks per {data.days} days from this site's own click-through curve. They are model figures, not promises, and they are <b>not added up</b>, because one query can sit in two groups.</p>
-</Explainer>
+</PageHeader>
 
 {#if data.groups.length === 0}
-	<div class="card p-6 text-center text-sm"><p class="mb-1 font-medium text-good">No easy wins found right now.</p><p class="text-muted-foreground">Either the site is already in good shape, or there is not enough data yet. Let the first sync finish, read the sitemaps (Indexing tab) and run the on-page check.</p></div>
+	<EmptyState icon={Zap} tone="green" title="No easy wins found right now." text="Either the site is already in good shape, or there is not enough data yet. Let the first sync finish, read the sitemaps (Indexing tab) and run the on-page check.">
+		<a class="btn btn-sm" href="/sites/{data.site.id}/onpage">Run the on-page check</a>
+	</EmptyState>
 {:else}
 	<div class="stagger space-y-4">
 		{#each data.groups as g (g.key)}

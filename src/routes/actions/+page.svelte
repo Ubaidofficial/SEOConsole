@@ -1,6 +1,9 @@
 <script lang="ts">
 	import ActionCard from '$lib/components/ActionCard.svelte';
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { ChartLine, CircleCheck, FunnelX } from '@lucide/svelte';
 	import { TYPE_LABEL } from '$lib/explain';
 	let { data } = $props();
 	let site = $state('all');
@@ -27,12 +30,12 @@
 	const quick = $derived(count((a) => a.effort === 'low' && !a.blocking));
 </script>
 
-<div class="mb-1 flex items-center gap-3"><h1 class="text-lg font-semibold">What to do first</h1><a class="btn ml-auto" href="/updates">Google updates</a></div>
-<Explainer lead="What to fix first across all your sites: blocking problems, then the biggest estimated gains.">
+<PageHeader page="/actions" level={1} title="What to do first" lead="What to fix first across all your sites: blocking problems, then the biggest estimated gains.">
 	<p>Open a site's <b>Actions</b> tab for its full list and to mark things done. Estimates are model figures from each site's own data, not promises, and larger sites naturally outrank smaller ones.</p>
-</Explainer>
+	{#snippet actions()}<a class="btn btn-sm" href="/updates"><ChartLine class="size-3.5" />Google updates</a>{/snippet}
+</PageHeader>
 {#if data.items.length === 0}
-	<div class="card p-6 text-center text-sm text-muted-foreground">Nothing to do across your sites right now, or no data has synced yet.</div>
+	<EmptyState icon={CircleCheck} tone="green" title="Nothing to do across your sites right now." text="Or no data has synced yet: the list fills in after each site's first sync." />
 {:else}
 	<div class="card mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 p-3">
 		<div class="seg" role="group" aria-label="Show">
@@ -52,9 +55,11 @@
 		</select>
 		{#if site !== 'all' || type !== 'all' || only !== 'all'}<button class="btn btn-ghost btn-xs" onclick={() => ((site = 'all'), (type = 'all'), (only = 'all'))}>Clear filters</button>{/if}
 	</div>
-	<p class="mb-3 text-sm"><b>{shown.length}</b> of <b>{rows.length}</b> shown {#if blocking && only !== 'blocking'}· <b class="text-bad">{blocking} blocking</b>{/if}</p>
+	<p class="mb-3 text-sm"><b>{shown.length}</b> of <b>{rows.length}</b> shown {#if blocking && only !== 'blocking'}· <StatusPill tone="bad">{blocking} blocking</StatusPill>{/if}</p>
 	{#if rows.length === 0}
-		<div class="card p-6 text-center text-sm text-muted-foreground">Nothing matches these filters. <button class="underline" onclick={() => ((site = 'all'), (type = 'all'), (only = 'all'))}>Clear them</button></div>
+		<EmptyState icon={FunnelX} title="Nothing matches these filters.">
+			<button class="btn btn-sm" onclick={() => ((site = 'all'), (type = 'all'), (only = 'all'))}>Clear them</button>
+		</EmptyState>
 	{:else}
 		<div class="stagger space-y-3">
 			{#each shown as a, i (a.siteId + ':' + a.key)}<ActionCard {a} rank={i + 1} sameAs={sameAs[i]} site={a.site} siteHref="/sites/{a.siteId}/actions" />{/each}

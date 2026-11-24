@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { ConfirmButton } from '$lib/components/ui/confirm';
 	import { enhance } from '$app/forms';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { KeyRound, Plus, RefreshCw, Users } from '@lucide/svelte';
 	let { data, form } = $props();
 </script>
 
-<div class="mb-4 flex items-center gap-3">
-	<h1 class="text-lg font-semibold">Google accounts</h1>
-	{#if data.googleConfigured}<a class="btn btn-primary ml-auto" href="/auth/connect">+ Connect Google account</a>{/if}
-</div>
+<PageHeader page="/accounts" level={1} title="Google accounts" lead="The Google accounts whose Search Console properties this app reads.">
+	{#snippet actions()}{#if data.googleConfigured}<a class="btn btn-primary btn-sm" href="/auth/connect"><Plus class="size-3.5" />Connect Google account</a>{/if}{/snippet}
+</PageHeader>
 
 {#if data.googleConfigured}<p class="mb-3 text-xs text-muted-foreground">By connecting you agree to the <a class="underline" href="/terms">terms</a> and <a class="underline" href="/privacy">privacy policy</a>. Your Google data is used only to show it to you here and to do what you ask.</p>{/if}
 
@@ -18,7 +21,7 @@
 
 {#if !data.googleConfigured}
 	<div class="card mb-5 p-4 text-sm">
-		<p class="mb-2 font-medium">Set up Google OAuth to connect real accounts</p>
+		<p class="mb-2 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><KeyRound class="size-3.5" /></span>Set up Google OAuth to connect real accounts</p>
 		<ol class="ml-5 list-decimal space-y-1 text-muted-foreground">
 			<li>In Google Cloud Console, enable the <b>Search Console API</b>, then create an <b>OAuth client ID</b> of type <i>Web application</i>.</li>
 			<li>Add this authorised redirect URI: <code class="rounded bg-black/5 px-1 dark:bg-white/10">{data.redirectUri}</code></li>
@@ -32,16 +35,17 @@
 	{#each data.accounts as a (a.id)}
 		<div class="card p-4">
 			<div class="flex flex-wrap items-center gap-3">
+				<span class="ibadge" aria-hidden="true"><img src="/logos/search-console.svg" alt="" width="18" height="18" class="size-[18px] object-contain" /></span>
 				<div>
 					<div class="pii font-medium">{a.label ?? a.email} {#if a.is_demo}<span class="chip">demo</span>{/if}</div>
 					<div class="text-xs text-muted-foreground"><span class="pii">{a.email}</span> · {a.sites} properties</div>
 				</div>
 				{#if a.status === 'revoked'}
-					<span class="chip text-bad">access revoked</span>
-					<a class="btn btn-primary" href="/auth/connect">Reconnect</a>
+					<StatusPill tone="bad">access revoked</StatusPill>
+					<a class="btn btn-primary btn-sm" href="/auth/connect"><RefreshCw class="size-3.5" />Reconnect</a>
 				{/if}
 				<div class="ml-auto flex flex-wrap gap-2">
-					<form method="POST" action="?/refresh" use:enhance><input type="hidden" name="id" value={a.id} /><button class="btn">Refresh properties</button></form>
+					<form method="POST" action="?/refresh" use:enhance><input type="hidden" name="id" value={a.id} /><button class="btn"><RefreshCw class="size-3.5" />Refresh properties</button></form>
 					<form method="POST" action="?/relabel" use:enhance class="flex gap-1">
 						<input type="hidden" name="id" value={a.id} />
 						<input class="input w-36" name="label" aria-label="Label" placeholder="Label" value={a.label ?? ''} />
@@ -57,7 +61,7 @@
 				<form method="POST" action="?/addSite" use:enhance class="mt-3 flex flex-wrap gap-2 border-t pt-3" style="border-color:var(--border)">
 					<input type="hidden" name="id" value={a.id} />
 					<input class="input min-w-64 flex-1 sm:max-w-xl" name="siteUrl" placeholder="sc-domain:example.com or https://example.com/" aria-label="Property to add" />
-					<button class="btn">Add property</button>
+					<button class="btn"><Plus class="size-3.5" />Add property</button>
 				</form>
 				<details class="mt-2 text-sm">
 					<summary class="cursor-pointer text-xs text-muted-foreground">Prove ownership here (no need to open Search Console)</summary>
@@ -78,7 +82,9 @@
 			{/if}
 		</div>
 	{:else}
-		<div class="card p-6 text-center text-muted-foreground">No accounts connected yet.</div>
+		<EmptyState icon={Users} tone="blue" title="No accounts connected yet." text="Connect a Google account to import its Search Console properties.">
+			{#if data.googleConfigured}<a class="btn btn-primary btn-sm" href="/auth/connect"><Plus class="size-3.5" />Connect Google account</a>{/if}
+		</EmptyState>
 	{/each}
 </div>
 <p class="mt-4 text-xs text-muted-foreground">OAuth tokens are encrypted at rest (AES-256-GCM). Scope requested: {data.readOnly ? 'webmasters.readonly' : 'webmasters (read/write, needed for sitemaps and property management)'}.</p>

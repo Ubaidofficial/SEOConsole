@@ -1,5 +1,7 @@
 <script lang="ts">
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { Download } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import Chart from '$lib/components/Chart.svelte';
@@ -112,9 +114,12 @@
 	);
 </script>
 
-<Explainer lead="Every source side by side, joined on the page. Arrows show the change against the previous period; a dash means no data.">
+<PageHeader tab="/pages" title="Pages" lead="Every source side by side, joined on the page. Arrows show the change against the previous period; a dash means no data.">
 	<p>Every source side by side, joined on the page's path (so www, http and https variants count as one page). Arrows show the change against the previous period; a dash means that source has nothing for the page. The first group, GA4 all traffic, shows page views (every view of the page from any channel, for any period) with the page's title in GA4, and, for the 7, 28, 90, 180 and 480-day periods, the sessions that landed on the page and the channel that sent most of them. The second GA4 group counts Google-organic sessions only: sessions and clicks are different measurements, so expect them close, not equal. The AI group counts GA4 sessions whose referrer is an AI assistant; an assistant that sends no referrer shows up as Direct and is not counted, so treat it as a floor. It does not include citations or bot crawls.</p>
-</Explainer>
+	{#snippet actions()}
+		<a class="btn btn-primary btn-sm" href="/sites/{page.params.id}/export?dim=page&days={page.url.searchParams.get('days') ?? 28}"><Download class="size-3.5" aria-hidden="true" />Export CSV</a>
+	{/snippet}
+</PageHeader>
 {#if notes.length}
 	<details class="mb-3 text-xs text-muted-foreground">
 		<summary class="cursor-pointer select-none hover:text-foreground">Date ranges and data notes ({notes.length})</summary>
@@ -124,11 +129,11 @@
 {#if data.pageGroups.length || data.views.length}
 	<div class="mb-2 flex flex-wrap items-center gap-2">
 		{#if data.pageGroups.length}<select class="input" aria-label="Page group" value={data.group ? String(data.group) : ''} onchange={(e) => { const u = new URL(page.url); const v = e.currentTarget.value; v ? u.searchParams.set('group', v) : u.searchParams.delete('group'); goto(u.pathname + u.search, { keepFocus: true, noScroll: true }); }}><option value="">All pages</option>{#each data.pageGroups as g}<option value={String(g.id)}>{g.name}</option>{/each}</select>{/if}
-		{#if data.groupMissing}<span class="text-xs text-bad">That page group no longer exists.</span>{/if}
+		{#if data.groupMissing}<StatusPill tone="bad">That page group no longer exists.</StatusPill>{/if}
 	</div>
 {/if}
 <SavedViews views={data.views} canSave={page.data.user?.role !== 'viewer'} />
-<div class="flex flex-wrap items-start justify-between gap-2"><SectionTabs bind:value={view} label="Columns" tabs={views} /><a class="btn" href="/sites/{page.params.id}/export?dim=page&days={page.url.searchParams.get('days') ?? 28}">Export CSV</a></div>
+<SectionTabs bind:value={view} label="Columns" tabs={views} />
 {#key view}<DataTable rows={data.rows} {cols} sortKey={sortFor} onRowClick={toggle} empty="No page data yet." />{/key}
 {#if open}
 	<div class="card mt-3 p-4">
