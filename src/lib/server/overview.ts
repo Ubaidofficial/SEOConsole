@@ -1,7 +1,7 @@
 import { db } from './db';
 import type { SiteRow } from './clients';
 import { breakdown, brandTerms, historyCoversPrevious, topPages, topQueries } from './queries';
-import { eachDay, type Period } from './dates';
+import { addDays, eachDay, type Period } from './dates';
 import { isBranded } from '../analytics';
 import { groupHistory, groupsReportFor } from './groups';
 
@@ -84,19 +84,26 @@ export function devices(site: SiteRow, p: Period) {
 	return now.map((r) => ({ device: r.key, clicks: r.clicks, impressions: r.impressions, prev: prev ? (prev.get(r.key) ?? 0) : null }));
 }
 
-/** Brand and non-brand clicks per day over the period (only searches Google lists; anonymised ones cannot be classed). */
-export function brandByDay(site: SiteRow, p: Period): { date: string; brand: number; other: number }[] | null {
+/**
+ * Brand and non-brand clicks per day over the period, and the clicks Google hides (anonymised searches, which cannot be classed):
+ * the day's total clicks less the clicks of the searches it lists.
+ */
+export function brandByDay(site: SiteRow, p: Period): { date: string; brand: number; other: number; hidden: number }[] | null {
 	const terms = brandTerms(site);
 	if (!terms.length) return null;
 	const days = eachDay(p.start, p.end);
 	const at = new Map(days.map((x, i) => [x, i]));
-	const out = days.map((date) => ({ date, brand: 0, other: 0 }));
+	const out = days.map((date) => ({ date, brand: 0, other: 0, hidden: 0 }));
 	const memo = new Map<string, boolean>();
 	for (const r of db().prepare('SELECT date, query, SUM(clicks) c FROM sa_rows WHERE site_id = ? AND date BETWEEN ? AND ? AND clicks > 0 GROUP BY date, query').iterate(site.id, p.start, p.end) as Iterable<{ date: string; query: string; c: number }>) {
 		let b = memo.get(r.query);
 		if (b === undefined) memo.set(r.query, (b = isBranded(r.query, terms)));
 		const i = at.get(r.date);
 		if (i !== undefined) b ? (out[i].brand += r.c) : (out[i].other += r.c);
+	}
+	for (const r of db().prepare('SELECT date, clicks FROM site_daily WHERE site_id = ? AND date BETWEEN ? AND ?').all(site.id, p.start, p.end) as { date: string; clicks: number }[]) {
+		const i = at.get(r.date);
+		if (i !== undefined) out[i].hidden = Math.max(0, r.clicks - out[i].brand - out[i].other);
 	}
 	return out;
 }
@@ -114,4 +121,38 @@ export function bucketPanel(site: SiteRow, p: Period, days: number) {
 			return { id: x.id!, name: x.name, clicks: x.clicks, impressions: x.impressions, deltaPct: x.deltaPct, members: x.members, spark: daysList.map((d) => h.get(d) ?? 0) };
 		})
 	};
+}
+
+/** Clicks by country (Search Console), now and in the period before when stored, for the map. */
+export function countries(site: SiteRow, p: Period) {
+	const now = breakdown(site.id, p.start, p.end, 'country');
+	const prev = historyCoversPrevious(site, p.prevStart) ? new Map(breakdown(site.id, p.prevStart, p.prevEnd, 'country').map((r) => [r.key, r.clicks])) : null;
+	return now.filter((r) => r.key && r.key !== 'zzz').map((r) => ({ country: r.key, clicks: r.clicks, impressions: r.impressions, prev: prev ? (prev.get(r.key) ?? 0) : null }));
+}
+
+/**
+ * Sessions sent by AI assistants (GA4, by referrer), day by day per assistant over GA4's own newest days, with the period before and
+ * the pages they land on. Null when GA4 has no AI rows stored. Assistants that send no referrer count as Direct and are missed.
+ */
+export function aiVisits(site: SiteRow, days: number) {
+	const d = db();
+	const end = (d.prepare('SELECT MAX(date) d FROM ga4_ai_daily WHERE site_id = ?').get(site.id) as { d: string | null }).d;
+	if (!end) return null;
+	const start = addDays(end, -(days - 1));
+	const prevStart = addDays(start, -days), prevEnd = addDays(start, -1);
+	const daysList = eachDay(start, end);
+	const at = new Map(daysList.map((x, i) => [x, i]));
+	const rows = d.prepare('SELECT date, assistant, SUM(sessions) s FROM ga4_ai_daily WHERE site_id = ? AND date BETWEEN ? AND ? GROUP BY date, assistant').all(site.id, start, end) as { date: string; assistant: string; s: number }[];
+	const per = new Map<string, number[]>();
+	for (const r of rows) {
+		if (!per.has(r.assistant)) per.set(r.assistant, daysList.map(() => 0));
+		const i = at.get(r.date);
+		if (i !== undefined) per.get(r.assistant)![i] += r.s;
+	}
+	const assistants = [...per].map(([name, values]) => ({ name, values, total: values.reduce((a, b) => a + b, 0) })).sort((a, b) => b.total - a.total);
+	const total = assistants.reduce((a, x) => a + x.total, 0);
+	const prev = (d.prepare('SELECT COALESCE(SUM(sessions), 0) s FROM ga4_ai_daily WHERE site_id = ? AND date BETWEEN ? AND ?').get(site.id, prevStart, prevEnd) as { s: number }).s;
+	const hasPrev = !!d.prepare('SELECT 1 FROM ga4_ai_daily WHERE site_id = ? AND date <= ? LIMIT 1').get(site.id, prevStart);
+	const pages = d.prepare('SELECT page, SUM(sessions) s, GROUP_CONCAT(DISTINCT assistant) who FROM ga4_ai_daily WHERE site_id = ? AND date BETWEEN ? AND ? GROUP BY page ORDER BY s DESC LIMIT 6').all(site.id, start, end) as { page: string; s: number; who: string }[];
+	return { start, end, days: daysList, assistants, total, prev: hasPrev ? prev : null, pages: pages.map((p) => ({ page: p.page, sessions: p.s, assistants: p.who.split(',') })) };
 }

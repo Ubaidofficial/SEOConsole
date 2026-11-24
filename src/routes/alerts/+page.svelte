@@ -33,7 +33,7 @@
 
 <Explainer lead="Each site's alert rules, checked every hour against the stored data. Thresholds and custom alerts are on each site's Alerts tab.">
 	<p>An alert opens when a rule's condition starts to hold and is sent once, to the site's own Slack or Discord webhook if it has one, else to DIGEST_WEBHOOK_URL. While the condition holds the same alert is updated rather than repeated, and it ends by itself when the condition stops.</p>
-	<p>Resolve means you dealt with it; dismiss means it was not relevant. Either way the rule stays quiet until the condition has ended and starts again. There is no email delivery.</p>
+	<p>Resolve means you dealt with it; dismiss means it was not relevant. Either way the rule stays quiet until the condition has ended and starts again. Alerts are also emailed when SMTP is set up in .env.</p>
 </Explainer>
 
 <AlertList alerts={data.alerts} empty={data.show === 'open' ? 'No open alerts. Rules are checked every hour.' : 'No closed alerts yet.'} />

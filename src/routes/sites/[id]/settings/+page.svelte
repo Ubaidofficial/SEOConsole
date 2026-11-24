@@ -52,7 +52,7 @@
 
 	<section class="card p-4 text-sm lg:col-span-2" style="border-color:var(--bad)">
 		<h2 class="mb-1 font-medium text-bad">Danger zone</h2>
-		<p class="mb-3 text-xs text-muted-foreground">Removes this property from Google Search Console itself (not just from this app). Other users of the property lose it too. This cannot be undone from here.</p>
+		<p class="mb-3 text-xs text-muted-foreground">Removes this property from Google Search Console itself, for every user of it. Google cannot undo this from here; the stored history stays restorable under Recently removed on the dashboard for 14 days.</p>
 		<form method="POST" action="?/removeProperty" use:enhance class="flex flex-wrap gap-2">
 			<input class="input w-80" name="confirm" aria-label="Type the site name to confirm" placeholder="Type the site name to confirm" />
 			<button class="btn btn-danger">Remove from Search Console</button>

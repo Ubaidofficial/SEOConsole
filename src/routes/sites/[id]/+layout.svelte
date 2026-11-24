@@ -15,6 +15,7 @@
 
 	let { data, children } = $props();
 	const syncing = $derived(data.site.syncStatus === 'running' || data.site.syncStatus === 'queued');
+	const fresh = $derived(!!data.site.lastSync && Date.now() - data.site.lastSync < 7 * 3600_000);
 	let wasSyncing = false;
 	$effect(() => {
 		if (syncing) {
@@ -89,6 +90,10 @@
 		<PeriodPicker days={data.days} latest={data.latest} />
 		{#if data.openseo?.url}<a class="btn" href={data.openseo.url} target="_blank" rel="noreferrer noopener" title={privacy.on ? undefined : `OpenSEO project: ${data.openseo.name}`}>OpenSEO ↗</a>{/if}
 		<a class="btn" href="/chat?draft={encodeURIComponent(`About ${data.site.name}: `)}" title="Open the chat with this site named in the question"><Sparkles class="size-3.5" />Ask about this site</a>
+		<!-- one glance at whether the numbers are current: synced in the last 7 hours, behind, syncing, or failed -->
+		<span class="hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs sm:inline-flex {data.site.syncStatus === 'error' ? 'text-bad' : syncing ? 'text-muted-foreground' : fresh ? 'text-good' : 'text-warn'}" title={data.site.lastSync ? `Last synced ${ago(data.site.lastSync)}. Data refreshes every 6 hours.` : 'Not synced yet.'} role="status">
+			<span class="size-2 rounded-full {syncing ? 'animate-pulse' : ''}" style="background:currentColor" aria-hidden="true"></span>{data.site.syncStatus === 'error' ? 'Sync failed' : syncing ? 'Syncing' : fresh ? 'Up to date' : 'Behind'}
+		</span>
 		<form method="POST" action="{base}/sync" onsubmit={startSync}><button class="btn" disabled={syncing}><RefreshCw class="size-3.5 {syncing ? 'animate-spin' : ''}" />{syncing ? 'Syncing…' : 'Sync'}</button></form>
 	</div>
 </div>

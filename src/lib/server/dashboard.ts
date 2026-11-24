@@ -57,7 +57,7 @@ function bing(site: Site, days: number) {
 }
 
 // ── GA4 ──────────────────────────────────────────────────────────────────────
-function ga4(site: Site, days: number) {
+export function ga4(site: Site, days: number) {
 	const d = db();
 	// GA4 runs about a day behind real time, Search Console about two: each source is shown for its own newest days, with its dates.
 	const end = (d.prepare('SELECT MAX(date) d FROM ga4_daily WHERE site_id = ?').get(site.id) as { d: string | null }).d;

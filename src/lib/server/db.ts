@@ -990,6 +990,14 @@ function migrate(db: Database.Database) {
 	if (!cols('sites').includes('bing_feeds_error')) db.exec('ALTER TABLE sites ADD COLUMN bing_feeds_error TEXT');
 	// Alerts for one site can go to their own Slack or Discord webhook (checked against those hosts), else to DIGEST_WEBHOOK_URL.
 	if (!cols('sites').includes('alert_webhook')) db.exec('ALTER TABLE sites ADD COLUMN alert_webhook TEXT');
+	// A removed site is kept for 14 days (restorable, with its history) before the scheduler deletes it: when it was removed, or NULL.
+	if (!cols('sites').includes('deleted_at')) db.exec('ALTER TABLE sites ADD COLUMN deleted_at INTEGER');
+	// Email addresses this site's alerts also go to (comma separated), when SMTP_URL is set; NULL = ALERT_EMAIL_TO, or none.
+	if (!cols('sites').includes('alert_emails')) db.exec('ALTER TABLE sites ADD COLUMN alert_emails TEXT');
+	// Whether an alert was emailed: 0 not yet (or no email set up), 1 sent, 2 failed (retried for a day).
+	if (!cols('alert_events').includes('emailed')) db.exec('ALTER TABLE alert_events ADD COLUMN emailed INTEGER NOT NULL DEFAULT 0');
+	// A keyword bucket's 8 biggest searches are followed on the Rank tracking tab (on unless switched off for the bucket).
+	if (!cols('rule_groups').includes('track')) db.exec('ALTER TABLE rule_groups ADD COLUMN track INTEGER NOT NULL DEFAULT 1');
 	// Pinned sites come first on the dashboard, whatever the sort.
 	if (!cols('sites').includes('pinned')) db.exec('ALTER TABLE sites ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
 	if (!cols('ai_runs').includes('via')) db.exec('ALTER TABLE ai_runs ADD COLUMN via TEXT');

@@ -196,6 +196,10 @@
 				<span class="tnum text-2xl font-semibold tracking-tight">{fmtCompact(data.totals.clicks)}</span><span class="text-xs text-muted-foreground">clicks</span>
 				{#if data.totals.clicksDelta != null}<Delta value={data.totals.clicksDelta} {why} /><span class="text-xs text-muted-foreground">vs previous {data.days} days</span>{/if}
 			</div>
+			<nav class="seg mb-2" aria-label="Compare with">
+				<a class="seg-item !py-0.5 !text-xs {data.portfolio.mode === 'prev' ? 'seg-on' : ''}" aria-current={data.portfolio.mode === 'prev' ? 'page' : undefined} href="?days={data.days}&cmp=prev" data-sveltekit-noscroll>vs previous period</a>
+				{#if data.portfolio.yearOk}<a class="seg-item !py-0.5 !text-xs {data.portfolio.mode === 'year' ? 'seg-on' : ''}" aria-current={data.portfolio.mode === 'year' ? 'page' : undefined} href="?days={data.days}&cmp=year" data-sveltekit-noscroll>vs last year</a>{:else}<span class="seg-item !py-0.5 !text-xs opacity-50" title="Needs a year of stored history for every site">vs last year</span>{/if}
+			</nav>
 			<Chart data={data.portfolio.now} prev={data.portfolio.prev} updates={data.portfolio.updates} defaultMetrics={['clicks']} height={200} dashed={2} />
 		</section>
 	{/if}
@@ -297,9 +301,9 @@
 							<form method="POST" action="?/purgeRemoved" use:enhance class="relative z-10">
 								<input type="hidden" name="id" value={c.id} />
 								<ConfirmButton
-									title="Delete this removed property?"
-									description="Search Console no longer lists it. This deletes its stored history from SEOConsole (your Search Console data is not touched). It cannot be undone, and you can re-add the property later to download it again."
-									confirmLabel="Delete stored data"
+									title="Remove this property from SEOConsole?"
+									description="Search Console no longer lists it. It moves to Recently removed at the bottom of the dashboard, where you can restore it with its history for {data.restoreDays} days; after that its stored history is deleted. Your Search Console data is not touched."
+									confirmLabel="Remove"
 									class="grid size-8 place-items-center rounded-full border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-destructive/10 hover:text-destructive"
 								><Trash2 class="size-4" /></ConfirmButton>
 							</form>
@@ -364,6 +368,21 @@
 		<a class="underline underline-offset-2" href="?days={data.days}&hidden={data.showHidden ? 0 : 1}">{data.showHidden ? 'Hide' : 'Show'} hidden sites</a>
 	</p>
 	{#if data.cards.some((c) => c.authority.dr || c.authority.da)}<p class="mt-1 text-xs text-muted-foreground"><AuthorityCredit dr={data.cards.some((c) => c.authority.dr)} da={data.cards.some((c) => c.authority.da)} /> Circles show DR and DA out of 100: {BANDS_TEXT} (this app's own bands, not Ahrefs' or Moz's).</p>{/if}
+{/if}
+{#if data.removed.length}
+	<details class="mt-4 text-sm">
+		<summary class="cursor-pointer text-xs text-muted-foreground select-none">Recently removed ({data.removed.length})</summary>
+		<ul class="mt-2 divide-y rounded-xl border bg-card" style="border-color:var(--border)">
+			{#each data.removed as r (r.id)}
+				<li class="flex flex-wrap items-center gap-3 px-4 py-2.5">
+					<span class="pii min-w-0 flex-1 truncate">{r.label || r.name}</span>
+					<span class="text-xs text-muted-foreground">removed {ago(r.deletedAt)} · deleted for good {new Date(r.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+					<form method="POST" action="?/restoreSite" use:enhance><input type="hidden" name="id" value={r.id} /><button class="btn btn-sm">Restore</button></form>
+					<form method="POST" action="?/deleteRemoved" use:enhance><input type="hidden" name="id" value={r.id} /><ConfirmButton class="btn btn-sm text-muted-foreground" title="Delete it for good now?" description="Its stored history is deleted now instead of on the date shown. Your Search Console data is not touched. This cannot be undone." confirmLabel="Delete now">Delete now</ConfirmButton></form>
+				</li>
+			{/each}
+		</ul>
+	</details>
 {/if}
 {#if data.onboarding?.hidden}
 	<form method="POST" action="?/showOnboarding" use:enhance class="mt-2 text-xs text-muted-foreground"><button class="underline underline-offset-2">Set-up guide{data.onboarding.progress.complete ? '' : ` (${data.onboarding.progress.done} of ${data.onboarding.progress.total} done)`}</button></form>

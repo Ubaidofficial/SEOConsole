@@ -12,12 +12,12 @@ import { pctChange } from '../analytics';
 export type GroupKind = 'bucket' | 'pages';
 export const MAX_GROUPS = 50;
 
-export interface RuleGroup { id: number; siteId: number; kind: GroupKind; name: string; set: RuleSet; summary: string; createdAt: number }
+export interface RuleGroup { id: number; siteId: number; kind: GroupKind; name: string; set: RuleSet; summary: string; createdAt: number; /** buckets only: its 8 biggest searches are followed on Rank tracking */ track: boolean }
 
-const hydrate = (r: { id: number; site_id: number; kind: GroupKind; name: string; rules: string; created_at: number }): RuleGroup | null => {
+const hydrate = (r: { id: number; site_id: number; kind: GroupKind; name: string; rules: string; created_at: number; track?: number }): RuleGroup | null => {
 	const p = parseRuleSet(r.rules);
 	if ('error' in p) return null;
-	return { id: r.id, siteId: r.site_id, kind: r.kind, name: r.name, set: p.set, summary: describeRuleSet(p.set), createdAt: r.created_at };
+	return { id: r.id, siteId: r.site_id, kind: r.kind, name: r.name, set: p.set, summary: describeRuleSet(p.set), createdAt: r.created_at, track: r.track !== 0 };
 };
 
 export function listGroups(siteId: number, kind: GroupKind): RuleGroup[] {
@@ -180,4 +180,24 @@ export function saveView(siteId: number, tab: string, name: string, params: stri
 
 export function deleteView(siteId: number, id: number): boolean {
 	return db().prepare('DELETE FROM saved_views WHERE id = ? AND site_id = ?').run(id, siteId).changes > 0;
+}
+
+/** Switch whether a bucket's 8 biggest searches are followed on the Rank tracking tab. */
+export function setBucketTracking(siteId: number, id: number, on: boolean): boolean {
+	return db().prepare("UPDATE rule_groups SET track = ? WHERE id = ? AND site_id = ? AND kind = 'bucket'").run(on ? 1 : 0, id, siteId).changes > 0;
+}
+
+/** The searches the buckets follow on Rank tracking: each tracking bucket's 8 biggest by clicks over the last 28 days. */
+export const BUCKET_TRACK = 8;
+export function bucketTracked(site: Pick<SiteRow, 'id' | 'synced_through'>): Map<string, string[]> {
+	const out = new Map<string, string[]>();
+	const buckets = listGroups(site.id, 'bucket').filter((g) => g.track);
+	if (!buckets.length) return out;
+	const p = periodFor(site, 28);
+	const rows = topQueries(site.id, p.start, p.end, {}, 20_000);
+	for (const b of buckets) {
+		const test = compileRuleSet(b.set);
+		for (const r of rows.filter((x) => test(x.query)).slice(0, BUCKET_TRACK)) out.set(r.query, [...(out.get(r.query) ?? []), b.name]);
+	}
+	return out;
 }

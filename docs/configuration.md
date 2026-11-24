@@ -43,7 +43,8 @@ All are optional except where noted; copy `.env.example` to `.env`. On Cloudflar
 | `AI_VIS_RUNS_PER_DAY`, `AI_VIS_EVERY_DAYS` | AI answers: runs a day across all sites (default 60, max 2000) and days between re-asking a prompt (default 7). |
 | `AI_VIS_CLAUDE_MODEL`, `AI_VIS_CLAUDE_EFFORT`, `AI_VIS_OPENAI_MODEL`, `AI_VIS_PERPLEXITY_MODEL` | AI answers: the models used (defaults `claude-opus-5-5`, `medium`, `gpt-6-astra`, `sonar`). |
 | `DIGEST_MONTHLY` | `0` stops the automatic monthly report (default on; it can still be made by hand on the Digest page). |
-| `DIGEST_WEBHOOK_URL`, `DIGEST_WEBHOOK_FORMAT`, `DIGEST_DAY` | Weekly digest and urgent alerts: https webhook, `slack` (default) / `discord` / `json`, weekday 0-6 (default 1 = Monday). No email. |
+| `DIGEST_WEBHOOK_URL`, `DIGEST_WEBHOOK_FORMAT`, `DIGEST_DAY` | Weekly digest and urgent alerts: https webhook, `slack` (default) / `discord` / `json`, weekday 0-6 (default 1 = Monday). The digest is not emailed. |
+| `SMTP_URL`, `ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO` | Email for alert rules (not the digest): your SMTP server as `smtps://user:password@host:465` or `smtp://…:587`, the From address, and default recipients (comma separated). An admin can set other recipients per site on its Alerts tab (up to 10). The server is read from here only, never from a form. Tested against a stand-in mail transport, not a live SMTP server. |
 | `MCP_OAUTH_REDIRECTS` | Extra callback addresses an MCP client may register for "Sign in" (comma-separated, exact, https only). Claude's own is built in. Leave empty unless you connect another client. |
 | `MCP_INSPECT_PER_KEY_DAY` | Live URL inspections one API key may cause per day through `inspect_url` (default 100, max 2000; Google allows about 2,000 a day per property). |
 | `INDEX_RECHECK_PER_RUN` | URLs the automatic day 1 / 3 / 5 re-checks inspect per site per run (default 40, max 200). They share Google's URL Inspection quota with the indexing monitor. |

@@ -66,7 +66,7 @@ const A: Role = 'admin';
  * action cannot slip through unclassified; and anything not listed needs admin anyway (fail closed).
  */
 export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
-	'/': { pin: E, syncAll: E, hideDuplicates: E, toggleHidden: E, purgeRemoved: A, hideOnboarding: A, showOnboarding: A, onboardIndexing: E, onboardBrand: A },
+	'/': { pin: E, restoreSite: A, deleteRemoved: A, syncAll: E, hideDuplicates: E, toggleHidden: E, purgeRemoved: A, hideOnboarding: A, showOnboarding: A, onboardIndexing: E, onboardBrand: A },
 	'/accounts': { refresh: E, verifyToken: A, verifyNow: A, relabel: A, remove: A, addSite: A },
 	'/agents': { create: A, permission: A, changes: A, remove: A },
 	'/connect': { ahrefsKey: A, ahrefsRemove: A, ahrefsRefresh: A, mozKeys: A, mozRemove: A, mozRefresh: A, automationDefault: A, automationApply: A, resync: E, bingKey: A, bingRemove: A, ga4Auto: A, gtmAuto: A, clarity: A, manual: A, pick: A, unlink: A, openseo: A, crux: A, cruxRemove: A, openseoRemove: A, setupRun: A, setupTos: A, setupCheck: A },
@@ -81,9 +81,9 @@ export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
 	'/profile': { name: 'viewer', email: 'viewer', password: 'viewer', linkGoogle: 'viewer', unlinkGoogle: 'viewer' },
 	'/sites/[id]': { addNote: E, makeTest: E, deleteNote: E, changelogAuto: E },
 	'/sites/[id]/actions': { state: E },
-	'/sites/[id]/alerts': { rule: E, addRule: E, deleteRule: E, webhook: A, testWebhook: A, resolve: E, dismiss: E, reopen: E, check: E },
+	'/sites/[id]/alerts': { rule: E, addRule: E, deleteRule: E, webhook: A, emails: A, testWebhook: A, resolve: E, dismiss: E, reopen: E, check: E },
 	'/sites/[id]/rank': { add: E, remove: E },
-	'/sites/[id]/groups': { saveGroup: E, deleteGroup: E },
+	'/sites/[id]/groups': { saveGroup: E, deleteGroup: E, suggest: E, acceptSuggestions: E, useBrand: A, toggleTrack: E },
 	'/sites/[id]/pages': { saveView: E, deleteView: E },
 	'/sites/[id]/bing': { refreshLinks: E, pageQueries: 'viewer' },
 	'/sites/[id]/clarity': { check: E, plan: E, install: A },

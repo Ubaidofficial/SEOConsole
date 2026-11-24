@@ -15,6 +15,7 @@
 	import MoverPanel from '$lib/components/viz/MoverPanel.svelte';
 	import DayBars from '$lib/components/viz/DayBars.svelte';
 	import Donut from '$lib/components/viz/Donut.svelte';
+	import CountryMap from '$lib/components/viz/CountryMap.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import { isBranded } from '$lib/analytics';
 	import { fmtCompact } from '$lib/format';
@@ -124,8 +125,12 @@
 <section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs">
 	<div class="mb-3 flex items-baseline justify-between gap-3">
 		<h2 class="text-base font-semibold tracking-tight">{data.allTraffic ? 'Search Console' : 'Traffic'}</h2>
-		<p class="text-xs text-muted-foreground">Dashed line = the period before · G = a Google update · dots = your change log · shaded = unusual days</p>
+		<p class="text-xs text-muted-foreground">Dashed line = {data.compare.mode === 'year' ? 'the same weekdays last year' : 'the period before'} · G = a Google update · dots = your change log · shaded = unusual days</p>
 	</div>
+	<nav class="seg mb-3" aria-label="Compare with">
+		<a class="seg-item !py-0.5 !text-xs {data.compare.mode === 'prev' ? 'seg-on' : ''}" aria-current={data.compare.mode === 'prev' ? 'page' : undefined} href="?days={data.days}&cmp=prev" data-sveltekit-noscroll>vs previous period</a>
+		{#if data.compare.yearOk}<a class="seg-item !py-0.5 !text-xs {data.compare.mode === 'year' ? 'seg-on' : ''}" aria-current={data.compare.mode === 'year' ? 'page' : undefined} href="?days={data.days}&cmp=year" data-sveltekit-noscroll>vs last year</a>{:else}<span class="seg-item !py-0.5 !text-xs opacity-50" title="Needs a year of stored history before this period">vs last year</span>{/if}
+	</nav>
 	<Chart data={data.series} prev={data.prevSeries} {updates} {markers} anomalies={data.anomalies} />
 	</section>
 {/if}
@@ -148,7 +153,9 @@
 			<div class="flex items-baseline gap-2"><span class="text-2xl font-semibold">{fmtInt(b.now.other)}</span><span class="text-xs text-muted-foreground">non-brand clicks</span>{#if d != null}<span class="tnum text-xs font-medium {d >= 0 ? 'text-good' : 'text-bad'}">{fmtSigned(d)}</span>{/if}</div>
 			{#if total}<div class="mt-3"><SegBar title="Clicks from brand and non-brand searches" format={(v) => `${fmtInt(v)} clicks`} parts={[{ label: 'Non-brand', value: b.now.other, color: 'var(--chart-1)' }, { label: 'Brand', value: b.now.brand, color: 'var(--chart-2)' }]} /></div>{/if}
 			{#if data.panels.brandDays && data.panels.brandDays.some((x) => x.brand + x.other > 0)}
-				<div class="mt-4"><DayBars days={data.panels.brandDays.map((x) => x.date)} series={[{ label: 'Non-brand', color: 'var(--chart-1)', values: data.panels.brandDays.map((x) => x.other) }, { label: 'Brand', color: 'var(--chart-2)', values: data.panels.brandDays.map((x) => x.brand) }]} height={70} unit=" clicks" legend={false} /></div>
+				{@const hiddenSum = data.panels.brandDays.reduce((a, x) => a + x.hidden, 0)}
+				<div class="mt-4"><DayBars days={data.panels.brandDays.map((x) => x.date)} series={[{ label: 'Non-brand', color: 'var(--chart-1)', values: data.panels.brandDays.map((x) => x.other) }, { label: 'Brand', color: 'var(--chart-2)', values: data.panels.brandDays.map((x) => x.brand) }, ...(hiddenSum ? [{ label: 'Hidden by Google', color: 'color-mix(in oklab, var(--muted-foreground) 35%, transparent)', values: data.panels.brandDays.map((x) => x.hidden) }] : [])]} height={70} unit=" clicks" legend={false} /></div>
+				{#if hiddenSum}<p class="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span class="size-2 rounded-sm" style="background:color-mix(in oklab, var(--muted-foreground) 35%, transparent)"></span>Hidden by Google: {fmtInt(hiddenSum)} clicks from searches Google does not list, so they cannot be classed.</p>{/if}
 			{/if}
 			<p class="mt-2 text-[11px] text-muted-foreground">Brand = contains <span class="pii">{b.terms.join(', ')}</span>. <a class="underline" href="/sites/{page.params.id}/settings">Change</a> · <a class="underline" href="/sites/{page.params.id}/queries?b=nonbrand">See non-brand searches</a></p>
 		{:else}
@@ -207,6 +214,45 @@
 		{/if}
 	</section>
 </div>
+
+
+<section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="geo-h">
+	<div class="mb-3 flex flex-wrap items-baseline gap-x-3"><h2 id="geo-h" class="text-base font-semibold tracking-tight">Countries</h2><span class="text-xs text-muted-foreground">Google clicks by searcher's country, this period</span></div>
+	{#if P.countries.length}<CountryMap rows={P.countries} />{:else}<p class="text-sm text-muted-foreground">No data in this period yet.</p>{/if}
+</section>
+
+{#if P.ga4.linked && P.ga4.synced}
+	{@const g = P.ga4}
+	{@const AI_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--ord-3)', 'var(--ord-4)']}
+	<div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="ai-h">
+			<div class="mb-2 flex flex-wrap items-baseline gap-x-2"><h2 id="ai-h" class="text-base font-semibold tracking-tight">Visits from AI assistants</h2><img src="/logos/ga4.svg" alt="" width="14" height="14" class="size-3.5" /></div>
+			{#if g.ai && g.ai.total}
+				<div class="mb-3 flex items-baseline gap-2"><span class="tnum text-3xl font-semibold tracking-tight">{fmtInt(g.ai.total)}</span><span class="text-xs text-muted-foreground">sessions</span>{#if g.ai.prev}<span class="tnum text-xs font-medium {g.ai.total >= g.ai.prev ? 'text-good' : 'text-bad'}">{fmtSigned(g.ai.total / g.ai.prev - 1, 0)}</span>{/if}</div>
+				<DayBars days={g.ai.days} series={g.ai.assistants.map((a, i) => ({ label: a.name, color: AI_COLORS[i % AI_COLORS.length], values: a.values }))} height={64} unit=" sessions" />
+				{#if g.ai.pages.length}<ul class="mt-3 space-y-1 text-[13px]">{#each g.ai.pages.slice(0, 4) as pg}<li class="flex gap-2"><span class="pii min-w-0 flex-1 truncate">{pg.page}</span><span class="tnum text-xs text-muted-foreground">{pg.sessions} · {pg.assistants.join(', ')}</span></li>{/each}</ul>{/if}
+			{:else}<p class="text-sm text-muted-foreground">GA4 recorded no sessions from ChatGPT, Perplexity, Gemini, Claude or Copilot in this period.</p>{/if}
+		</section>
+		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="ch-h">
+			<div class="mb-3 flex flex-wrap items-baseline gap-x-2"><h2 id="ch-h" class="text-base font-semibold tracking-tight"><a class="hover:underline" href="/sites/{page.params.id}/dashboard?days={data.days}">Traffic by channel</a></h2><span class="tnum text-xs text-muted-foreground">{fmtCompact(g.sessions)} sessions</span></div>
+			{#if g.channels.length}
+				<SegBar title="Sessions by channel" format={(v) => `${fmtInt(v)} sessions`} legend={false} parts={g.channels.map((c, i) => ({ label: c.key, value: c.sessions, color: ['var(--ord-1)', 'var(--ord-2)', 'var(--ord-3)', 'var(--ord-4)', 'var(--chart-2)', 'var(--chart-3)'][i % 6] }))} />
+				<ul class="mt-3 space-y-1.5 text-[13px]">{#each g.channels as c, i}<li class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-sm" style="background:{['var(--ord-1)', 'var(--ord-2)', 'var(--ord-3)', 'var(--ord-4)', 'var(--chart-2)', 'var(--chart-3)'][i % 6]}"></span><span class="min-w-0 flex-1 truncate">{c.key}</span><span class="tnum text-xs text-muted-foreground">{Math.round(c.share * 100)}%</span><span class="tnum w-12 text-right text-xs {c.sessionsDelta == null ? 'text-muted-foreground' : c.sessionsDelta >= 0 ? 'text-good' : 'text-bad'}">{fmtSigned(c.sessionsDelta, 0)}</span></li>{/each}</ul>
+			{:else}<p class="text-sm text-muted-foreground">No sessions in this period.</p>{/if}
+		</section>
+		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="ke-h">
+			<h2 id="ke-h" class="mb-3 text-base font-semibold tracking-tight"><a class="hover:underline" href="/sites/{page.params.id}/analytics?days={data.days}">Key events</a></h2>
+			{#if g.keyEvents && g.keyEvents.status === 'ok' && g.keyEvents.events.length}
+				{@const ke = g.keyEvents}
+				{@const kmax = Math.max(1, ...ke.events.map((e) => e.keyEvents))}
+				<div class="mb-3 flex items-baseline gap-2"><span class="tnum text-3xl font-semibold tracking-tight">{fmtCompact(ke.total)}</span><span class="text-xs text-muted-foreground">key events</span></div>
+				<ul class="space-y-2 text-[13px]">{#each ke.events.slice(0, 5) as e}<li class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2"><span class="min-w-0"><span class="block truncate font-mono text-xs">{e.event}</span><span class="mt-1 block h-1.5 rounded-full bg-muted"><span class="block h-full rounded-full bg-[color:var(--c-clicks)]" style="width:{Math.max(2, (e.keyEvents / kmax) * 100)}%"></span></span></span><span class="tnum font-medium">{fmtCompact(e.keyEvents)}</span><span class="tnum w-12 text-right text-xs {e.keyEventsDelta == null ? 'text-muted-foreground' : e.keyEventsDelta >= 0 ? 'text-good' : 'text-bad'}">{fmtSigned(e.keyEventsDelta, 0)}</span></li>{/each}</ul>
+			{:else}<p class="text-sm text-muted-foreground">No key events recorded in this period. Mark a GA4 event as a key event on the <a class="underline" href="/sites/{page.params.id}/tags">Tag Manager</a> tab.</p>{/if}
+		</section>
+	</div>
+{:else if !P.ga4.linked}
+	<p class="mb-5 rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">Link GA4 to see visits from AI assistants, traffic by channel and key events here. <a class="underline" href="/sites/{page.params.id}/analytics">Connect GA4</a></p>
+{/if}
 
 <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
 	<section>

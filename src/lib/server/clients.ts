@@ -50,6 +50,8 @@ export interface SiteRow {
 	changelog_auto: number;
 	alert_webhook: string | null;
 	pinned: number;
+	deleted_at: number | null;
+	alert_emails: string | null;
 	created_at: number;
 }
 
