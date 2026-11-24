@@ -25,8 +25,8 @@
 	}
 </script>
 
-<div class="mb-3 flex w-fit max-w-full flex-wrap gap-1 rounded-lg bg-muted p-1" role="group" aria-label={label}>
+<div class="seg mb-3" role="group" aria-label={label}>
 	{#each tabs as t (t.id)}
-		<button type="button" aria-pressed={value === t.id} class="rounded-md px-3 py-1 text-[13px] transition-colors {value === t.id ? 'bg-card font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}" onclick={() => pick(t.id)}>{t.label}{#if t.count != null}<span class="tnum ml-1.5 text-xs text-muted-foreground">{t.count}</span>{/if}</button>
+		<button type="button" aria-pressed={value === t.id} class="seg-item {value === t.id ? 'seg-on' : ''}" onclick={() => pick(t.id)}>{t.label}{#if t.count != null}<span class="tnum ml-1.5 text-xs text-muted-foreground">{t.count}</span>{/if}</button>
 	{/each}
 </div>

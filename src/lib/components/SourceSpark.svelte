@@ -8,6 +8,8 @@
 		values: (number | null)[];
 		/** how many of the newest days to draw dashed because the source may still revise them */
 		dashed?: number;
+		/** the previous period: drawn thin and dashed under the others, with no fill */
+		ghost?: boolean;
 	}
 </script>
 
@@ -46,10 +48,10 @@
 			const first = s.values.findIndex((v) => v != null);
 			const cut = Math.max(first, last - (s.dashed ?? 0));
 			// Area only under a lone line: stacked translucent fills would muddy each other.
-			const area = series.length === 1 && last > first ? `${path(s.values, first, last)}L${x(last).toFixed(1)},${H}L${x(first).toFixed(1)},${H}Z` : '';
+			const area = !s.ghost && series.filter((x) => !x.ghost).length === 1 && last > first ? `${path(s.values, first, last)}L${x(last).toFixed(1)},${H}L${x(first).toFixed(1)},${H}Z` : '';
 			return { ...s, solid: last >= 0 ? path(s.values, first, cut) : '', tail: cut < last ? path(s.values, cut, last) : '', area, empty: last < 0 };
 		});
-		return { H, lines: lines.reverse() };
+		return { H, lines: lines.reverse(), path: (v: (number | null)[]) => path(v, 0, v.length - 1) };
 	});
 	const label = $derived(`Daily ${series.map((s) => s.label).join(', ')}`);
 </script>
@@ -66,9 +68,11 @@
 	{/if}
 	{#each geom.lines as l (l.key)}
 		<g style="color:{l.color}">
+			{#if l.ghost}<path d={geom.path(l.values)} fill="none" stroke="currentColor" stroke-width="1.25" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" opacity="0.45" />{:else}
 			{#if l.area}<path d={l.area} fill="url(#fill-{uid})" />{/if}
 			<path d={l.solid} fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" style="filter:drop-shadow(0 2px 5px color-mix(in oklab, currentColor 40%, transparent))" />
 			{#if l.tail}<path d={l.tail} fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.75" />{/if}
+			{/if}
 		</g>
 	{/each}
 </svg>

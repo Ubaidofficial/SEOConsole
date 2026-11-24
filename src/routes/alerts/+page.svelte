@@ -13,9 +13,9 @@
 
 <div class="mb-4 flex flex-wrap items-center gap-3">
 	<h1 class="text-2xl font-semibold tracking-tight">Alerts</h1>
-	<nav class="flex gap-1.5" aria-label="Which alerts">
-		<a class="chip {data.show === 'open' ? 'chip-on' : ''}" href={href({ show: 'open' })}>Open · {data.counts.open}</a>
-		<a class="chip {data.show === 'closed' ? 'chip-on' : ''}" href={href({ show: 'closed' })}>Closed · {data.counts.closed}</a>
+	<nav class="seg" aria-label="Which alerts">
+		<a class="seg-item {data.show === 'open' ? 'seg-on' : ''}" aria-current={data.show === 'open' ? 'page' : undefined} href={href({ show: 'open' })}>Open · {data.counts.open}</a>
+		<a class="seg-item {data.show === 'closed' ? 'seg-on' : ''}" aria-current={data.show === 'closed' ? 'page' : undefined} href={href({ show: 'closed' })}>Closed · {data.counts.closed}</a>
 	</nav>
 	{#if data.sites.length > 1}
 		<select class="input" aria-label="Site" value={data.site ? String(data.site) : ''} onchange={(e) => { const u = new URL(page.url); const v = e.currentTarget.value; v ? u.searchParams.set('site', v) : u.searchParams.delete('site'); goto(u.pathname + u.search); }}>

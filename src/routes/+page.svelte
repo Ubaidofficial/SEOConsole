@@ -12,8 +12,11 @@
 	import { BANDS_TEXT } from '$lib/authority';
 	import Delta from '$lib/components/Delta.svelte';
 	import GetStarted from '$lib/components/GetStarted.svelte';
+	import Chart from '$lib/components/Chart.svelte';
+	import SectionTabs from '$lib/components/SectionTabs.svelte';
+	import Sparkline from '$lib/components/Sparkline.svelte';
 	import { privacy } from '$lib/privacy.svelte';
-	import { fmtInt, fmtPct, fmtPos, ago } from '$lib/format';
+	import { fmtCompact, fmtInt, fmtPct, fmtPos, fmtStat, ago } from '$lib/format';
 
 	let { data, form } = $props();
 	let q = $state('');
@@ -23,9 +26,21 @@
 	const ATT = { look: 2, watch: 1 } as const;
 	const attentionRank = (c: (typeof data.cards)[number]) => (c.attention ? ATT[c.attention] : 0) * 1000 + Math.min(999, c.alerts);
 
+	// empty until the switches read the address (?trend=…&view=…), so a link opens the same filter and layout
+	let trend = $state('');
+	let layout = $state('');
+	const TREND_LABEL = { growing: 'Growing', steady: 'Steady', declining: 'Declining' } as const;
+	/** The cards the search, account and group filters leave, before the Growing / Steady / Declining switch, so its counts stay put. */
+	const pool = $derived(data.cards.filter((c) => (account === 'all' || String(c.accountId) === account) && (!group || c.tags.includes(group)) && (!q || `${c.name} ${c.label ?? ''} ${c.tags.join(' ')}`.toLowerCase().includes(q.toLowerCase()))));
+	const trendTabs = $derived([
+		{ id: 'all', label: 'All', count: pool.length },
+		...(['growing', 'steady', 'declining'] as const).map((t) => ({ id: t, label: TREND_LABEL[t], count: pool.filter((c) => c.trend === t).length }))
+	]);
+	/** Sites with a real fall in clicks or an open problem alert, worst first, for the strip above the cards. */
+	const attention = $derived(data.cards.filter((c) => !c.hidden && !c.removed && (c.attention === 'look' || c.alerts > 0)).sort((a, b) => attentionRank(b) - attentionRank(a)));
 	const cards = $derived(
-		data.cards
-			.filter((c) => (account === 'all' || String(c.accountId) === account) && (!group || c.tags.includes(group)) && (!q || `${c.name} ${c.label ?? ''} ${c.tags.join(' ')}`.toLowerCase().includes(q.toLowerCase())))
+		pool
+			.filter((c) => !trend || trend === 'all' || c.trend === trend)
 			.sort((a, b) =>
 				Number(b.pinned) - Number(a.pinned) ||
 				(sort === 'name' ? a.name.localeCompare(b.name)
@@ -41,16 +56,16 @@
 		const impressions = xs.reduce((a, c) => a + c.impressions, 0);
 		return { sites: xs.length, clicks, impressions, look: xs.filter((c) => c.attention === 'look').length };
 	});
-	type Kpi = { label: string; v: string; d: number | null; inv: boolean; pos?: boolean; color?: string; title?: string; pending?: boolean };
+	type Kpi = { label: string; v: string; exact?: string; d: number | null; inv: boolean; pos?: boolean; color?: string; title?: string; pending?: boolean };
 	const kpis = $derived<Kpi[]>([
-		{ label: data.totals.ga4 || data.totals.bing ? 'Google clicks' : 'Clicks', v: fmtInt(data.totals.clicks), d: data.totals.clicksDelta, inv: false, color: 'var(--src-gsc)', title: 'Clicks from Google Search, from Search Console' },
+		{ label: data.totals.ga4 || data.totals.bing ? 'Google clicks' : 'Clicks', v: fmtStat(data.totals.clicks), exact: fmtInt(data.totals.clicks), d: data.totals.clicksDelta, inv: false, color: 'var(--src-gsc)', title: 'Clicks from Google Search, from Search Console' },
 		...(data.totals.ga4
-			? [{ label: 'Sessions · GA4', v: fmtInt(data.totals.ga4.sessions), d: data.totals.ga4.delta, inv: false, color: 'var(--src-ga4)', pending: !data.totals.ga4.comparable, title: `Every GA4 session, from every channel (search, direct, social, referral, AI assistants…), over ${data.totals.ga4.properties} GA4 propert${data.totals.ga4.properties === 1 ? 'y' : 'ies'}. Organic Search sessions already include most Google clicks, so do not add the two together.` }]
+			? [{ label: 'Sessions · GA4', v: fmtStat(data.totals.ga4.sessions), exact: fmtInt(data.totals.ga4.sessions), d: data.totals.ga4.delta, inv: false, color: 'var(--src-ga4)', pending: !data.totals.ga4.comparable, title: `Every GA4 session, from every channel (search, direct, social, referral, AI assistants…), over ${data.totals.ga4.properties} GA4 propert${data.totals.ga4.properties === 1 ? 'y' : 'ies'}. Organic Search sessions already include most Google clicks, so do not add the two together.` }]
 			: []),
 		...(data.totals.bing
-			? [{ label: 'Bing clicks', v: fmtInt(data.totals.bing.clicks), d: data.totals.bing.delta, inv: false, color: 'var(--src-bing)', pending: !data.totals.bing.comparable, title: `Clicks from Bing (and the engines that use its results), from Bing Webmaster Tools, over ${data.totals.bing.properties} site${data.totals.bing.properties === 1 ? '' : 's'}` }]
+			? [{ label: 'Bing clicks', v: fmtStat(data.totals.bing.clicks), exact: fmtInt(data.totals.bing.clicks), d: data.totals.bing.delta, inv: false, color: 'var(--src-bing)', pending: !data.totals.bing.comparable, title: `Clicks from Bing (and the engines that use its results), from Bing Webmaster Tools, over ${data.totals.bing.properties} site${data.totals.bing.properties === 1 ? '' : 's'}` }]
 			: []),
-		{ label: 'Impressions', v: fmtInt(data.totals.impressions), d: data.totals.impressionsDelta, inv: false },
+		{ label: 'Impressions', v: fmtStat(data.totals.impressions), exact: fmtInt(data.totals.impressions), d: data.totals.impressionsDelta, inv: false },
 		{ label: 'CTR', v: fmtPct(data.totals.ctr), d: data.totals.ctrDelta, inv: false },
 		{ label: 'Avg position', v: fmtPos(data.totals.position), d: data.totals.positionDelta, inv: true, pos: true }
 	]);
@@ -59,8 +74,11 @@
 	const seriesOf = (c: (typeof data.cards)[number]): SparkSeries[] => [
 		{ key: 'gsc', label: 'Google clicks', color: 'var(--src-gsc)', values: c.traffic.chart.gsc, dashed: 2 },
 		...(c.traffic.chart.ga4 ? [{ key: 'ga4', label: 'GA4 sessions', color: 'var(--src-ga4)', values: c.traffic.chart.ga4, dashed: 1 }] : []),
-		...(c.traffic.chart.bing ? [{ key: 'bing', label: 'Bing clicks', color: 'var(--src-bing)', values: c.traffic.chart.bing }] : [])
+		...(c.traffic.chart.bing ? [{ key: 'bing', label: 'Bing clicks', color: 'var(--src-bing)', values: c.traffic.chart.bing }] : []),
+		// last, so it is drawn underneath: Google clicks in the period before, day for day
+		...(c.prevSpark ? [{ key: 'prev', label: 'Google clicks, previous period', color: 'var(--src-gsc)', values: c.prevSpark, ghost: true }] : [])
 	];
+	const TREND_TONE = { growing: 'text-good', steady: 'text-muted-foreground', declining: 'text-bad' } as const;
 	const why = $derived(data.totals.comparable ? 'Previous period had too little data for a reliable comparison' : `Comparison shown once the history finishes loading (${data.totals.loading} site${data.totals.loading === 1 ? '' : 's'} still downloading)`);
 
 	// A real sync takes minutes (one Google request per day of history), so follow it live instead of
@@ -159,7 +177,7 @@
 		{#each kpis as k}
 			<div class="rounded-2xl border bg-card p-4 shadow-xs" title={k.title}>
 				<div class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">{#if k.color}<span class="size-2 shrink-0 rounded-full" style="background:{k.color}" aria-hidden="true"></span>{/if}{k.label}</div>
-				<div class="tnum mt-1.5 text-3xl font-semibold tracking-tight">{k.v}</div>
+				<div class="tnum mt-1.5 text-3xl font-semibold tracking-tight" title={k.exact}>{k.v}</div>
 				<div class="mt-1 h-4">
 					{#if k.d == null}
 						<span class="text-xs text-muted-foreground" title={k.pending ? 'Stored history does not reach the previous period yet for every linked property' : why}>{k.pending ?? !data.totals.comparable ? 'comparison pending' : 'no reliable comparison'}</span>
@@ -170,6 +188,33 @@
 			</div>
 		{/each}
 	</div>
+
+	{#if data.portfolio && data.portfolio.now.length > 1}
+		<section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="all-h">
+			<div class="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+				<h2 id="all-h" class="text-base font-semibold tracking-tight">All {data.totals.sites - data.totals.duplicates} sites</h2>
+				<span class="tnum text-2xl font-semibold tracking-tight">{fmtCompact(data.totals.clicks)}</span><span class="text-xs text-muted-foreground">clicks</span>
+				{#if data.totals.clicksDelta != null}<Delta value={data.totals.clicksDelta} {why} /><span class="text-xs text-muted-foreground">vs previous {data.days} days</span>{/if}
+			</div>
+			<Chart data={data.portfolio.now} prev={data.portfolio.prev} updates={data.portfolio.updates} defaultMetrics={['clicks']} height={200} dashed={2} />
+		</section>
+	{/if}
+
+	{#if attention.length}
+		<section class="mb-5" aria-labelledby="att-h">
+			<div class="mb-2 flex items-baseline gap-2"><h2 id="att-h" class="text-base font-semibold tracking-tight">Needs attention</h2><span class="text-xs text-muted-foreground">{attention.length} site{attention.length === 1 ? '' : 's'} with a real fall in clicks or an open alert</span><a class="ml-auto text-xs underline underline-offset-2" href="/alerts">All alerts</a></div>
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+				{#each attention.slice(0, 4) as c (c.id)}
+					<a href={c.alerts ? `/sites/${c.id}/alerts` : `/sites/${c.id}?days=${data.days}`} class="group flex flex-col rounded-xl border bg-card p-3.5 shadow-xs transition-colors hover:border-foreground/30">
+						<span class="flex items-center gap-2"><SiteAvatar name={title(c)} siteId={c.id} class="pii !size-6 !rounded-md !text-[11px]" /><span class="pii min-w-0 flex-1 truncate text-sm font-medium">{title(c)}</span><span class="chip shrink-0 !px-1.5 !py-0 text-[10px] {c.attention === 'look' || c.alerts ? 'text-bad' : 'text-warn'}">{c.attention === 'look' ? 'Needs a look' : c.attention === 'watch' ? 'Watch' : 'Alert'}</span></span>
+						<span class="pii mt-2 text-sm font-semibold leading-snug">{c.topAlert ?? (c.clicksDelta != null ? `Clicks fell ${Math.round(Math.abs(c.clicksDelta) * 100)}%` : 'Clicks are falling')}</span>
+						<span class="mt-0.5 text-xs text-muted-foreground">{c.alerts ? `${c.alerts} open alert${c.alerts === 1 ? '' : 's'}` : `vs previous ${data.days} days`}</span>
+						<span class="mt-2 text-xs font-medium text-foreground/80 group-hover:underline">Open →</span>
+					</a>
+				{/each}
+			</div>
+		</section>
+	{/if}
 
 	{#if data.duplicates.length}
 		<div class="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border bg-card p-4 text-sm shadow-xs">
@@ -184,6 +229,36 @@
 	{#if groupTotals}
 		<p class="tnum mb-3 text-sm text-muted-foreground">Group <b class="text-foreground">{group}</b>: {groupTotals.sites} site{groupTotals.sites === 1 ? '' : 's'}, <b class="text-foreground">{fmtInt(groupTotals.clicks)}</b> clicks, {fmtInt(groupTotals.impressions)} impressions{#if groupTotals.look} · {groupTotals.look} need a look{/if}</p>
 	{/if}
+	<div class="mb-3 flex flex-wrap items-center gap-x-3">
+		<SectionTabs bind:value={trend} param="trend" label="Sites by direction" tabs={trendTabs} />
+		<div class="ml-auto"><SectionTabs bind:value={layout} param="view" label="Layout" tabs={[{ id: 'cards', label: 'Cards' }, { id: 'table', label: 'Table' }]} /></div>
+	</div>
+	{#if layout === 'table'}
+		<div class="overflow-x-auto rounded-2xl border bg-card shadow-xs">
+			<table class="w-full text-sm">
+				<thead class="text-left text-xs text-muted-foreground"><tr class="border-b">
+					<th class="px-4 py-2.5 font-medium">Site</th><th class="px-3 py-2.5 font-medium">Direction</th><th class="px-3 py-2.5 text-right font-medium">Clicks</th><th class="px-3 py-2.5 text-right font-medium">Δ</th><th class="px-3 py-2.5 font-medium">Daily clicks</th><th class="px-3 py-2.5 text-right font-medium">Impr.</th><th class="px-3 py-2.5 text-right font-medium">CTR</th><th class="px-3 py-2.5 text-right font-medium">Position</th><th class="px-3 py-2.5 text-right font-medium">Alerts</th>
+				</tr></thead>
+				<tbody>
+					{#each cards as c (c.id)}
+						<tr class="border-b last:border-0 hover:bg-muted/40 {c.hidden ? 'opacity-55' : ''}">
+							<td class="max-w-64 px-4 py-2.5"><a class="pii flex items-center gap-2 font-medium hover:underline" href="/sites/{c.id}?days={data.days}">{#if c.pinned}<Pin class="size-3 shrink-0 fill-current text-muted-foreground" />{/if}<span class="truncate">{title(c)}</span></a></td>
+							<td class="px-3 py-2.5 text-xs {c.trend ? TREND_TONE[c.trend] : 'text-muted-foreground'}">{c.trend ? TREND_LABEL[c.trend] : '–'}</td>
+							<td class="tnum px-3 py-2.5 text-right font-medium">{fmtInt(c.clicks)}</td>
+							<td class="px-3 py-2.5 text-right"><Delta value={c.clicksDelta} why={c.comparable ? 'Too little data in the previous period' : 'Previous period still loading'} /></td>
+							<td class="px-3 py-1"><Sparkline values={c.spark} width={110} height={26} /></td>
+							<td class="tnum px-3 py-2.5 text-right">{fmtCompact(c.impressions)}</td>
+							<td class="tnum px-3 py-2.5 text-right">{fmtPct(c.ctr)}</td>
+							<td class="tnum px-3 py-2.5 text-right">{fmtPos(c.position)}</td>
+							<td class="tnum px-3 py-2.5 text-right">{#if c.alerts}<a class="text-bad hover:underline" href="/sites/{c.id}/alerts">{c.alerts}</a>{:else}<span class="text-muted-foreground">–</span>{/if}</td>
+						</tr>
+					{:else}
+						<tr><td colspan="9" class="px-4 py-6 text-center text-muted-foreground">No site matches these filters.</td></tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{:else}
 	<div class="stagger grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
 		{#each cards as c (c.id)}
 			<article class="group relative rounded-2xl border bg-card p-5 shadow-xs transition-all hover:-translate-y-px hover:shadow-md {c.hidden ? 'opacity-55' : ''}">
@@ -195,6 +270,7 @@
 							<AuthorityBadges authority={c.authority} class="ml-1" />
 							{#if c.removed}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px]" title="Google no longer lists this property for the account">removed in Search Console</span>{/if}
 							{#if isPrefix(c)}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px]">URL prefix</span>{/if}
+							{#if c.trend && !c.attention}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px] {TREND_TONE[c.trend]}" title="Clicks against the previous {data.days} days: a real change of 5% or more either way, beyond day-to-day noise">{TREND_LABEL[c.trend]}</span>{/if}
 							{#if c.attention}<span class="chip shrink-0 !px-1.5 !py-0 text-[10px] {c.attention === 'look' ? 'text-bad' : 'text-warn'}" title="Clicks fell {c.attention === 'look' ? '20%' : '10%'} or more against the previous period, beyond day-to-day noise">{c.attention === 'look' ? 'Needs a look' : 'Watch'}</span>{/if}
 							{#if c.alerts}<a href="/sites/{c.id}/alerts" class="chip relative z-10 inline-flex shrink-0 items-center gap-0.5 !px-1.5 !py-0 text-[10px] text-bad" title="{c.alerts} open alert{c.alerts === 1 ? '' : 's'}"><Bell class="size-2.5" />{c.alerts}</a>{/if}
 							<a href={c.href} target="_blank" rel="noreferrer noopener" class="tap relative z-10 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 [@media(hover:none)]:opacity-100" aria-label="Open the site in a new tab" title="Open site"><ExternalLink class="size-3.5" /></a>
@@ -247,6 +323,7 @@
 				{:else}
 					{#if c.spark.length > 1}
 						<SourceSpark series={seriesOf(c)} class="mt-5" />
+						{#if c.daysUp}<p class="tnum mt-1.5 text-xs text-muted-foreground">More clicks than the period before on <b class="font-medium text-foreground">{c.daysUp.up}</b> of {c.daysUp.of} days <span class="opacity-70">· dashed line</span></p>{/if}
 						{#if c.traffic.ga4 || c.traffic.bing}
 							<!-- Legend: names, totals and changes in text ink beside a colour swatch, so a line is never told apart by colour alone. -->
 							<div class="tnum mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -277,8 +354,11 @@
 					</span>
 				</div>
 			</article>
+		{:else}
+			<p class="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground lg:col-span-2 2xl:col-span-3">No site matches these filters.</p>
 		{/each}
 	</div>
+	{/if}
 	<p class="mt-6 text-xs text-muted-foreground">
 		<span title="Each source keeps its own newest days (Search Console lags about 2 days, Pacific time), so a line can stop a day early. GA4 sessions already include most Google clicks: the lines overlap, they do not add up.">Lines on one scale: <span class="font-medium" style="color:var(--src-gsc)">green</span> Google clicks, <span class="font-medium" style="color:var(--src-ga4)">orange</span> GA4 sessions (every channel), <span class="font-medium" style="color:var(--src-bing)">blue</span> Bing clicks. GA4 already includes most Google clicks, so they overlap, not add up. Dashed = days still being revised.</span>
 		<a class="underline underline-offset-2" href="?days={data.days}&hidden={data.showHidden ? 0 : 1}">{data.showHidden ? 'Hide' : 'Show'} hidden sites</a>

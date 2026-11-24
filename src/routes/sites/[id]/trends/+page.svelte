@@ -23,8 +23,8 @@
 	const xs = $derived(fc?.projection ? [...fc.weekly.slice(-12).map((w) => w.weekEnd), ...fc.projection.points.map((p) => p.weekEnd)] : []);
 </script>
 
-<nav class="mb-4 flex flex-wrap gap-1.5" aria-label="Trend views">
-	{#each views as [v, label]}<a class="chip {data.view === v ? 'chip-on' : ''}" href={href(v)} data-sveltekit-noscroll>{label}</a>{/each}
+<nav class="seg mb-4" aria-label="Trend views">
+	{#each views as [v, label]}<a class="seg-item {data.view === v ? 'seg-on' : ''}" aria-current={data.view === v ? 'page' : undefined} href={href(v)} data-sveltekit-noscroll>{label}</a>{/each}
 </nav>
 
 {#if (data.view === 'movers' || data.view === 'new') && data.comparable === false}

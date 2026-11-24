@@ -28,10 +28,10 @@
 			{/each}
 		</dl>
 		{#if weeks.length >= 2}
-			<details class="mt-3 text-xs">
-				<summary class="cursor-pointer text-muted-foreground select-none">Week by week, last {weeks.length} weeks</summary>
-				<div class="mt-2"><PositionTrend {weeks} /></div>
-			</details>
+			<div class="mt-4">
+				<div class="mb-1 text-xs text-muted-foreground">Week by week, last {weeks.length} weeks</div>
+				<PositionTrend {weeks} />
+			</div>
 		{/if}
 {:else}
 	<p class="text-sm text-muted-foreground">Not enough searches yet to show where they rank.</p>

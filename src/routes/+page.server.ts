@@ -17,7 +17,10 @@ import { authorityMap } from '$lib/server/authority';
 import { hasRole } from '$lib/server/roles';
 import { cardTraffic, sumSource } from '$lib/server/traffic';
 import { eachDay } from '$lib/server/dates';
-import { attentionOf } from '$lib/alerts';
+import { attentionOf, daysAhead, trendOf } from '$lib/alerts';
+import { addDays } from '$lib/server/dates';
+import { dailySeries } from '$lib/server/queries';
+import { updatesBetween } from '$lib/server/gupdates';
 
 export const load: PageServerLoad = ({ url, locals }) => {
 	const showHidden = url.searchParams.get('hidden') === '1';
@@ -29,6 +32,11 @@ export const load: PageServerLoad = ({ url, locals }) => {
 	const authBySite = authorityMap();
 	const cards = siteCards(days, { includeHidden: showHidden }).filter((c) => scope === null || scope.includes(c.site.id));
 	const alertsBySite = new Map((db().prepare("SELECT site_id, COUNT(*) n FROM alert_events WHERE status = 'open' AND positive = 0 GROUP BY site_id").all() as { site_id: number; n: number }[]).map((r) => [r.site_id, r.n]));
+	// The newest open problem alert of each site, for the "Needs attention" strip.
+	const topAlert = new Map<number, string>();
+	for (const r of db().prepare("SELECT site_id, title FROM alert_events WHERE status = 'open' AND positive = 0 ORDER BY opened_at DESC").all() as { site_id: number; title: string }[]) if (!topAlert.has(r.site_id)) topAlert.set(r.site_id, r.title);
+	// Each site's previous period, day by day: the dashed line on its card and the "on X of N days" count.
+	const prevDaily = new Map(cards.map((c) => [c.site.id, c.comparable && c.site.synced_through ? dailySeries(c.site.id, c.period.prevStart, c.period.prevEnd).map((r) => r.clicks) : null]));
 	const totals = portfolioTotals(cards.filter((c) => !c.site.hidden && c.site.permission !== 'none'));
 	const links = allLinks();
 	const has = (id: number, k: string) => links.some((l) => l.site_id === id && l.kind === k);
@@ -72,6 +80,7 @@ export const load: PageServerLoad = ({ url, locals }) => {
 		accounts: listAccounts()
 			.filter((a) => scope === null || cards.some((c) => c.site.account_id === a.id))
 			.map((a) => ({ id: a.id, label: a.label ?? a.email, status: a.status })),
+		portfolio: portfolioSeries(counted.map((c) => c.site.id), latest, days, totals.comparable),
 		tagList: [...new Set(cards.flatMap((c) => (c.site.tags ? c.site.tags.split(',').filter(Boolean) : [])))].sort(),
 		cards: cards.map((c) => ({
 			id: c.site.id,
@@ -82,6 +91,16 @@ export const load: PageServerLoad = ({ url, locals }) => {
 			tags: c.site.tags ? c.site.tags.split(',').filter(Boolean) : [],
 			pinned: !!c.site.pinned,
 			alerts: alertsBySite.get(c.site.id) ?? 0,
+			topAlert: topAlert.get(c.site.id) ?? null,
+			trend: trendOf(c),
+			// the previous period on the card chart's calendar: day i of this period beside day i of the one before
+			prevSpark: (() => {
+				const prev = prevDaily.get(c.site.id);
+				if (!prev) return null;
+				const own = new Map(eachDay(c.period.start, c.period.end).map((d, i) => [d, i]));
+				return traffic.get(c.site.id)!.chart.dates.map((d) => (own.has(d) ? (prev[own.get(d)!] ?? null) : null));
+			})(),
+			daysUp: prevDaily.get(c.site.id) ? daysAhead(c.spark, prevDaily.get(c.site.id)!) : null,
 			// Falling clicks put a site first under "Needs a look": a real drop (beyond day-to-day noise) of 20%+ is "look", 10%+ "watch".
 			attention: attentionOf(c),
 			account: c.site.account_label ?? c.site.account_email,
@@ -194,3 +213,28 @@ export const actions: Actions = {
 		}
 	}
 };
+
+/**
+ * Every counted site's clicks and impressions added up by day, on one calendar ending at the newest data day, and the same for the
+ * period before (when every counted site has it stored), for the chart above the site cards.
+ */
+function portfolioSeries(ids: number[], latest: string | null, days: number, comparable: boolean) {
+	if (!ids.length || !latest) return null;
+	const end = latest;
+	const start = addDays(end, -(days - 1));
+	const sum = (from: string, to: string) => {
+		const by = new Map<string, { clicks: number; impressions: number; pw: number }>();
+		for (const id of ids) for (const r of dailySeries(id, from, to)) {
+			const a = by.get(r.date) ?? { clicks: 0, impressions: 0, pw: 0 };
+			a.clicks += r.clicks;
+			a.impressions += r.impressions;
+			a.pw += r.position * r.impressions;
+			by.set(r.date, a);
+		}
+		return eachDay(from, to).map((date) => {
+			const a = by.get(date) ?? { clicks: 0, impressions: 0, pw: 0 };
+			return { date, clicks: a.clicks, impressions: a.impressions, position: a.impressions ? a.pw / a.impressions : 0 };
+		});
+	};
+	return { now: sum(start, end), prev: comparable ? sum(addDays(start, -days), addDays(start, -1)) : null, updates: updatesBetween(start, end).map((u) => ({ date: u.begin, label: u.name })) };
+}

@@ -148,11 +148,11 @@
 	<h2 class="mb-1 font-medium">Weak and dead URLs</h2>
 	<p class="mb-2 max-w-3xl text-xs text-muted-foreground">Every page Search Console has shown, classed by how it is doing against the previous {data.days} days (cut-offs are my own, chosen to be conservative). A page that never got an impression is invisible to Search Console; compare with your sitemap to find those.</p>
 	{#if !data.classes.comparable}<p class="mb-2 text-xs text-warn">“Dead” and “fading” are not judged yet: {data.classes.reason}</p>{/if}
-	<div class="mb-3 flex flex-wrap gap-1.5">
-		<button class="chip {cls === 'all' ? 'chip-on' : ''}" onclick={() => (cls = 'all')}>All problems {Object.entries(data.classes.counts).filter(([k]) => k !== 'healthy').reduce((a, [, n]) => a + n, 0)}</button>
+	<div class="seg mb-3" role="group" aria-label="Which problems">
+		<button class="seg-item {cls === 'all' ? 'seg-on' : ''}" aria-pressed={cls === 'all'} onclick={() => (cls = 'all')}>All problems {Object.entries(data.classes.counts).filter(([k]) => k !== 'healthy').reduce((a, [, n]) => a + n, 0)}</button>
 		{#each Object.keys(labels) as k}
 			{@const n = data.classes.counts[k as keyof typeof data.classes.counts]}
-			<button class="chip {cls === k ? 'chip-on' : ''}" onclick={() => (cls = k)} title={help[k]}>{labels[k]} {n}{#if data.classes.lost[k]} <span class="text-bad">(−{data.classes.lost[k].toLocaleString('en-US')} clicks)</span>{/if}</button>
+			<button class="seg-item {cls === k ? 'seg-on' : ''}" aria-pressed={cls === k} onclick={() => (cls = k)} title={help[k]}>{labels[k]} {n}{#if data.classes.lost[k]} <span class="text-bad">(−{data.classes.lost[k].toLocaleString('en-US')} clicks)</span>{/if}</button>
 		{/each}
 		<span class="chip text-muted-foreground">Healthy {data.classes.counts.healthy}</span>
 	</div>

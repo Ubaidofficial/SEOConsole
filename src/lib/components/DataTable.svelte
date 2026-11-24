@@ -4,11 +4,13 @@
 	import { privacy } from '$lib/privacy.svelte';
 	import { Tip } from '$lib/components/ui/tooltip';
 	import { COLUMN_HINT } from '$lib/explain';
+	import Sparkline from '$lib/components/Sparkline.svelte';
 
 	interface Col {
 		key: string;
 		label: string;
-		type?: 'text' | 'int' | 'pct' | 'pos' | 'delta' | 'link' | 'dur' | 'money';
+		/** 'spark': the value is an array of daily numbers, drawn as a small line (sorted by its total) */
+		type?: 'text' | 'int' | 'pct' | 'pos' | 'delta' | 'link' | 'dur' | 'money' | 'spark';
 		/** ISO 4217 code for a money column, e.g. USD. */
 		currency?: string | null;
 		href?: (row: Row) => string;
@@ -51,15 +53,16 @@
 	let page = $state(0);
 	let filter = $state('');
 
-	const numeric = (c: Col) => !!c.type && c.type !== 'text' && c.type !== 'link';
+	const numeric = (c: Col) => !!c.type && c.type !== 'text' && c.type !== 'link' && c.type !== 'spark';
+	const total = (v: unknown) => (Array.isArray(v) ? v.reduce((a: number, x) => a + (Number(x) || 0), 0) : v);
 	const isPii = (c: Col, row: Row) => (c.pii === undefined ? c.key === 'site' || c.type === 'link' : typeof c.pii === 'function' ? c.pii(row) : c.pii);
 
 	const textKeys = $derived(cols.filter((c) => c.type === 'text' || c.type === 'link' || !c.type).map((c) => c.key));
 	const filtered = $derived(filter ? rows.filter((r) => textKeys.some((k) => String(r[k] ?? '').toLowerCase().includes(filter.toLowerCase()))) : rows);
 	const sorted = $derived(
 		[...filtered].sort((a, b) => {
-			const av = a[sortKey];
-			const bv = b[sortKey];
+			const av = total(a[sortKey]);
+			const bv = total(b[sortKey]);
 			const r = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av ?? '').localeCompare(String(bv ?? ''));
 			return sortDir === 'asc' ? r : -r;
 		})
@@ -156,7 +159,9 @@
 				<tr class="fade-in transition-colors hover:bg-muted/50" style="--i:{Math.min(ri, 12)}" class:cursor-pointer={!!onRowClick} onclick={() => onRowClick?.(row)}>
 					{#each cols as c, ci}
 						<td class="td" class:pii={isPii(c, row)} class:text-right={numeric(c)} class:tnum={numeric(c)} style="{tint(c)}{edge(ci)}{c.bar ? barStyle(c, row) : ''}{c.width ? `;max-width:${c.width}` : ''}">
-							{#if c.type === 'link'}
+							{#if c.type === 'spark'}
+								{#if Array.isArray(row[c.key]) && row[c.key].length > 1}<Sparkline values={row[c.key]} width={84} height={22} />{:else}<span class="text-muted-foreground">–</span>{/if}
+							{:else if c.type === 'link'}
 								<a class="block max-w-[34rem] truncate text-link hover:underline" href={c.href ? c.href(row) : String(row[c.key])} target="_blank" rel="noreferrer noopener" title={tip(c, row, String(row[c.key]))}>{c.display ? c.display(row) : String(row[c.key]).replace(/^https?:\/\/(www\.)?/, '')}</a>
 							{:else if c.type === 'delta'}
 								<span class:text-good={(row[c.key] ?? 0) > 0.005} class:text-bad={(row[c.key] ?? 0) < -0.005}>{cell(c, row[c.key])}</span>

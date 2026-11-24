@@ -83,3 +83,23 @@ export function attentionOf(c: { comparable: boolean; now: { clicks: number }; p
 	const fall = (c.prev.clicks - c.now.clicks) / c.prev.clicks;
 	return fall >= 0.2 ? 'look' : fall >= 0.1 ? 'watch' : null;
 }
+
+/**
+ * A site's direction for the dashboard's Growing / Steady / Declining label: a real change in clicks (beyond day-to-day noise) of
+ * 5% or more either way, else Steady; null when the two periods cannot be compared or there are too few clicks to say.
+ */
+export type Trend = 'growing' | 'steady' | 'declining';
+export function trendOf(c: { comparable: boolean; now: { clicks: number }; prev: { clicks: number } }): Trend | null {
+	if (!c.comparable || c.now.clicks + c.prev.clicks < 20) return null;
+	const change = c.prev.clicks ? (c.now.clicks - c.prev.clicks) / c.prev.clicks : 1;
+	if (Math.abs(change) < 0.05 || !countChangeReal(c.now.clicks, c.prev.clicks)) return 'steady';
+	return change > 0 ? 'growing' : 'declining';
+}
+
+/** On how many days this period beat the same day of the period before (day i against day i, so weekdays line up). */
+export function daysAhead(now: number[], prev: number[]): { up: number; of: number } {
+	const n = Math.min(now.length, prev.length);
+	let up = 0;
+	for (let i = 0; i < n; i++) if (now[i] > prev[i]) up++;
+	return { up, of: n };
+}
