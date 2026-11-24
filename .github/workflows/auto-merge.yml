@@ -1,0 +1,66 @@
+# Merges a pull request by itself once CI has passed on it, so a change Claude prepares goes in without a manual click.
+#
+# Only pull requests that are safe to merge unattended qualify:
+#   - the branch lives in this repository (never a fork) and starts with claude/
+#   - the pull request was opened by the repository owner, is not a draft, and has no "hold" label
+#   - CI passed on the exact commit that is merged (the merge is refused if the branch moved since)
+# Add the "hold" label, or mark the pull request as a draft, to keep one open.
+#
+# A merge made with the workflow's own token does not start other workflows on main (a GitHub rule), so this workflow starts
+# the Deploy workflow itself after merging.
+name: Auto-merge
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: auto-merge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'claude/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Merge the pull request if it qualifies
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          pr=$(gh api "repos/$REPO/pulls?state=open&head=$OWNER:$BRANCH" --jq '.[0] // empty')
+          if [ -z "$pr" ]; then echo "No open pull request for $BRANCH."; exit 0; fi
+          num=$(jq -r .number <<<"$pr")
+          author=$(jq -r .user.login <<<"$pr")
+          draft=$(jq -r .draft <<<"$pr")
+          head=$(jq -r .head.sha <<<"$pr")
+          base=$(jq -r .base.ref <<<"$pr")
+          hold=$(jq -r '[.labels[].name] | index("hold") != null' <<<"$pr")
+          if [ "${author,,}" != "${OWNER,,}" ]; then echo "#$num was opened by $author, not the owner: left for a person."; exit 0; fi
+          if [ "$draft" = "true" ] || [ "$hold" = "true" ]; then echo "#$num is a draft or labelled hold: left open."; exit 0; fi
+          if [ "$head" != "$SHA" ]; then echo "#$num has moved on since CI passed ($SHA → $head): waiting for CI on the new commit."; exit 0; fi
+          if [ "$base" != "main" ]; then echo "#$num targets $base, not main: left open."; exit 0; fi
+          gh api -X PUT "repos/$REPO/pulls/$num/merge" -f merge_method=merge -f sha="$SHA" -f commit_title="Merge pull request #$num (auto-merged after CI passed)"
+          echo "merged=true" >> "$GITHUB_OUTPUT"
+          echo "Merged #$num."
+      - name: Start the deploy
+        if: steps.merge.outputs.merged == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --repo "${{ github.repository }}" --ref main

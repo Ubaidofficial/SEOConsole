@@ -1,0 +1,53 @@
+# Asks Openship to deploy main: after CI passes on main, when Auto-merge has merged a pull request, or by hand (Run workflow).
+#
+# It runs only when the repository has these secrets (Settings → Secrets and variables → Actions):
+#   OPENSHIP_URL      the Openship server's address, e.g. https://openship.example.com
+#   OPENSHIP_TOKEN    a personal access token (`openship token create`) with the deployment:write permission
+#   OPENSHIP_PROJECT  the Openship project id of this app (proj_…)
+#   OPENSHIP_ORG      optional: the organization id, sent as X-Organization-Id
+# Without them it does nothing, so it never clashes with Openship's own "Auto Deploy" toggle (Source tab), which deploys on
+# every push to main by itself. Use one or the other, not both, or main is deployed twice.
+# API: POST /api/deployments {"projectId","branch"} with a bearer token (openship.io/docs/api/deployments).
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask Openship to deploy main
+        env:
+          OPENSHIP_URL: ${{ secrets.OPENSHIP_URL }}
+          OPENSHIP_TOKEN: ${{ secrets.OPENSHIP_TOKEN }}
+          OPENSHIP_PROJECT: ${{ secrets.OPENSHIP_PROJECT }}
+          OPENSHIP_ORG: ${{ secrets.OPENSHIP_ORG }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENSHIP_URL:-}" ] || [ -z "${OPENSHIP_TOKEN:-}" ] || [ -z "${OPENSHIP_PROJECT:-}" ]; then
+            echo "::notice::Openship secrets are not set, so nothing was deployed. Set OPENSHIP_URL, OPENSHIP_TOKEN and OPENSHIP_PROJECT, or switch on Auto Deploy in Openship instead."
+            exit 0
+          fi
+          body=$(jq -nc --arg p "$OPENSHIP_PROJECT" '{projectId: $p, branch: "main"}')
+          org=()
+          if [ -n "${OPENSHIP_ORG:-}" ]; then org=(-H "X-Organization-Id: $OPENSHIP_ORG"); fi
+          code=$(curl -sS -o response.json -w '%{http_code}' -X POST "${OPENSHIP_URL%/}/api/deployments" \
+            -H "Authorization: Bearer $OPENSHIP_TOKEN" -H 'Content-Type: application/json' "${org[@]}" -d "$body")
+          echo "Openship answered HTTP $code"
+          # the response can name the deployment; it is printed without the token, which is never echoed
+          jq -c '{id: (.id // .deployment.id // null), status: (.status // .deployment.status // null)}' response.json 2>/dev/null || true
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then echo "::error::Openship refused the deploy (HTTP $code)."; exit 1; fi
