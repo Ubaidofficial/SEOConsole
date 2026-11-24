@@ -4,6 +4,10 @@
 	import Delta from '$lib/components/Delta.svelte';
 	import Explainer from '$lib/components/Explainer.svelte';
 	import SectionTabs from '$lib/components/SectionTabs.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { Search, Hourglass, Map as MapIcon, RefreshCw, LoaderCircle, Link, CircleX, CircleCheck } from '@lucide/svelte';
 	import { enhance } from '$app/forms';
 	import { fmtInt, fmtPct, ago } from '$lib/format';
 	let { data, form } = $props();
@@ -20,9 +24,11 @@
 	const CODE_LABEL: Record<string, string> = { '2xx': 'OK (2xx)', '301': 'Moved (301)', '302': 'Temporary (302)', '4xx': 'Not found (4xx)', '5xx': 'Server error (5xx)', other: 'Other' };
 	const path = (u: string) => { try { const x = new URL(u); return x.pathname + x.search || '/'; } catch { return u; } };
 	const KIND = { gone: 'Page not found', error: 'Server error' } as const;
+	const feedTone = (st: string) => (/fail|error/i.test(st) ? 'bad' : /success|ok/i.test(st) ? 'good' : 'muted');
+	const maxLinked = $derived(data.linked && data.linksData?.report ? Math.max(1, ...data.linksData.report.mostLinked.slice(0, 10).map((m) => m.count)) : 1);
 	const cols = (l: string, link = false) => [
 		{ key: 'term', label: l, type: (link ? 'link' : 'text') as 'link' | 'text', pii: link ? undefined : (r: { branded?: boolean }) => !!r.branded },
-		{ key: 'clicks', label: 'Clicks', type: 'int' as const },
+		{ key: 'clicks', label: 'Clicks', type: 'int' as const, bar: true },
 		{ key: 'impressions', label: 'Impressions', type: 'int' as const },
 		{ key: 'ctr', label: 'CTR', type: 'pct' as const },
 		{ key: 'clickPos', label: 'Avg click pos.', type: 'pos' as const }
@@ -30,8 +36,15 @@
 </script>
 
 {#if !data.linked}
-	<div class="card p-6 text-center"><p class="mb-3">Bing Webmaster isn't linked to this site yet.</p><a class="btn btn-primary" href="/connect">Connect Bing</a></div>
+	<PageHeader tab="/bing" title="Bing" lead="Bing Webmaster data for this site, once Bing is linked." />
+	<EmptyState icon={Search} tone="violet" title="Bing Webmaster isn't linked to this site yet." text="Link Bing Webmaster Tools to see Bing clicks, queries, pages, crawling and inbound links beside Google's.">
+		<a class="btn btn-primary btn-sm" href="/connect"><img src="/logos/bing.svg" alt="" width="14" height="14" class="size-3.5 object-contain" />Connect Bing</a>
+	</EmptyState>
 {:else}
+	<PageHeader tab="/bing" title="Bing" lead="Bing clicks, queries, pages, crawling and inbound links, from Bing Webmaster Tools." label="Where these numbers come from">
+		<p>Daily totals come from Bing's traffic endpoint (updated daily; includes web, chat, news, images, videos from 24 Mar 2023). Query and page tables use Bing's detail endpoints, which Microsoft documents as <b>updated weekly</b>, so they lag the totals and are aggregated from weekly rows.</p>
+		{#snippet meta()}{#if data.status.state === 'error'}<StatusPill tone="bad" title={data.status.message ?? undefined}>sync failed</StatusPill>{/if}{/snippet}
+	</PageHeader>
 	<div class="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Bing clicks</div><div class="tnum text-xl font-semibold">{fmtInt(data.kpi.clicks)}</div><Delta value={data.kpi.clicksDelta} /></div>
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Bing impressions</div><div class="tnum text-xl font-semibold">{fmtInt(data.kpi.impressions)}</div><Delta value={data.kpi.impressionsDelta} /></div>
@@ -39,7 +52,6 @@
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Site</div><div class="pii truncate text-sm font-medium">{data.bingUrl}</div><div class="text-xs text-muted-foreground">{data.status.state === 'error' ? data.status.message : 'synced ' + ago(data.status.lastSync)}</div></div>
 	</div>
 	<div class="card mb-4 p-4"><Chart data={data.series} hide={['position']} labels={{ clicks: 'Bing clicks', impressions: 'Bing impressions' }} /></div>
-	<details class="mb-4 text-xs text-muted-foreground"><summary class="cursor-pointer select-none hover:text-foreground">Where these numbers come from</summary><p class="mt-1">Daily totals come from Bing's traffic endpoint (updated daily; includes web, chat, news, images, videos from 24 Mar 2023). Query and page tables use Bing's detail endpoints, which Microsoft documents as <b>updated weekly</b>, so they lag the totals and are aggregated from weekly rows.</p></details>
 	<SectionTabs bind:value={view} label="Bing details" tabs={[
 		{ id: 'queries', label: 'Queries' },
 		{ id: 'pages', label: 'Pages' },
@@ -77,7 +89,7 @@
 	<section id="crawl">
 		<h2 class="sr-only">How Bing crawls the site</h2>
 		{#if !data.crawl}
-			<p class="card p-4 text-sm text-muted-foreground">Read on the next Bing sync.</p>
+			<EmptyState icon={Hourglass} title="Read on the next Bing sync." />
 		{:else}
 			{@const c = data.crawl}
 			{#if c.crawlError}<p class="mb-2 text-xs text-warn">Bing's crawl statistics could not be read on the last sync: {c.crawlError}</p>{/if}
@@ -94,7 +106,7 @@
 					Status codes Bing got: {Object.entries(t.codes).filter(([, v]) => v > 0).map(([k, v]) => `${CODE_LABEL[k]} ${fmtInt(v)}`).join(' · ') || 'none recorded'}{t.dnsFailures || t.timeouts ? ` · DNS failures ${fmtInt(t.dnsFailures)} · timeouts ${fmtInt(t.timeouts)}` : ''}{t.malware ? ` · malware flagged ${fmtInt(t.malware)}` : ''}. Bing keeps about six months.
 				</p>
 			{:else}
-				<p class="mb-3 text-sm text-muted-foreground">Bing has no crawl statistics for this period.</p>
+				<EmptyState icon={Hourglass} title="Bing has no crawl statistics for this period." />
 			{/if}
 		{/if}
 	</section>
@@ -114,28 +126,28 @@
 				<div class="card overflow-x-auto"><table class="w-full text-sm">
 					<thead><tr class="text-left text-xs text-muted-foreground"><th class="p-2">Sitemap</th><th class="p-2">Status</th><th class="p-2 text-right">URLs</th><th class="p-2">Last read by Bing</th><th class="p-2">Submitted</th></tr></thead>
 					<tbody>{#each c.feeds as f (f.url)}
-						<tr class="border-t"><td class="pii max-w-[20rem] truncate p-2" title={f.url}>{path(f.url)}</td><td class="p-2 {/fail|error/i.test(f.status) ? 'text-bad' : ''}">{f.status || '–'}</td><td class="tnum p-2 text-right">{fmtInt(f.urlCount)}</td><td class="p-2">{f.lastCrawled ?? 'never'}</td><td class="p-2">{f.submitted ?? '–'}</td></tr>
+						<tr class="border-t"><td class="pii max-w-[20rem] truncate p-2" title={f.url}>{path(f.url)}</td><td class="p-2">{#if f.status}<StatusPill tone={feedTone(f.status)}>{f.status}</StatusPill>{:else}–{/if}</td><td class="tnum p-2 text-right">{fmtInt(f.urlCount)}</td><td class="p-2">{f.lastCrawled ?? 'never'}</td><td class="p-2">{f.submitted ?? '–'}</td></tr>
 					{/each}</tbody>
 				</table></div>
 			{:else if !c.feedsError}
-				<p class="card p-3 text-sm text-muted-foreground">Bing lists no sitemaps for this site yet. SEOConsole sends it the sitemaps Search Console has on each Bing sync.</p>
+				<EmptyState icon={MapIcon} title="Bing lists no sitemaps for this site yet." text="SEOConsole sends it the sitemaps Search Console has on each Bing sync." />
 			{/if}
 		{:else}
-			<p class="card p-4 text-sm text-muted-foreground">Read on the next Bing sync.</p>
+			<EmptyState icon={Hourglass} title="Read on the next Bing sync." />
 		{/if}
 	{:else}
 	<section id="links">
 		<div class="mb-2 flex flex-wrap items-center gap-2">
-			<h2 class="font-medium">Inbound links Bing knows about</h2>
+			<h3 class="flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-violet" aria-hidden="true"><Link class="size-3.5" /></span>Inbound links Bing knows about</h3>
 			<form method="POST" action="?/refreshLinks" class="ml-auto" use:enhance={() => { busy = true; return async ({ update }) => { await update(); busy = false; }; }}>
-				<button class="btn btn-sm" disabled={busy || data.readOnly}>{busy ? 'Fetching…' : 'Refresh now'}</button>
+				<button class="btn btn-sm" disabled={busy || data.readOnly}>{#if busy}<LoaderCircle class="size-3.5 animate-spin" />Fetching…{:else}<RefreshCw class="size-3.5" />Refresh now{/if}</button>
 			</form>
 		</div>
 		{#if form?.error}<p class="mb-2 text-sm text-red-600" role="alert">{form.error}</p>{/if}
 		{#if !data.linksData}
-			<p class="card p-4 text-sm text-muted-foreground">Not fetched yet. It is read once a week with the key you already connected, or press Refresh now.</p>
+			<EmptyState icon={Hourglass} title="Not fetched yet." text="It is read once a week with the key you already connected, or press Refresh now." />
 		{:else if !data.linksData.report}
-			<p class="card p-4 text-sm text-muted-foreground">The last attempt failed: {data.linksData.error}. It will retry within a day.</p>
+			<EmptyState icon={CircleX} tone="red" title="The last attempt failed." text="{data.linksData.error}. It will retry within a day." />
 		{:else}
 			{@const r = data.linksData.report}
 			{#if r.malware.length}
@@ -153,23 +165,23 @@
 			</Explainer>
 			<div class="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<div>
-					<h3 class="mb-1 text-sm font-medium">Failing pages that still have links</h3>
+					<h4 class="mb-1 text-sm font-medium">Failing pages that still have links</h4>
 					{#if r.dead.length}
 						<div class="card overflow-x-auto"><table class="w-full text-sm">
 							<thead><tr class="text-left text-xs text-muted-foreground"><th class="p-2">Page</th><th class="p-2">Problem</th><th class="p-2 text-right">Links</th><th class="p-2">Redirect to</th></tr></thead>
 							<tbody>{#each r.dead.slice(0, 25) as d (d.url)}
-								<tr class="border-t"><td class="pii max-w-[16rem] truncate p-2" title={d.url}>{path(d.url)}</td><td class="p-2">{KIND[d.kind]} ({d.httpCode})</td><td class="tnum p-2 text-right">{fmtInt(d.inLinks)}</td><td class="pii max-w-[14rem] truncate p-2" title={d.redirectTo ?? ''}>{d.redirectTo ? path(d.redirectTo) : d.kind === 'error' ? 'Fix the error' : 'No close match: pick one'}</td></tr>
+								<tr class="border-t"><td class="pii max-w-[16rem] truncate p-2" title={d.url}>{path(d.url)}</td><td class="p-2"><StatusPill tone={d.kind === 'error' ? 'bad' : 'warn'}>{KIND[d.kind]} ({d.httpCode})</StatusPill></td><td class="tnum p-2 text-right">{fmtInt(d.inLinks)}</td><td class="pii max-w-[14rem] truncate p-2" title={d.redirectTo ?? ''}>{d.redirectTo ? path(d.redirectTo) : d.kind === 'error' ? 'Fix the error' : 'No close match: pick one'}</td></tr>
 							{/each}</tbody>
 						</table></div>
 					{:else}
-						<p class="card p-3 text-sm text-muted-foreground">None. Every failing page Bing found has no links pointing at it.</p>
+						<EmptyState icon={CircleCheck} tone="green" title="None." text="Every failing page Bing found has no links pointing at it." />
 					{/if}
 				</div>
 				<div>
-					<h3 class="mb-1 text-sm font-medium">Most linked pages</h3>
+					<h4 class="mb-1 text-sm font-medium">Most linked pages</h4>
 					<div class="card overflow-x-auto"><table class="w-full text-sm">
 						<thead><tr class="text-left text-xs text-muted-foreground"><th class="p-2">Page</th><th class="p-2 text-right">Links</th></tr></thead>
-						<tbody>{#each r.mostLinked.slice(0, 10) as m (m.url)}<tr class="border-t"><td class="pii max-w-[22rem] truncate p-2" title={m.url}>{path(m.url)}</td><td class="tnum p-2 text-right">{fmtInt(m.count)}</td></tr>{/each}</tbody>
+						<tbody>{#each r.mostLinked.slice(0, 10) as m (m.url)}<tr class="border-t"><td class="pii max-w-[22rem] truncate p-2" title={m.url}>{path(m.url)}</td><td class="tnum cellbar p-2 text-right" style="--w:{m.count / maxLinked}">{fmtInt(m.count)}</td></tr>{/each}</tbody>
 					</table></div>
 				</div>
 			</div>

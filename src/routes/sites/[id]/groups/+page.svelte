@@ -7,7 +7,9 @@
 	import { enhance } from '$app/forms';
 	import RuleGroupEditor from '$lib/components/RuleGroupEditor.svelte';
 	import Chart from '$lib/components/Chart.svelte';
-	import { Sparkles } from '@lucide/svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import { Sparkles, Plus, FolderTree, Tags, Languages, Swords, CalendarRange } from '@lucide/svelte';
 	let { data, form } = $props();
 	let suggesting = $state(false);
 	const isAdmin = $derived(page.data.user?.role === 'owner' || page.data.user?.role === 'admin');
@@ -27,6 +29,15 @@
 	const cell = (v: number, max: number) => (max > 0 ? Math.min(1, v / max) : 0);
 </script>
 
+<PageHeader tab="/groups" title="Groups" lead="Your keyword buckets and page groups, plus pages by folder and queries by topic, to see which part of the site is growing or shrinking.">
+	{#snippet actions()}
+		{#if data.mine && canEdit}
+			<form method="POST" action="?/suggest" use:enhance={() => { suggesting = true; return async ({ update }) => { await update({ reset: false }); suggesting = false; }; }}><button class="btn btn-sm" disabled={suggesting} title={data.aiReady ? 'Your AI provider (the one Ask uses) reads your top searches and pages and proposes buckets, page groups and brand terms. Nothing is saved until you tick and add.' : 'Proposes buckets from your topic clusters and page groups from your folders. Set up Ask to have an AI propose them.'}><Sparkles class="size-3.5" />{suggesting ? 'Suggesting…' : data.aiReady ? 'Suggest with AI' : 'Suggest'}</button></form>
+			{#if editing !== 'new'}<button class="btn btn-primary btn-sm" onclick={() => (editing = 'new')}><Plus class="size-3.5" />{data.mine.kind === 'bucket' ? 'New bucket' : 'New page group'}</button>{/if}
+		{/if}
+	{/snippet}
+</PageHeader>
+
 <div class="mb-4 flex flex-wrap items-center gap-3">
 	<nav class="seg" aria-label="Group views">
 		{#each views as [v, label]}<a class="seg-item {data.view === v ? 'seg-on' : ''}" aria-current={data.view === v ? 'page' : undefined} href={href({ view: v })} data-sveltekit-noscroll>{label}</a>{/each}
@@ -39,19 +50,11 @@
 
 {#if data.mine}
 	{@const bucket = data.mine.kind === 'bucket'}
-	<div class="mb-3 flex flex-wrap items-center gap-3">
-		<p class="text-xs text-muted-foreground">{bucket ? 'Searches sorted into topics by your own rules. A search can sit in several buckets.' : 'Pages sorted into sections by your own rules on the path. A page can sit in several groups.'} Click a row for its daily chart.</p>
-		{#if canEdit}
-			<div class="ml-auto flex gap-2">
-				<form method="POST" action="?/suggest" use:enhance={() => { suggesting = true; return async ({ update }) => { await update({ reset: false }); suggesting = false; }; }}><button class="btn" disabled={suggesting} title={data.aiReady ? 'Your AI provider (the one Ask uses) reads your top searches and pages and proposes buckets, page groups and brand terms. Nothing is saved until you tick and add.' : 'Proposes buckets from your topic clusters and page groups from your folders. Set up Ask to have an AI propose them.'}><Sparkles class="size-3.5" />{suggesting ? 'Suggesting…' : data.aiReady ? 'Suggest with AI' : 'Suggest'}</button></form>
-				{#if editing !== 'new'}<button class="btn" onclick={() => (editing = 'new')}>{bucket ? 'New bucket' : 'New page group'}</button>{/if}
-			</div>
-		{/if}
-	</div>
+	<p class="mb-3 text-xs text-muted-foreground">{bucket ? 'Searches sorted into topics by your own rules. A search can sit in several buckets.' : 'Pages sorted into sections by your own rules on the path. A page can sit in several groups.'} Click a row for its daily chart.</p>
 	{#if form?.suggestions}
 		{@const sg = form.suggestions}
 		<section class="card mb-4 p-4" aria-labelledby="sg-h">
-			<div class="mb-2 flex flex-wrap items-baseline gap-x-3"><h2 id="sg-h" class="font-medium">Suggestions</h2><span class="text-xs text-muted-foreground">{sg.source === 'ai' ? 'from AI' : 'from your topic clusters and folders'} · tick what to keep</span></div>
+			<div class="mb-2 flex flex-wrap items-center gap-x-3"><h3 id="sg-h" class="flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-violet" aria-hidden="true"><Sparkles class="size-3.5" /></span>Suggestions</h3><span class="text-xs text-muted-foreground">{sg.source === 'ai' ? 'from AI' : 'from your topic clusters and folders'} · tick what to keep</span></div>
 			{#if sg.note}<p class="mb-3 text-xs text-muted-foreground">{sg.note}</p>{/if}
 			{#if sg.brandTerms.length}
 				<form method="POST" action="?/useBrand" use:enhance class="mb-4 flex flex-wrap items-center gap-2 text-sm">
@@ -63,7 +66,7 @@
 			<form method="POST" action="?/acceptSuggestions" use:enhance={() => async ({ update }) => { await update(); }} class="grid gap-4 lg:grid-cols-2">
 				{#each [['bucket', 'Keyword buckets', sg.buckets, 'searches'], ['pages', 'Page groups', sg.pageGroups, 'pages']] as const as [kind, label, list, unit]}
 					<div>
-						<h3 class="mb-1.5 text-sm font-medium">{label}</h3>
+						<h4 class="mb-1.5 text-sm font-medium">{label}</h4>
 						{#if list.length}
 							<ul class="space-y-1.5">
 								{#each list as x}
@@ -73,7 +76,7 @@
 						{:else}<p class="text-xs text-muted-foreground">None to suggest.</p>{/if}
 					</div>
 				{/each}
-				{#if sg.buckets.length + sg.pageGroups.length}<div class="lg:col-span-2"><button class="btn btn-primary">Add the ticked ones</button></div>{/if}
+				{#if sg.buckets.length + sg.pageGroups.length}<div class="lg:col-span-2"><button class="btn btn-primary"><Plus class="size-3.5" />Add the ticked ones</button></div>{/if}
 			</form>
 		</section>
 	{/if}
@@ -91,7 +94,7 @@
 				<Chart data={chart} defaultMetrics={['clicks', 'position']} height={220} />
 			</div>
 		{/if}
-		<h3 class="mt-6 mb-2 text-sm font-medium">{bucket ? 'Your buckets' : 'Your page groups'}</h3>
+		<h3 class="mt-6 mb-2 flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true">{#if bucket}<Tags class="size-3.5" />{:else}<FolderTree class="size-3.5" />{/if}</span>{bucket ? 'Your buckets' : 'Your page groups'}</h3>
 		<ul class="divide-y rounded-xl border bg-card" style="border-color:var(--border)">
 			{#each data.mine.groups as g (g.id)}
 				<li class="px-4 py-2.5">
@@ -110,7 +113,9 @@
 			{/each}
 		</ul>
 	{:else if editing !== 'new'}
-		<div class="card p-6 text-center text-sm text-muted-foreground">{bucket ? 'No keyword buckets yet. A bucket gathers searches about one topic, such as everything containing “shoe” but not “repair”.' : 'No page groups yet. A group gathers a section of the site, such as every path starting with /blog/.'}</div>
+		<EmptyState icon={bucket ? Tags : FolderTree} tone="blue" title={bucket ? 'No keyword buckets yet.' : 'No page groups yet.'} text={bucket ? 'A bucket gathers searches about one topic, such as everything containing “shoe” but not “repair”.' : 'A group gathers a section of the site, such as every path starting with /blog/.'}>
+			{#if canEdit}<button class="btn btn-primary btn-sm" onclick={() => (editing = 'new')}><Plus class="size-3.5" />{bucket ? 'New bucket' : 'New page group'}</button>{/if}
+		</EmptyState>
 	{/if}
 {:else if data.view === 'folders' && data.groups}
 	<p class="mb-3 text-xs text-muted-foreground">Pages grouped by the folder they live in (<code>/blog/post</code> → <code>/blog/</code>); pages directly under the root share “/”. Compared with the previous {data.days} days. Use it to see which section of the site is growing or shrinking, rather than reading page by page.</p>
@@ -129,7 +134,7 @@
 		<span class="ml-2">Complete calendar months only (a part-month would look like a collapse). Each row is shaded against its own best month, so a fading row lightens to the right.</span>
 	</div>
 	{#if data.heatmap.months.length < 2 || !data.heatmap.rows.length}
-		<div class="card p-6 text-center text-sm text-muted-foreground">Needs at least two complete months of stored history. The app is still downloading it, or the site is new.</div>
+		<EmptyState icon={CalendarRange} title="Needs at least two complete months of stored history." text="The app is still downloading it, or the site is new." />
 	{:else}
 		<div class="card overflow-x-auto">
 			<table class="w-full">
@@ -149,12 +154,12 @@
 		</div>
 	{/if}
 {:else if data.view === 'locales' && data.locales}
-	<h2 class="mb-1 font-medium">Locale folders</h2>
+	<h3 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true"><Languages class="size-3.5" /></span>Locale folders</h3>
 	<Explainer lead="Locale folders, and where their clicks really come from.">
 	<p>Folders such as <code>/en-gb/</code> or <code>/de/</code> and where their clicks really come from. A region folder (like <code>/en-gb/</code>) that earns under 40% of its clicks from its own country is flagged: check its hreflang tags and which page Google shows to whom. Only common countries are mapped.</p>
 </Explainer>
 	<DataTable rows={data.locales.map((l) => ({ ...l, top: l.topCountries.map((c) => `${c.country.toUpperCase()} ${(c.share * 100).toFixed(0)}%`).join(' · '), flag: l.mismatch ? '⚠ check hreflang' : '' }))} cols={[{ key: 'folder', label: 'Folder', type: 'text', pii: true }, { key: 'clicks', label: 'Clicks', type: 'int', bar: true }, { key: 'impressions', label: 'Impressions', type: 'int' }, { key: 'homeShare', label: 'From own country', type: 'pct' }, { key: 'top', label: 'Top countries', type: 'text' }, { key: 'flag', label: '', type: 'text' }]} sortKey="clicks" filterable={false} empty="No locale folders found in this site's URLs." />
-	<h2 class="mt-6 mb-1 font-medium">Cannibalization within a country</h2>
+	<h3 class="mt-6 mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><Swords class="size-3.5" /></span>Cannibalization within a country</h3>
 	<p class="mb-2 text-xs text-muted-foreground">Queries where two or more pages compete for the same people in the <i>same</i> country. The same query answered by different pages in different countries is normal for a localised site and is not listed.</p>
 	<DataTable rows={data.cannibal.map((g) => ({ country: g.country.toUpperCase(), query: g.query, severity: g.severity, clicksAtStake: Math.round(g.potentialClicks), pages: g.pages.length, winner: g.winner, totalClicks: g.totalClicks }))} cols={[{ key: 'country', label: 'Country', type: 'text' }, { key: 'query', label: 'Query', type: 'text', pii: (r: { query: string }) => isBranded(r.query, data.brandTerms ?? []) }, { key: 'severity', label: 'Severity', type: 'text' }, { key: 'clicksAtStake', label: 'Clicks at stake', type: 'int' }, { key: 'pages', label: 'Pages', type: 'int' }, { key: 'winner', label: 'Winning page', type: 'link' }]} sortKey="clicksAtStake" empty="No page competes with another inside one country." />
 {/if}

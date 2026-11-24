@@ -5,6 +5,10 @@
 	import ClarityInstall from '$lib/components/ClarityInstall.svelte';
 	import SectionTabs from '$lib/components/SectionTabs.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { ExternalLink, MousePointerClick, RefreshCw, CircleCheck, Hourglass } from '@lucide/svelte';
 	let { data, form } = $props();
 
 	type Metric = { metricName: string; information: Record<string, string | number>[] };
@@ -32,9 +36,14 @@
 	];
 </script>
 
+<PageHeader tab="/clarity" title="Clarity" lead="Rage clicks, dead clicks and scroll depth from Microsoft Clarity, next to your search data.">
+	<p>Microsoft Clarity snapshot, once linked. Clarity only exposes the last 1 to 3 days and 10 API calls a day, so the daily snapshot is refreshed every 8½ hours (9 calls a day), alternating the device and channel breakdowns, and kept.</p>
+	{#snippet actions()}{#if data.linked}<a class="btn btn-sm" href={data.clarityUrl} target="_blank" rel="noopener noreferrer"><ExternalLink class="size-3.5" />Open in Clarity</a>{/if}{/snippet}
+</PageHeader>
+
 {#if recording}
 	<details class="card mb-4 px-4 py-3">
-		<summary class="cursor-pointer text-sm select-none"><span class="text-good">●</span> Clarity is installed and recording <span class="text-xs text-muted-foreground">· setup details</span></summary>
+		<summary class="cursor-pointer text-sm select-none"><StatusPill tone="good">Clarity is installed and recording</StatusPill> <span class="text-xs text-muted-foreground">· setup details</span></summary>
 		<div class="mt-3"><ClarityInstall install={data.install} scan={data.scan} gtm={data.gtm} readOnly={data.readOnly} connected={data.linked} sessions={headline.sessions} form={form ?? null} /></div>
 	</details>
 {:else}
@@ -42,19 +51,18 @@
 {/if}
 
 {#if !data.linked}
-	<div class="card p-5 text-sm"><p class="mb-1 font-medium">Connect Clarity's data</p><p class="mb-3 text-muted-foreground">The script records visits; an API token lets SEOConsole read them (Clarity: <b>Settings → Data Export → Generate new API token</b>). Then rage clicks, dead clicks and scroll depth show next to your search data.</p><a class="btn btn-primary" href="/connect">Paste the token on Connect</a></div>
+	<EmptyState icon={MousePointerClick} tone="violet" title="Connect Clarity's data" text="The script records visits; an API token lets SEOConsole read them (Clarity: Settings → Data Export → Generate new API token). Then rage clicks, dead clicks and scroll depth show next to your search data.">
+		<a class="btn btn-primary btn-sm" href="/connect"><img src="/logos/clarity.png" alt="" width="14" height="14" class="size-3.5 object-contain" />Paste the token on Connect</a>
+	</EmptyState>
 {:else}
 	<div class="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Sessions, last 24h</div><div class="tnum text-xl font-semibold">{fmtInt(headline.sessions)}</div><div class="text-xs text-muted-foreground">{fmtInt(headline.bots)} of them bots</div></div>
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Distinct users</div><div class="tnum text-xl font-semibold">{fmtInt(headline.users)}</div></div>
 		<div class="card px-3 py-2"><div class="text-xs text-muted-foreground">Snapshot</div><div class="text-xl font-semibold">{data.totals?.day ?? '–'}</div><div class="truncate text-xs text-muted-foreground">{data.status.state === 'error' ? data.status.message : 'read ' + ago(data.status.lastSync)}</div></div>
 		<div class="card px-3 py-2" title="Clarity allows 10 API calls a day and shows only 1 to 3 days, so SEOConsole refreshes every 8½ hours (9 calls, one kept for you), alternating the device and channel breakdowns, and keeps a daily history."><div class="text-xs text-muted-foreground">API calls left today</div><div class="tnum text-xl font-semibold">{data.callsLeft}<span class="text-sm text-muted-foreground"> / 10</span></div>
-			<form method="POST" action="/connect?/resync" use:enhance><input type="hidden" name="siteId" value={page.params.id} /><input type="hidden" name="kind" value="clarity" /><button class="btn btn-ghost btn-xs">refresh now (uses calls)</button></form></div>
+			<form method="POST" action="/connect?/resync" use:enhance><input type="hidden" name="siteId" value={page.params.id} /><input type="hidden" name="kind" value="clarity" /><button class="btn btn-ghost btn-xs"><RefreshCw class="size-3" />refresh now (uses calls)</button></form></div>
 	</div>
-	<div class="mb-4 flex flex-wrap items-center gap-3">
-		<a class="btn btn-sm" href={data.clarityUrl} target="_blank" rel="noopener noreferrer">Open in Clarity ↗</a>
-		<span class="text-xs text-muted-foreground">Recordings and heatmaps are in Clarity: filter Recordings by <b>Visited URL</b> to watch one page.</span>
-	</div>
+	<p class="mb-4 text-xs text-muted-foreground">Recordings and heatmaps are in Clarity (<a class="underline" href={data.clarityUrl} target="_blank" rel="noopener noreferrer">open it</a>): filter Recordings by <b>Visited URL</b> to watch one page.</p>
 
 	<SectionTabs bind:value={view} label="Clarity details" tabs={[
 		{ id: 'pages', label: 'Pages to watch', count: data.frustrated.length || null },
@@ -80,21 +88,21 @@
 				pageSize={10}
 			/>
 		{:else}
-			<p class="text-sm text-muted-foreground">No page had rage or dead clicks in the latest snapshot.</p>
+			<EmptyState icon={CircleCheck} tone="green" title="No page had rage or dead clicks in the latest snapshot." />
 		{/if}
 	{:else if view === 'channel'}
 		{#if data.channels}
 			<p class="mb-2 text-xs text-muted-foreground">Snapshot {data.channels.day}. A channel with far more rage or dead clicks points at landing pages that do not match what they promised.</p>
 			<DataTable rows={data.channels.rows} cols={behaviourCols('Channel')} sortKey="sessions" filterable={false} />
 		{:else}
-			<p class="text-sm text-muted-foreground">Appears after the next Clarity refresh: it alternates with the device breakdown to stay inside Clarity's 10 calls a day.</p>
+			<EmptyState icon={Hourglass} title="Appears after the next Clarity refresh." text="It alternates with the device breakdown to stay inside Clarity's 10 calls a day." />
 		{/if}
 	{:else if view === 'device'}
 		{#if data.devices}
 			<p class="mb-2 text-xs text-muted-foreground">Snapshot {data.devices.day}. Much worse numbers on mobile usually mean a layout or tap-target problem.</p>
 			<DataTable rows={data.devices.rows} cols={behaviourCols('Device')} sortKey="sessions" filterable={false} />
 		{:else}
-			<p class="text-sm text-muted-foreground">Appears after the next Clarity refresh.</p>
+			<EmptyState icon={Hourglass} title="Appears after the next Clarity refresh." text="It alternates with the channel breakdown to stay inside Clarity's 10 calls a day." />
 		{/if}
 	{:else}
 		<p class="mb-3 text-xs text-muted-foreground">Every metric as Clarity's API returns it, for checking a number against Clarity itself.</p>

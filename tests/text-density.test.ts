@@ -19,8 +19,9 @@ function files(dir: string): string[] {
 const words = (html: string) => (html.replace(/\{[^}]*\}/g, ' ').replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ').match(/[\p{L}\p{N}'’-]+/gu) ?? []).length;
 const folded = (src: string, at: number) => {
 	const before = src.slice(0, at);
-	const opens = (before.match(/<(Explainer|details)\b/g) ?? []).length;
-	const closes = (before.match(/<\/(Explainer|details)>/g) ?? []).length;
+	// a self-closing <PageHeader … /> folds nothing, so it does not open a fold
+	const opens = (before.match(/<(Explainer|PageHeader|details)\b/g) ?? []).length - (before.match(/<(Explainer|PageHeader)\b[^<]*?\/>/g) ?? []).length;
+	const closes = (before.match(/<\/(Explainer|PageHeader|details)>/g) ?? []).length;
 	return opens > closes;
 };
 
@@ -45,7 +46,7 @@ describe('text density', () => {
 	it('every Explainer lead is short', () => {
 		for (const f of files('src/routes')) {
 			const src = readFileSync(f, 'utf8');
-			for (const m of src.matchAll(/<Explainer lead="([^"]*)"/g)) expect(words(m[1]), `${f}: ${m[1]}`).toBeLessThanOrEqual(32);
+			for (const m of src.matchAll(/<(?:Explainer|PageHeader)\b[^>]*?\blead="([^"]*)"/g)) expect(words(m[1]), `${f}: ${m[1]}`).toBeLessThanOrEqual(32);
 		}
 	});
 });

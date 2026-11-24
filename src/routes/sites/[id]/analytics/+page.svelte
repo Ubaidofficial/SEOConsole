@@ -1,5 +1,9 @@
 <script lang="ts">
 	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { ChartLine, Activity, LoaderCircle } from '@lucide/svelte';
 	import Chart from '$lib/components/Chart.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import SectionTabs from '$lib/components/SectionTabs.svelte';
@@ -16,7 +20,7 @@
 	const timeCol = $derived(values ? [{ key: 'avgTime', label: 'Avg. time', title: TIME_TIP, type: 'dur' as const }] : []);
 	const cols = $derived([
 		{ key: 'channel', label: 'Channel group', type: 'text' as const },
-		{ key: 'sessions', label: 'Sessions', type: 'int' as const },
+		{ key: 'sessions', label: 'Sessions', type: 'int' as const, bar: true },
 		{ key: 'sessionsDelta', label: 'Δ sessions', type: 'delta' as const },
 		{ key: 'engagementRate', label: 'Engaged', type: 'pct' as const },
 		...timeCol,
@@ -43,18 +47,22 @@
 </script>
 
 {#if !data.linked}
-	<div class="card p-6 text-center"><p class="mb-3">No GA4 property is linked to this site yet.</p><a class="btn btn-primary" href="/connect">Connect GA4</a></div>
+	<PageHeader tab="/analytics" title="GA4" lead="Google Analytics 4 organic sessions beside Search Console clicks, once GA4 is linked." />
+	<EmptyState icon={ChartLine} tone="violet" title="No GA4 property is linked to this site yet." text="Link a GA4 property to see organic sessions, traffic sources, landing pages and key events beside your Search Console clicks.">
+		<a class="btn btn-primary btn-sm" href="/connect"><img src="/logos/ga4.svg" alt="" width="14" height="14" class="size-3.5 object-contain" />Connect GA4</a>
+	</EmptyState>
 {:else}
-	<p class="mb-2 text-xs text-muted-foreground">Property: <b class="pii">{data.property}</b> · {data.status.state === 'error' ? data.status.message : 'synced ' + ago(data.status.lastSync)}</p>
+	<PageHeader tab="/analytics" title="GA4" lead="GA4 sessions and Search Console clicks are different measurements, so expect them close, not equal.">
+		<p>GA4 organic sessions and Search Console clicks are different measurements (sessions vs. clicks, consent-mode gaps, other search engines count as organic in GA4), so expect them to move together but not match. A divergence is a prompt to look, not proof of a problem.</p>
+		{#snippet meta()}<span class="chip pii">{data.property}</span>{#if data.status.state === 'error'}<StatusPill tone="bad" title={data.status.message ?? undefined}>sync failed</StatusPill>{:else}<span class="text-xs text-muted-foreground">synced {ago(data.status.lastSync)}</span>{/if}{/snippet}
+	</PageHeader>
+	{#if data.status.state === 'error'}<p class="mb-2 text-xs text-warn" role="alert">{data.status.message}</p>{/if}
 	<div class="card mb-4 p-4"><Chart data={data.series} hide={['position']} labels={{ clicks: 'GA4 organic sessions', impressions: 'Google Search clicks' }} /></div>
-	<Explainer lead="GA4 sessions and Search Console clicks are different measurements, so expect them close, not equal.">
-	<p>GA4 organic sessions and Search Console clicks are different measurements (sessions vs. clicks, consent-mode gaps, other search engines count as organic in GA4), so expect them to move together but not match. A divergence is a prompt to look, not proof of a problem.</p>
-</Explainer>
 	<DataTable rows={data.channels} {cols} sortKey="sessions" filterable={false} />
 	<section class="mt-6">
-		<h2 class="mb-1 font-medium">Right now</h2>
+		<h2 class="mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-green" aria-hidden="true"><Activity class="size-3.5" /></span>Right now</h2>
 		<form method="POST" action="?/realtime" use:enhance={() => { rtBusy = true; return async ({ update }) => { await update({ reset: false }); rtBusy = false; }; }} class="mb-2 flex items-center gap-2">
-			<button class="btn text-xs" disabled={rtBusy}>{rtBusy ? 'Asking GA4…' : 'Show the last 30 minutes'}</button>
+			<button class="btn btn-sm" disabled={rtBusy}>{#if rtBusy}<LoaderCircle class="size-3.5 animate-spin" />Asking GA4…{:else}<Activity class="size-3.5" />Show the last 30 minutes{/if}</button>
 			<span class="text-xs text-muted-foreground">GA4 Realtime, read live: who is on the site, and whether a new tag sends its event.</span>
 		</form>
 		{#if form?.realtime}

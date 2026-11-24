@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { X } from '@lucide/svelte';
+	import { X, Plus, Target, Lightbulb, ListPlus } from '@lucide/svelte';
 	import RankSpark from '$lib/components/RankSpark.svelte';
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import { isBranded } from '$lib/analytics';
 	import { fmtInt } from '$lib/format';
 	let { data } = $props();
@@ -16,21 +17,23 @@
 		)
 	);
 	const pos = (p: number | null | undefined) => (p == null ? '–' : p.toFixed(1));
+	const maxClicks = $derived(Math.max(1, ...data.rows.map((r) => r.clicks)));
 	const top10 = $derived(data.rows.filter((r) => r.week != null && r.week <= 10.5).length);
 </script>
 
-<div class="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-	<h2 class="text-base font-semibold">Rank tracking</h2>
-	<span class="text-xs text-muted-foreground">{data.rows.filter((r) => r.manual).length} of {data.max.total} searches{#if data.rows.some((r) => !r.manual)} + {data.rows.filter((r) => !r.manual).length} from buckets{/if} · {top10} on page one this week · {data.start} → {data.end}</span>
-	{#if data.rows.length}
-		<label class="ml-auto text-xs text-muted-foreground">Sort <select class="input" bind:value={sort}><option value="latest">Position</option><option value="change">Biggest fall</option><option value="clicks">Clicks</option><option value="query">A–Z</option></select></label>
-	{/if}
-</div>
-
-<Explainer lead="Daily Google position of the searches you choose, from your own Search Console data. No credits, no scraping.">
+<PageHeader tab="/rank" title="Rank tracking" lead="Daily Google position of the searches you choose, from your own Search Console data. No credits, no scraping.">
 	<p>Each day's position is Search Console's average for that search across every country and device, weighted by impressions. A day without an impression has no position (a gap in the line) rather than a guess. Results-page trackers check one place and one device; this shows what searchers actually saw, a few days late, as Search Console is.</p>
 	<p>The dashed line is position 10, the end of page one. “This week” is the last 7 days against the 7 before. The built-in “Tracked searches falling” alert watches these.</p>
-</Explainer>
+	{#snippet meta()}
+		<span class="text-xs text-muted-foreground">{data.rows.filter((r) => r.manual).length} of {data.max.total} searches{#if data.rows.some((r) => !r.manual)} + {data.rows.filter((r) => !r.manual).length} from buckets{/if} · {top10} on page one this week · {data.start} → {data.end}</span>
+	{/snippet}
+	{#snippet actions()}
+		{#if data.rows.length}
+			<label class="text-xs text-muted-foreground">Sort <select class="input" bind:value={sort}><option value="latest">Position</option><option value="change">Biggest fall</option><option value="clicks">Clicks</option><option value="query">A–Z</option></select></label>
+		{/if}
+		<a class="btn btn-sm" href="#rank-add"><Plus class="size-3.5" aria-hidden="true" />Track searches</a>
+	{/snippet}
+</PageHeader>
 
 {#if rows.length}
 	<div class="overflow-x-auto rounded-xl border bg-card" style="border-color:var(--border)">
@@ -57,7 +60,7 @@
 						<td class="tnum px-3 py-2 text-right {r.change == null ? 'text-muted-foreground' : r.change >= 0.5 ? 'text-good' : r.change <= -0.5 ? 'text-bad' : 'text-muted-foreground'}">{r.change == null ? '–' : (r.change > 0 ? '+' : '') + r.change.toFixed(1)}</td>
 						<td class="tnum px-3 py-2 text-right">{pos(r.best)}</td>
 						<td class="px-3 py-1"><RankSpark values={r.series} /></td>
-						<td class="tnum px-3 py-2 text-right">{fmtInt(r.clicks)}</td>
+						<td class="tnum cellbar px-3 py-2 text-right" style="--w:{r.clicks / maxClicks}">{fmtInt(r.clicks)}</td>
 						<td class="tnum px-3 py-2 text-right text-muted-foreground">{r.daysTop10}/{r.daysShown}</td>
 						<td class="px-2 py-2">{#if r.manual}<form method="POST" action="?/remove" use:enhance><input type="hidden" name="query" value={r.query} /><button class="text-muted-foreground hover:text-foreground" aria-label="Stop tracking this search" title="Stop tracking"><X class="size-3.5" /></button></form>{/if}</td>
 					</tr>
@@ -66,19 +69,21 @@
 		</table>
 	</div>
 {:else}
-	<p class="rounded-xl border bg-card px-4 py-6 text-center text-sm text-muted-foreground" style="border-color:var(--border)">No searches tracked yet. Add some below, or pick from the suggestions.</p>
+	<EmptyState icon={Target} tone="blue" title="No searches tracked yet." text="Add some below, or pick from the suggestions.">
+		<a class="btn btn-primary btn-sm" href="#rank-add"><Plus class="size-3.5" aria-hidden="true" />Track searches</a>
+	</EmptyState>
 {/if}
 
 <div class="mt-5 grid gap-4 lg:grid-cols-2">
 	<form method="POST" action="?/add" use:enhance class="card p-4">
-		<label class="text-sm font-medium" for="rank-add">Track searches</label>
+		<label class="flex items-center gap-2 text-sm font-medium" for="rank-add"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true"><ListPlus class="size-3.5" /></span>Track searches</label>
 		<p class="mb-2 text-xs text-muted-foreground">One per line, up to {data.max.atOnce} at a time. Written as people search; case does not matter.</p>
 		<textarea id="rank-add" name="queries" rows="5" class="input w-full font-mono text-xs" placeholder={'running shoes\nbest trail running shoes'}></textarea>
-		<button class="btn btn-primary mt-2">Track</button>
+		<button class="btn btn-primary mt-2"><Plus class="size-3.5" aria-hidden="true" />Track</button>
 	</form>
 	{#if data.suggestions.length}
 		<form method="POST" action="?/add" use:enhance class="card p-4">
-			<div class="text-sm font-medium">Suggestions</div>
+			<div class="flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><Lightbulb class="size-3.5" /></span>Suggestions</div>
 			<p class="mb-2 text-xs text-muted-foreground">Your biggest searches on page one or two in the last 28 days, not tracked yet.</p>
 			<ul class="max-h-56 space-y-1 overflow-y-auto text-sm">
 				{#each data.suggestions as s}

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { CalendarDays } from '@lucide/svelte';
-	import { MAX_DAYS, MENU_PERIODS, QUICK_PERIODS, periodLabel, shiftDay } from '$lib/periods';
+	import { goto } from '$app/navigation';
+	import { MAX_DAYS, MENU_PERIODS, PERIOD_KEYS, QUICK_PERIODS, periodKey, periodLabel, shiftDay } from '$lib/periods';
 
 	/**
 	 * 24h, 3d, 7d and 28d, then a date-picker menu: the longer ranges (3m, 6m, 16m) and a "from" date. A date means "since then, up to the
@@ -27,16 +28,27 @@
 	let open = $state(false);
 	let box = $state<HTMLDetailsElement>();
 	const close = () => (open = false);
+	function keys(e: KeyboardEvent) {
+		if (e.key === 'Escape') return close();
+		const t = e.target as HTMLElement | null;
+		if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat || (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))) return;
+		const d = PERIOD_KEYS[e.key.toLowerCase()];
+		if (!d || d === days) return;
+		e.preventDefault();
+		close();
+		goto(href(d), { keepFocus: true, noScroll: true });
+	}
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && close()} onclick={(e) => box && open && !box.contains(e.target as Node) && close()} />
+<svelte:window onkeydown={keys} onclick={(e) => box && open && !box.contains(e.target as Node) && close()} />
 
 <div class="inline-flex items-center rounded-lg bg-muted p-0.5" role="group" aria-label="Period">
 	{#each QUICK_PERIODS as d}
 		<a
 			href={href(d)}
 			aria-current={d === days ? 'true' : undefined}
-			title={d === 1 ? 'The newest day Search Console has: it reports whole days and runs about two days behind' : undefined}
+			title={d === 1 ? 'The newest day Search Console has: it reports whole days and runs about two days behind (press D)' : `Last ${periodLabel(d)} (press ${periodKey(d)})`}
+			aria-keyshortcuts={periodKey(d) || undefined}
 			class="rounded-md px-2.5 py-1 text-xs font-medium transition-all {d === days ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}">{periodLabel(d)}</a
 		>
 	{/each}
@@ -52,7 +64,7 @@
 			<p class="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Longer ranges</p>
 			<div class="mb-3 flex gap-1">
 				{#each MENU_PERIODS as d}
-					<a href={href(d)} onclick={close} aria-current={d === days ? 'true' : undefined} class="flex-1 rounded-md border px-2 py-1.5 text-center text-xs font-medium hover:bg-accent {d === days ? 'border-foreground bg-accent' : ''}">{periodLabel(d)}</a>
+					<a href={href(d)} onclick={close} aria-current={d === days ? 'true' : undefined} aria-keyshortcuts={periodKey(d) || undefined} class="flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-center text-xs font-medium hover:bg-accent {d === days ? 'border-foreground bg-accent' : ''}">{periodLabel(d)}<kbd class="rounded border px-1 font-sans text-[10px] text-muted-foreground">{periodKey(d)}</kbd></a>
 				{/each}
 			</div>
 			<form method="GET" action={page.url.pathname} onsubmit={close}>
@@ -61,6 +73,7 @@
 				<input id="period-from" name="from" type="date" required min={earliest} max={latest ?? undefined} value={!quick && !inMenu && since ? since : ''} class="input mb-2 w-full" />
 				<p class="mb-2 text-[11px] leading-snug text-muted-foreground">From that day to the newest data{latest ? ` (${latest})` : ''}. Search Console runs about two days behind.</p>
 				<button class="btn btn-primary w-full">Apply</button>
+				<p class="mt-2 text-[11px] text-muted-foreground">Keys: {QUICK_PERIODS.map((d) => `${periodKey(d)} ${periodLabel(d)}`).join(' · ')}</p>
 			</form>
 		</div>
 	</details>

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { Check, Send } from '@lucide/svelte';
 	import ShowMore from '$lib/components/ShowMore.svelte';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -31,47 +34,54 @@
 	const q = $derived(data.quota);
 	const stillNot = $derived(data.submissions.filter((x) => x.verdict === 'still_not_indexed').length);
 	const stateText = { indexed: 'indexed', not_indexed: 'not indexed', unknown: 'unknown' } as const;
+	const anyChannel = $derived(Object.values(channels).some(Boolean));
+	const stepState = (done: boolean, current: boolean) => (done ? 'step step-done' : current ? 'step step-current' : 'step');
 </script>
 
-<section class="card mb-4 p-4">
-	<h2 class="mb-1 font-medium">Submit for indexing</h2>
-	<Explainer lead="Send new or changed pages to the search engines that take them. For Google, keep your sitemap current and watch the table below.">
+<PageHeader tab="/submit" title="Submit" lead="Send new or changed pages to the search engines that take them. For Google, keep your sitemap current and watch the table below.">
+	{#snippet meta()}{#if data.readOnly}<StatusPill tone="warn">read-only server: dry runs only</StatusPill>{/if}{/snippet}
 	<p>One place to tell the search engines that accept it about new or changed pages. <b class="text-foreground">Google has no "request indexing" button for ordinary pages that a tool can press</b>:
 		for Google, keep your sitemap current (below), then watch whether each page got indexed in the table at the bottom. Google's Indexing API exists, but Google documents it for <b>job-posting and livestream pages only</b>, so every other page is refused, not sent.
 		A channel saying <i>accepted</i> means it received the URL, not that the page is indexed.</p>
-</Explainer>
-	{#if data.readOnly}<p class="mt-2 text-sm text-warn">This server runs with READ_ONLY=1: only dry runs and checks work.</p>{/if}
-</section>
+</PageHeader>
 
 {#if form?.ok}<p class="mb-3 text-sm text-good">{form.ok}</p>{/if}{#if form?.error}<p class="mb-3 text-sm text-bad">{form.error}</p>{/if}
 
 <section class="card mb-4 p-4">
-	<h2 class="mb-2 font-medium">1 · URLs</h2>
 	<form method="POST" action="?/submit" use:enhance={run}>
+	<div class={stepState(count > 0, true)}>
+		<span class="step-n" aria-hidden="true">{#if count > 0}<Check class="size-3.5" />{:else}1{/if}</span>
+		<h3 class="mb-2 font-medium">URLs <span class="font-normal text-muted-foreground">{count ? `· ${count} ready` : '· paste them or pick a preset'}</span></h3>
 		<textarea class="input h-28 w-full" name="urls" bind:value={urls} aria-label="Full URLs of this site" placeholder="Full URLs of this site, one per line (up to {data.maxUrls})"></textarea>
 		<div class="mt-2 flex flex-wrap gap-2">
 			<button class="btn btn-sm" formaction="?/preset" name="preset" value="new" formnovalidate disabled={busy || !data.presets.new} title="Sitemap URLs whose date is in the last 7 days">New pages ({data.presets.new})</button>
 			<button class="btn btn-sm" formaction="?/preset" name="preset" value="never_shown" formnovalidate disabled={busy || !data.presets.never_shown} title="In a sitemap but never shown in search in 90 days: where indexing problems hide">Never shown ({data.presets.never_shown})</button>
 			<button class="btn btn-sm" formaction="?/preset" name="preset" value="removed" formnovalidate disabled={busy || !data.presets.removed} title="Pages the indexing monitor saw return 404">Removed pages ({data.presets.removed})</button>
 		</div>
-
-		<h2 class="mt-4 mb-2 font-medium">2 · Where to send them</h2>
+	</div>
+	<div class={stepState(count > 0 && anyChannel, count > 0)}>
+		<span class="step-n" aria-hidden="true">{#if count > 0 && anyChannel}<Check class="size-3.5" />{:else}2{/if}</span>
+		<h3 class="mb-2 font-medium">Where to send them</h3>
 		<div class="space-y-2 text-sm">
 			<label class="flex items-start gap-2"><input type="checkbox" name="channel" value="indexnow" bind:checked={channels.indexnow} class="mt-1" />
 				<span><b>IndexNow</b> <span class="text-xs text-muted-foreground">Bing, Yandex, Naver, Seznam, Yep. Not Google.</span>
 					{#if !data.channels.indexnow.hasKey}<span class="ml-1 text-xs text-warn">no key yet: <a class="underline" href="indexnow">set it up</a></span>
 					{:else if !data.channels.indexnow.verifiedHosts}<span class="ml-1 text-xs text-warn">key file not verified yet: <a class="underline" href="indexnow">verify</a></span>
-					{:else}<span class="ml-1 text-xs text-good">ready ({data.channels.indexnow.verifiedHosts} verified host{data.channels.indexnow.verifiedHosts === 1 ? '' : 's'})</span>{/if}</span></label>
+					{:else}<span class="ml-1"><StatusPill tone="good">ready · {data.channels.indexnow.verifiedHosts} verified host{data.channels.indexnow.verifiedHosts === 1 ? '' : 's'}</StatusPill></span>{/if}</span></label>
 			<label class="flex items-start gap-2"><input type="checkbox" name="channel" value="bing" bind:checked={channels.bing} class="mt-1" />
 				<span><b>Bing URL submission</b> <span class="text-xs text-muted-foreground">Bing's own API, up to 500 URLs a call within its daily allowance.</span>
-					{#if data.channels.bing.linked}<span class="ml-1 text-xs text-good">Bing linked</span>{:else}<span class="ml-1 text-xs text-warn">Bing not linked: <a class="underline" href="/connect">connect it</a></span>{/if}</span></label>
+					{#if data.channels.bing.linked}<span class="ml-1"><StatusPill tone="good">Bing linked</StatusPill></span>{:else}<span class="ml-1 text-xs text-warn">Bing not linked: <a class="underline" href="/connect">connect it</a></span>{/if}</span></label>
 			<label class="flex items-start gap-2"><input type="checkbox" name="channel" value="google_indexing_api" bind:checked={channels.google_indexing_api} class="mt-1" />
 				<span><b>Google Indexing API</b> <span class="text-xs text-muted-foreground">Only pages with JobPosting or livestream (BroadcastEvent) structured data; the page is read first and any other page is refused.</span>
 					{#if data.channels.googleIndexing.enabled}<span class="ml-1 text-xs text-good">on ({data.channels.googleIndexing.cap - data.channels.googleIndexing.used} of {data.channels.googleIndexing.cap} left today)</span>
 					{:else}<span class="ml-1 text-xs text-muted-foreground">off on this server (set <code>GOOGLE_INCLUDE_INDEXING=1</code> and reconnect Google to use it for those pages)</span>{/if}</span></label>
 		</div>
-		<div class="mt-3 flex flex-wrap items-center gap-3">
-			<button class="btn btn-primary" disabled={busy || !count}>{busy ? 'Working…' : `Submit ${count || ''} URL${count === 1 ? '' : 's'}`}</button>
+	</div>
+	<div class={stepState(!!form?.report, count > 0 && anyChannel)}>
+		<span class="step-n" aria-hidden="true">{#if form?.report}<Check class="size-3.5" />{:else}3{/if}</span>
+		<h3 class="mb-2 font-medium">Send</h3>
+		<div class="flex flex-wrap items-center gap-3">
+			<button class="btn btn-primary" disabled={busy || !count}><Send class="size-3.5" />{busy ? 'Working…' : `Submit ${count || ''} URL${count === 1 ? '' : 's'}`}</button>
 			<label class="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" name="dry" /> dry run (show what would happen, send nothing)</label>
 			<label class="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" name="force" /> IndexNow: even if sent in the last 24 hours</label>
 		</div>
@@ -79,6 +89,7 @@
 			<label class="flex items-center gap-1.5">Spread over <input class="input !h-7 w-16" type="number" name="drip" min="1" max={data.maxDrip} value="1" aria-label="Days to spread the list over" /> day(s) <span>(1 = all now; otherwise an even share goes each day)</span></label>
 			<label class="flex items-center gap-1.5"><input type="checkbox" name="queue" checked /> queue what does not fit today's limits and send it on the following days</label>
 		</div>
+	</div>
 	</form>
 
 	{#if form?.report}

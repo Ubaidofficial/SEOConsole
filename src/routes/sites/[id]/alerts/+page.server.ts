@@ -5,7 +5,7 @@ import { config } from '$lib/server/config';
 import { requireRole, hasRole } from '$lib/server/roles';
 import { setSiteEmails } from '$lib/server/alerts';
 import { mailConfig } from '$lib/server/mail';
-import { addCustomRule, closeAlerts, deleteCustomRule, listAlerts, listRules, maskedWebhook, renderAlerts, reopenAlert, runAlertRules, scopeText, setSiteWebhook, siteWebhook, updateRule } from '$lib/server/alerts';
+import { addCustomRule, alertTrends, closeAlerts, deleteCustomRule, listAlerts, listRules, maskedWebhook, renderAlerts, reopenAlert, runAlertRules, scopeText, setSiteWebhook, siteWebhook, updateRule } from '$lib/server/alerts';
 import { postWebhook, webhook } from '$lib/server/digest';
 import { listGroups } from '$lib/server/groups';
 import { listTracked } from '$lib/server/ranktrack';
@@ -18,13 +18,15 @@ export const load: PageServerLoad = ({ params, locals }) => {
 		const k = alertKind(r.kind)!;
 		return { ...r, label: k.label, text: ruleText(k, r.threshold), unit: k.unit, positive: k.positive, scope: scopeText(site.id, r) };
 	});
+	const alerts = listAlerts({ siteIds: null, siteId: site.id, status: 'all', limit: 60 });
 	return {
 		rules,
+		trends: alertTrends(alerts),
 		kinds: ALERT_KINDS.map((k) => ({ kind: k.kind, label: k.label, unit: k.unit, threshold: k.threshold, window: k.window, scopable: k.scopable, rule: k.rule })),
 		buckets: listGroups(site.id, 'bucket').map((g) => ({ id: g.id, name: g.name })),
 		pageGroups: listGroups(site.id, 'pages').map((g) => ({ id: g.id, name: g.name })),
 		tracked: listTracked(site.id).length,
-		alerts: listAlerts({ siteIds: null, siteId: site.id, status: 'all', limit: 60 }),
+		alerts,
 		webhook: { site: maskedWebhook(site.alert_webhook), global: !!webhook().url },
 		email: (() => {
 			const cfg = mailConfig();

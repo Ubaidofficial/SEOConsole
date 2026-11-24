@@ -1,5 +1,7 @@
 <script lang="ts">
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import { Gauge, Smartphone, Monitor, Hourglass } from '@lucide/svelte';
 	import { fmtPct } from '$lib/format';
 	import { fmtVital, type Rating } from '$lib/vitals';
 	import { privacy } from '$lib/privacy.svelte';
@@ -11,26 +13,23 @@
 	const anyData = $derived(data.devices.some((d) => d.has));
 </script>
 
-{#if !data.connected}
-	<div class="card p-6 text-center">
-		<p class="mb-3">Core Web Vitals are not connected.</p>
-		<p class="mb-4 text-sm text-muted-foreground">Real-user speed data from Google's Chrome UX Report. It needs a free API key and takes a minute to set up.</p>
-		<a class="btn btn-primary" href="/connect">Connect Core Web Vitals</a>
-	</div>
-{:else if !anyData}
-	<div class="card p-6 text-sm text-muted-foreground">
-		No Core Web Vitals data for this site yet. Chrome only reports a site once it has enough real visits, so small or new sites often have none. If the site should have enough traffic, press <b>Sync</b>; the data is also fetched once a day.
-	</div>
-{:else}
-	<Explainer lead="Real Chrome users over the last 28 days, as Google judges them.">
+<PageHeader tab="/vitals" title="Web vitals" lead="Real Chrome users over the last 28 days, as Google judges them.">
 	<p>Real Chrome users over the last 28 days (75th percentile, as Google judges them), from the Chrome UX Report. It is field data for the whole site, not for one page, and it is not the same as a lab test.
-		{#if data.snapshots}History builds up from the day you connected: {data.snapshots} daily snapshot{data.snapshots === 1 ? '' : 's'} so far.{/if}</p>
-</Explainer>
+		{#if data.connected && data.snapshots}History builds up from the day you connected: {data.snapshots} daily snapshot{data.snapshots === 1 ? '' : 's'} so far.{/if}</p>
+</PageHeader>
+
+{#if !data.connected}
+	<EmptyState icon={Gauge} tone="violet" title="Core Web Vitals are not connected." text="Real-user speed data from Google's Chrome UX Report. It needs a free API key and takes a minute to set up.">
+		<a class="btn btn-primary btn-sm" href="/connect"><img src="/logos/chrome.svg" alt="" width="14" height="14" class="size-3.5 object-contain" />Connect Core Web Vitals</a>
+	</EmptyState>
+{:else if !anyData}
+	<EmptyState icon={Hourglass} title="No Core Web Vitals data for this site yet." text="Chrome only reports a site once it has enough real visits, so small or new sites often have none. If the site should have enough traffic, press Sync; the data is also fetched once a day." />
+{:else}
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 		{#each data.devices as d (d.formFactor)}
 			<div class="rounded-2xl border bg-card p-5 shadow-xs">
 				<div class="mb-1 flex items-baseline justify-between gap-3">
-					<h2 class="text-lg font-semibold tracking-tight">{d.formFactor === 'PHONE' ? 'Phone' : 'Desktop'}</h2>
+					<h3 class="flex items-center gap-2 text-lg font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-violet" aria-hidden="true">{#if d.formFactor === 'PHONE'}<Smartphone class="size-3.5" />{:else}<Monitor class="size-3.5" />{/if}</span>{d.formFactor === 'PHONE' ? 'Phone' : 'Desktop'}</h3>
 					{#if d.has}<span class="text-xs text-muted-foreground">snapshot {d.date}</span>{/if}
 				</div>
 				{#if !d.has}

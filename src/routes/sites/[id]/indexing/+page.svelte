@@ -1,7 +1,12 @@
 <script lang="ts">
-	import SegBar from '$lib/components/viz/SegBar.svelte';
 	import BarList from '$lib/components/viz/BarList.svelte';
 	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import Donut from '$lib/components/viz/Donut.svelte';
+	import DayBars from '$lib/components/viz/DayBars.svelte';
+	import { CalendarClock, FileCheck, FileSearch, RefreshCw } from '@lucide/svelte';
 	import SectionTabs from '$lib/components/SectionTabs.svelte';
 	import { enhance } from '$app/forms';
 	import DataTable from '$lib/components/DataTable.svelte';
@@ -25,35 +30,43 @@
 	let view = $state('');
 </script>
 
-<section class="card mb-4 p-4">
-	<div class="flex flex-wrap items-center gap-3">
-		<h2 class="font-medium">Indexing monitor</h2>
-		<span class="chip {data.monitoring ? 'chip-on' : ''}">{data.monitoring ? 'on' : 'off'}</span>
-		<span class="text-xs text-muted-foreground">{data.summary.lastCheck ? 'last check ' + ago(data.summary.lastCheck) : 'never run'}</span>
-		<div class="ml-auto flex gap-2">
-			<form method="POST" action="?/check" use:enhance><button class="btn">Check now</button></form>
-			<form method="POST" action="?/toggle" use:enhance><input type="hidden" name="on" value={data.monitoring ? '0' : '1'} /><button class="btn {data.monitoring ? '' : 'btn-primary'}">{data.monitoring ? 'Switch off' : 'Monitor daily'}</button></form>
-		</div>
-	</div>
-	<Explainer lead="Re-checks your biggest pages with Google and records what changed: de-indexed, newly indexed, blocked.">
+<PageHeader tab="/indexing" title="Indexing" lead="Re-checks your biggest pages with Google and records what changed: de-indexed, newly indexed, blocked.">
+	{#snippet meta()}<StatusPill tone={data.monitoring ? 'good' : 'muted'} pulse={data.monitoring}>{data.monitoring ? 'Monitoring daily' : 'Monitor off'}</StatusPill><span class="text-xs text-muted-foreground">{data.summary.lastCheck ? 'last check ' + ago(data.summary.lastCheck) : 'never run'}</span>{/snippet}
+	{#snippet actions()}
+		<form method="POST" action="?/check" use:enhance><button class="btn btn-sm"><RefreshCw class="size-3.5" />Check now</button></form>
+		<form method="POST" action="?/toggle" use:enhance><input type="hidden" name="on" value={data.monitoring ? '0' : '1'} /><button class="btn btn-sm {data.monitoring ? '' : 'btn-primary'}"><CalendarClock class="size-3.5" />{data.monitoring ? 'Switch off' : 'Monitor daily'}</button></form>
+	{/snippet}
 	<p>Re-inspects this site's biggest pages (plus pages that lost their visibility) with Google's URL Inspection and records what changed: de-indexed, newly indexed, canonical swapped, blocked by robots.txt, page fetch errors.
 		Each run checks up to {data.perRun} URLs, the least recently checked first, so coverage rotates through the site. URL Inspection has a daily quota (set <code>INDEX_MONITOR_URLS</code> to change the number; I am not certain of Google's current limit), which is why daily monitoring is opt-in per site.</p>
-</Explainer>
-	{#if data.message}<p class="mt-2 rounded-md border border-[color:var(--warn)] p-2 text-xs text-warn">{data.message}{#if data.nextAt && data.nextAt > Date.now()} Next attempt {new Date(data.nextAt).toLocaleTimeString()}.{/if}</p>{/if}
-	{#if form?.ok}<p class="mt-2 text-sm text-good">{form.ok}</p>{/if}{#if form?.error}<p class="mt-2 text-sm text-bad">{form.error}</p>{/if}
-	{#if data.summary.checked}
+	<p>Order of checking: your watch list, then pages that appeared for the first time this period (indexing still open), then pages that lost visibility, then the biggest pages. The inspected set is a rotating sample, not the whole site.</p>
+</PageHeader>
+
+{#if data.message}<p class="mb-3 rounded-md border border-[color:var(--warn)] p-2 text-xs text-warn">{data.message}{#if data.nextAt && data.nextAt > Date.now()} Next attempt {new Date(data.nextAt).toLocaleTimeString()}.{/if}</p>{/if}
+{#if form?.ok}<p class="mb-3 text-sm text-good">{form.ok}</p>{/if}{#if form?.error}<p class="mb-3 text-sm text-bad">{form.error}</p>{/if}
+
+{#if data.summary.checked}
 	<!-- not indexed is grey, not red, as in Search Console: some exclusions are deliberate (noindex, a chosen canonical) -->
-	<div class="mt-3 max-w-2xl"><SegBar title="Inspected pages by index status" format={(v) => `${v} pages`} parts={[
-		{ label: 'Indexed', value: data.summary.counts.indexed, color: 'var(--st-good)' },
-		{ label: 'Not indexed', value: data.summary.counts.not_indexed, color: 'var(--muted-foreground)' },
-		{ label: 'Unknown', value: data.summary.counts.unknown, color: 'var(--border)', ink: 'var(--foreground)' }
-	]} /></div>
-	{/if}
-	<div class="mt-3 flex flex-wrap gap-3 text-sm">
-			<span><b>{data.summary.counts.indexed}</b> indexed</span><span class={data.summary.counts.not_indexed ? 'text-bad' : ''}><b>{data.summary.counts.not_indexed}</b> not indexed</span><span class="text-muted-foreground"><b>{data.summary.counts.unknown}</b> unknown</span><span class="text-muted-foreground">of {data.summary.checked} inspected</span>{#if data.summary.indexedShare != null}<span class="ml-auto"><b>{(data.summary.indexedShare * 100).toFixed(0)}%</b> of inspected URLs are indexed</span>{/if}
-	</div>
-	<p class="mt-2 text-[11px] text-muted-foreground">Order of checking: your watch list, then pages that appeared for the first time this period (indexing still open), then pages that lost visibility, then the biggest pages. The inspected set is a rotating sample, not the whole site.</p>
-</section>
+	<section class="card mb-4 grid grid-cols-1 gap-6 p-4 md:grid-cols-[minmax(0,20rem)_1fr]">
+		<div>
+			<h3 class="mb-3 flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-green" aria-hidden="true"><FileCheck class="size-3.5" /></span>Inspected pages <span class="font-normal text-muted-foreground">· {data.summary.checked}</span></h3>
+			<Donut size={112} center={data.summary.indexedShare != null ? `${(data.summary.indexedShare * 100).toFixed(0)}%` : '–'} sub="indexed" parts={[
+				{ label: 'Indexed', value: data.summary.counts.indexed, color: 'var(--st-good)', note: String(data.summary.counts.indexed) },
+				{ label: 'Not indexed', value: data.summary.counts.not_indexed, color: 'var(--muted-foreground)', note: String(data.summary.counts.not_indexed) },
+				{ label: 'Unknown', value: data.summary.counts.unknown, color: 'var(--border)', note: String(data.summary.counts.unknown) }
+			]} />
+		</div>
+		<div class="min-w-0">
+			<h3 class="mb-3 text-sm font-medium">Each check, by result</h3>
+			{#if data.history.length > 1}
+				<DayBars days={data.history.map((h) => h.day)} height={120} unit=" pages" series={[{ label: 'Indexed', color: 'var(--st-good)', values: data.history.map((h) => h.indexed) }, { label: 'Not indexed', color: 'var(--muted-foreground)', values: data.history.map((h) => h.notIndexed) }]} />
+			{:else}<EmptyState compact icon={CalendarClock} title="One check so far." text="Bars appear from the second check on; daily monitoring adds one a day." />{/if}
+		</div>
+	</section>
+{:else}
+	<div class="mb-4"><EmptyState icon={FileSearch} tone="green" title="No pages inspected yet." text="Run a check to ask Google about this site's biggest pages, or switch on daily monitoring.">
+		<form method="POST" action="?/check" use:enhance><button class="btn btn-primary btn-sm"><RefreshCw class="size-3.5" />Check now</button></form>
+	</EmptyState></div>
+{/if}
 
 <SectionTabs bind:value={view} label="Indexing details" tabs={[
 	{ id: 'monitor', label: 'Monitor results' },

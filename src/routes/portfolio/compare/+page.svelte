@@ -4,6 +4,10 @@
 	import LineChart from '$lib/components/LineChart.svelte';
 	import PeriodPicker from '$lib/components/PeriodPicker.svelte';
 	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
+	import { GitCompareArrows } from '@lucide/svelte';
 	import { fmtInt, fmtSigned } from '$lib/format';
 	let { data } = $props();
 	const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--muted-foreground)'];
@@ -19,20 +23,19 @@
 	};
 </script>
 
-<div class="mb-4 flex flex-wrap items-center gap-3">
-	<h1 class="text-2xl font-semibold tracking-tight">Compare sites</h1>
-	<PeriodPicker days={data.days} latest={data.latest} />
-	<div class="ml-auto flex flex-wrap items-center gap-2">
+<PageHeader page="/portfolio" level={1} title="Compare sites" lead="Two to four sites on one chart, to compare their trends or follow a migration.">
+	{#snippet actions()}
+		<PeriodPicker days={data.days} latest={data.latest} />
 		<select class="input" aria-label="Measure" value={data.metric} onchange={(e) => set('m', e.currentTarget.value)}><option value="clicks">Clicks</option><option value="impressions">Impressions</option></select>
 		<select class="input" aria-label="Scale" value={data.mode} onchange={(e) => set('mode', e.currentTarget.value)}><option value="index">Indexed: first week = 100</option><option value="actual">Actual numbers</option></select>
 		<label class="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={data.smooth} onchange={(e) => set('smooth', e.currentTarget.checked ? null : '0')} />7-day average</label>
-	</div>
-</div>
+	{/snippet}
+</PageHeader>
 
 <div class="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="Sites to compare">
 	{#each data.options as o}
 		{@const i = data.chosen.indexOf(o.id)}
-		<button type="button" class="chip pii {i >= 0 ? 'chip-on' : ''}" aria-pressed={i >= 0} onclick={() => toggle(o.id)}>{#if i >= 0}<span class="mr-1 inline-block size-2 rounded-full" style="background:{COLORS[i]}" aria-hidden="true"></span>{/if}{o.name}</button>
+		<button type="button" class="chip pii gap-1.5 !pl-1 {i >= 0 ? 'chip-on' : ''}" aria-pressed={i >= 0} onclick={() => toggle(o.id)}><SiteAvatar name={o.name} siteId={o.id} class="!size-4 !rounded !text-[9px]" />{#if i >= 0}<span class="inline-block size-2 rounded-full" style="background:{COLORS[i]}" aria-hidden="true"></span>{/if}{o.name}</button>
 	{/each}
 </div>
 
@@ -49,5 +52,5 @@
 		<p>Indexed: each site's first week in the period is 100, so 80 means 20% below where it started. Actual: the real daily numbers on one axis. The 7-day average smooths weekday swings. For a migration, pick the old and the new site and look for the hand-over: the old line falling as the new one rises.</p>
 	</Explainer>
 {:else}
-	<p class="rounded-xl border bg-card px-4 py-6 text-center text-sm text-muted-foreground" style="border-color:var(--border)">Pick two to four sites above.</p>
+	<EmptyState icon={GitCompareArrows} tone="blue" title="Pick two to four sites above." text="Their lines appear here on one chart, with Google updates marked." />
 {/if}

@@ -1,5 +1,7 @@
 <script lang="ts">
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import { FileText, Shapes, Sparkles, RefreshCw } from '@lucide/svelte';
 	import AreaSpark from '$lib/components/AreaSpark.svelte';
 	import Delta from '$lib/components/Delta.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
@@ -10,15 +12,16 @@
 	let { data } = $props();
 	const active = $derived(data.types.filter((t) => t.has));
 	const empty = $derived(data.types.filter((t) => !t.has));
+	const maxAppearClicks = $derived(Math.max(1, ...data.appearance.rows.map((r) => r.clicks)));
 	const pageTypes = $derived(active.filter((t) => t.type !== 'web' && data.typePages.types[t.type]?.rows.length));
 </script>
 
-<Explainer lead="Google reports each kind of search separately; the numbers are not added up.">
+<PageHeader tab="/types" title="Search types" lead="Google reports each kind of search separately; the numbers are not added up.">
 	<p>Google reports each kind of search separately. The Clicks, Impressions, CTR and Position cards on Overview are <b>Web</b> only, which is also what Search Console shows by default; the other types add to your reach but are not in those totals.</p>
-</Explainer>
+</PageHeader>
 
 {#if !data.typesPulled}
-	<div class="card p-6 text-sm text-muted-foreground">Search types are fetched on the next sync of this site. Press <b>Sync</b> (top right).</div>
+	<EmptyState icon={RefreshCw} tone="blue" title="Search types are fetched on the next sync of this site." text="Press Sync (top right) to fetch them now." />
 {:else}
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
 		{#each active as t (t.type)}
@@ -54,16 +57,16 @@
 	{/if}
 
 	{#if active.some((t) => t.type !== 'web')}
-		<h2 class="mt-8 mb-1 text-base font-semibold">Pages by search type</h2>
+		<h3 class="mt-8 mb-1 flex items-center gap-2 text-base font-semibold"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true"><FileText class="size-3.5" /></span>Pages by search type</h3>
 		{#if !data.pageWindows}
-			<p class="text-sm text-muted-foreground">Pages per search type are kept for the 7d, 28d, 3m, 6m and 16m periods. Pick one of those to see them.</p>
+			<EmptyState compact icon={Shapes} title="Pages per search type are kept for the 7d, 28d, 3m, 6m and 16m periods." text="Pick one of those periods to see them." />
 		{:else if !pageTypes.length}
-			<p class="text-sm text-muted-foreground">Which pages earn this traffic is read once a day; it appears after the next sync.</p>
+			<EmptyState compact icon={RefreshCw} title="Which pages earn this traffic is read once a day." text="It appears after the next sync." />
 		{:else}
 			<p class="mb-3 text-sm text-muted-foreground">The articles behind each type, for the {data.days} days ending {data.typePages.pulledOn}. A Discover rise or drop is usually a few pages: sort by Δ to find them.</p>
 			{#each pageTypes as t (t.type)}
 				{@const tp = data.typePages.types[t.type]!}
-				<h3 class="mt-4 mb-1 text-sm font-medium">{TYPE_LABEL[t.type]}</h3>
+				<h4 class="mt-4 mb-1 text-sm font-medium">{TYPE_LABEL[t.type]}</h4>
 				<DataTable
 					rows={tp.rows}
 					cols={[
@@ -81,7 +84,7 @@
 		{/if}
 	{/if}
 
-	<h2 class="mt-8 mb-1 text-base font-semibold">Search appearance</h2>
+	<h3 class="mt-8 mb-1 flex items-center gap-2 text-base font-semibold"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true"><Sparkles class="size-3.5" /></span>Search appearance</h3>
 	<p class="mb-3 text-sm text-muted-foreground">
 		How results were shown (rich results, snippets and similar), for the {data.appearance.pulledOn ? `${data.days} days ending ${data.appearance.pulledOn}` : 'selected period'}. Google reports this on its own: it cannot be split by query, page or country.
 	</p>
@@ -93,7 +96,7 @@
 					{#each data.appearance.rows as r (r.appearance)}
 						<tr>
 							<td class="td" title={r.appearance}>{appearanceLabel(r.appearance)}</td>
-							<td class="td tnum text-right">{fmtInt(r.clicks)}</td>
+							<td class="td tnum cellbar text-right" style="--w:{r.clicks / maxAppearClicks}">{fmtInt(r.clicks)}</td>
 							<td class="td tnum text-right">{fmtInt(r.impressions)}</td>
 							<td class="td tnum text-right">{fmtPct(r.impressions ? r.clicks / r.impressions : 0)}</td>
 							<td class="td tnum text-right">{fmtPos(r.position)}</td>
@@ -103,6 +106,6 @@
 			</table>
 		</div>
 	{:else}
-		<div class="card p-5 text-sm text-muted-foreground">No search-appearance data for this window. Google only lists appearances where your pages were shown with a special treatment.</div>
+		<EmptyState icon={Sparkles} title="No search-appearance data for this window." text="Google only lists appearances where your pages were shown with a special treatment." />
 	{/if}
 {/if}

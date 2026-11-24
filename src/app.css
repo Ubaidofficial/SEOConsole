@@ -70,6 +70,8 @@
 	--src-gsc: var(--chart-3);
 	--src-ga4: var(--chart-2);
 	--src-bing: var(--chart-1);
+	/* the fourth tone of the page-icon badges (Sources); the others reuse --link, --warn, --good and --muted-foreground */
+	--violet: oklch(0.5 0.2 295);
 }
 
 /* Dim dark: a cool slate, never pure black, with off-white text. Every text pair below is at least 4.8:1 (WCAG AA wants 4.5:1);
@@ -121,6 +123,7 @@
 	--st-bad: #ee5c5c;
 	--trend-up: oklch(0.8 0.18 152);
 	--trend-down: oklch(0.74 0.17 22);
+	--violet: oklch(0.78 0.13 295);
 }
 
 /* Logos drawn in plain black would vanish on the dim surface: invert them there. Coloured logos are left as they are. */
@@ -240,6 +243,61 @@
 	}
 	.seg-on {
 		@apply bg-card font-medium text-foreground shadow-xs;
+	}
+	/* a page's icon on a tinted square: the tone says which group of pages it belongs to (see TAB_TONE) */
+	.ibadge {
+		@apply inline-grid size-8 shrink-0 place-items-center rounded-lg;
+		background: color-mix(in oklab, var(--tone, var(--muted-foreground)) 13%, transparent);
+		color: var(--tone, var(--muted-foreground));
+	}
+	.ibadge-sm {
+		@apply size-6 rounded-md;
+	}
+	.ibadge-lg {
+		@apply size-11 rounded-xl;
+	}
+	.tone-blue { --tone: var(--link); }
+	.tone-amber { --tone: var(--warn); }
+	.tone-green { --tone: var(--good); }
+	.tone-violet { --tone: var(--violet); }
+	.tone-red { --tone: var(--bad); }
+	.tone-gray { --tone: var(--muted-foreground); }
+	/* status pills: a dot and a word, never colour alone */
+	.pill {
+		@apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap;
+		background: color-mix(in oklab, var(--tone, var(--muted-foreground)) 12%, transparent);
+		color: var(--tone, var(--muted-foreground));
+	}
+	.pill-good { --tone: var(--good); }
+	.pill-warn { --tone: var(--warn); }
+	.pill-bad { --tone: var(--bad); }
+	.pill-info { --tone: var(--link); }
+	.pill-muted { --tone: var(--muted-foreground); }
+	/* a soft bar behind a number in a table cell, as wide as its share of the column's biggest value (--w, 0 to 1) */
+	.cellbar {
+		background: linear-gradient(to right, color-mix(in oklab, var(--bar, var(--chart-1)) 16%, transparent) calc(var(--w, 0) * 100%), transparent 0);
+	}
+	/* numbered steps joined by a line (Submit, Request): a circle with the number, or a tick once the step is done */
+	.step {
+		@apply relative pb-5 pl-10;
+	}
+	.step::before {
+		content: '';
+		@apply absolute top-8 bottom-1 left-[0.9rem] w-px bg-border;
+	}
+	.step:last-child::before {
+		display: none;
+	}
+	.step-n {
+		@apply absolute top-0 left-0 grid size-7 place-items-center rounded-full border bg-card text-xs font-semibold text-muted-foreground;
+	}
+	.step-done > .step-n {
+		border-color: transparent;
+		background: color-mix(in oklab, var(--good) 15%, transparent);
+		color: var(--good);
+	}
+	.step-current > .step-n {
+		@apply border-primary bg-primary text-primary-foreground;
 	}
 	.th {
 		@apply h-10 border-b px-3 text-left text-xs font-medium whitespace-nowrap text-muted-foreground;

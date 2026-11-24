@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { RefreshCw, Trash2 } from '@lucide/svelte';
+	import { Bell, Mail, Pencil, Plus, RefreshCw, Send, ShieldCheck, Sliders, Trash2, Webhook } from '@lucide/svelte';
 	import AlertList from '$lib/components/AlertList.svelte';
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
 	let { data } = $props();
 	let checking = $state(false);
 	let kind = $state('clicks_drop');
@@ -13,36 +14,56 @@
 	const custom = $derived(data.rules.filter((r) => !r.builtin));
 	const open = $derived(data.alerts.filter((a) => a.status === 'open'));
 	const closed = $derived(data.alerts.filter((a) => a.status !== 'open'));
+	const onCount = $derived(data.rules.filter((r) => r.enabled).length);
+	let adding = $state(false);
+	let editing = $state<number | null>(null);
+	const windowText = (r: { kind: string; windowDays: number }) => (r.kind === 'deindexed' ? `last ${r.windowDays} days` : `over ${r.windowDays} days`);
 </script>
 
 {#snippet ruleRow(r: (typeof data.rules)[number])}
-	<form method="POST" action="?/rule" use:enhance={() => async ({ update }) => update({ reset: false })} class="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
+	<form method="POST" action="?/rule" use:enhance={() => async ({ update }) => { await update({ reset: false }); editing = null; }} class="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
 		<input type="hidden" name="id" value={r.id} />
-		<label class="flex min-w-0 flex-1 basis-60 items-center gap-2 text-sm">
+		<label class="relative inline-flex shrink-0 cursor-pointer items-center" title={r.enabled ? 'On: click to switch off' : 'Off: click to switch on'}>
 			<input type="hidden" name="enabled" value="0" />
-			<input type="checkbox" name="enabled" value="1" checked={r.enabled} onchange={(e) => e.currentTarget.form?.requestSubmit()} aria-label="Rule on" />
-			<span class={r.enabled ? '' : 'text-muted-foreground line-through'}><b class="font-medium">{r.label}</b>{#if r.positive}<span class="ml-1 chip !py-0 text-[10px]">good news</span>{/if}<span class="block text-xs text-muted-foreground"><span class="pii">{r.scope}</span> · {r.text}{#if r.kind === 'tracked_drop' && !data.tracked} · no searches tracked yet{/if}</span></span>
+			<input type="checkbox" class="peer sr-only" name="enabled" value="1" checked={r.enabled} onchange={(e) => e.currentTarget.form?.requestSubmit()} aria-label="{r.label}: rule on" />
+			<span class="h-5 w-9 rounded-full bg-muted ring-1 ring-border transition-colors peer-checked:bg-[color:var(--good)] peer-focus-visible:ring-2 peer-focus-visible:ring-ring" aria-hidden="true"></span>
+			<span class="absolute left-0.5 size-4 rounded-full bg-card shadow-sm transition-transform peer-checked:translate-x-4" aria-hidden="true"></span>
 		</label>
-		<label class="flex items-center gap-1 text-xs text-muted-foreground">Threshold<input class="input w-20 tnum" name="threshold" type="number" step="any" value={r.threshold} />{UNIT[r.unit]}</label>
-		{#if r.kind !== 'deindexed'}
-			<label class="flex items-center gap-1 text-xs text-muted-foreground">over<select class="input" name="window" value={String(r.windowDays)}>{#each [7, 14, 28] as w}<option value={String(w)}>{w} days</option>{/each}</select></label>
-		{:else}<input type="hidden" name="window" value={r.windowDays} />{/if}
-		<button class="btn btn-sm">Save</button>
+		<div class="min-w-0 flex-1 basis-56 text-sm {r.enabled ? '' : 'text-muted-foreground'}">
+			<b class="font-medium">{r.label}</b>{#if r.positive}<span class="ml-1.5 pill pill-good">good news</span>{/if}
+			<span class="block text-xs text-muted-foreground"><span class="pii">{r.scope}</span> · {r.text}{#if r.kind === 'tracked_drop' && !data.tracked} · no searches tracked yet{/if}</span>
+		</div>
+		{#if editing === r.id}
+			<label class="flex items-center gap-1 text-xs text-muted-foreground">Threshold<input class="input w-20 tnum" name="threshold" type="number" step="any" value={r.threshold} />{UNIT[r.unit]}</label>
+			{#if r.kind !== 'deindexed'}
+				<label class="flex items-center gap-1 text-xs text-muted-foreground">over<select class="input" name="window" value={String(r.windowDays)}>{#each [7, 14, 28] as w}<option value={String(w)}>{w} days</option>{/each}</select></label>
+			{:else}<input type="hidden" name="window" value={r.windowDays} />{/if}
+			<button class="btn btn-primary btn-xs">Save</button>
+			<button type="button" class="btn btn-ghost btn-xs" onclick={() => (editing = null)}>Cancel</button>
+		{:else}
+			<input type="hidden" name="threshold" value={r.threshold} /><input type="hidden" name="window" value={r.windowDays} />
+			<span class="chip tnum">{r.threshold}{UNIT[r.unit] === '%' ? '%' : UNIT[r.unit] ? ' ' + UNIT[r.unit] : ''} · {windowText(r)}</span>
+			<button type="button" class="btn btn-ghost btn-xs" onclick={() => (editing = r.id)} aria-label="Change {r.label}"><Pencil class="size-3.5" />Edit</button>
+		{/if}
 	</form>
 {/snippet}
 
-<div class="mb-3 flex flex-wrap items-center gap-3">
-	<h2 class="text-base font-semibold">Alerts</h2>
-	<span class="text-xs text-muted-foreground">{open.length} open · checked every hour</span>
-	<form class="ml-auto" method="POST" action="?/check" use:enhance={() => { checking = true; return async ({ update }) => { await update(); checking = false; }; }}><button class="btn" disabled={checking}><RefreshCw class="size-3.5 {checking ? 'animate-spin' : ''}" />{checking ? 'Checking…' : 'Check now'}</button></form>
-</div>
+<PageHeader tab="/alerts" title="Alerts" lead="Rules check this site every hour and open an alert when something moves more than normal.">
+	{#snippet meta()}<StatusPill tone={open.some((a) => !a.positive) ? 'bad' : open.length ? 'good' : 'muted'}>{open.length} open</StatusPill><span class="text-xs text-muted-foreground">{onCount} of {data.rules.length} rules on</span>{/snippet}
+	{#snippet actions()}
+		<form method="POST" action="?/check" use:enhance={() => { checking = true; return async ({ update }) => { await update(); checking = false; }; }}><button class="btn btn-sm" disabled={checking}><RefreshCw class="size-3.5 {checking ? 'animate-spin' : ''}" />{checking ? 'Checking…' : 'Check now'}</button></form>
+		<button type="button" class="btn btn-primary btn-sm" aria-expanded={adding} onclick={() => { adding = !adding; if (adding) queueMicrotask(() => document.getElementById('new-alert')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })); }}><Plus class="size-3.5" />New alert</button>
+	{/snippet}
+	<p>Every rule compares the last 7, 14 or 28 complete days with the same number of days before, as the period picker does. Clicks and impressions also have to change by more than day-to-day noise, so a quiet site does not alert on a handful of clicks.</p>
+	<p>An alert is sent once when it opens and ends by itself when the condition stops. Resolve or dismiss it to close it sooner; the rule then stays quiet until the condition has ended and starts again. Only Slack and Discord addresses can be set here; any other webhook goes in DIGEST_WEBHOOK_URL. With SMTP set up in .env, alerts are emailed as well.</p>
+</PageHeader>
 
-<AlertList alerts={open} showSite={false} empty="No open alerts for this site." />
+<AlertList alerts={open} trends={data.trends} showSite={false} empty="No open alerts for this site." />
 
-<h3 class="mt-6 mb-2 text-sm font-medium">Built-in rules <span class="font-normal text-muted-foreground">· on for every site; change a threshold or switch one off</span></h3>
+<h3 class="mt-6 mb-2 flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><ShieldCheck class="size-3.5" /></span>Built-in rules <span class="font-normal text-muted-foreground">· on for every site; switch one off or edit its threshold</span></h3>
 <div class="divide-y rounded-xl border bg-card" style="border-color:var(--border)">{#each builtin as r (r.id)}{@render ruleRow(r)}{/each}</div>
 
-<h3 class="mt-6 mb-2 text-sm font-medium">Custom alerts <span class="font-normal text-muted-foreground">· {custom.length} of 20; watch part of the site</span></h3>
+<h3 class="mt-6 mb-2 flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true"><Sliders class="size-3.5" /></span>Custom alerts <span class="font-normal text-muted-foreground">· {custom.length} of 20; watch part of the site</span></h3>
 {#if custom.length}
 	<div class="mb-3 divide-y rounded-xl border bg-card" style="border-color:var(--border)">
 		{#each custom as r (r.id)}
@@ -53,7 +74,10 @@
 		{/each}
 	</div>
 {/if}
-<form method="POST" action="?/addRule" use:enhance class="card flex flex-wrap items-end gap-3 p-4">
+{#if !custom.length && !adding}<p class="mb-3 text-xs text-muted-foreground">None yet. <button type="button" class="text-link hover:underline" onclick={() => (adding = true)}>Add one</button> to watch a folder, a set of searches, a keyword bucket or a page group.</p>{/if}
+{#if adding}
+<form id="new-alert" method="POST" action="?/addRule" use:enhance={() => async ({ result, update }) => { await update(); if (result.type === 'success') adding = false; }} class="card flex scroll-mt-20 flex-wrap items-end gap-3 border-[color:var(--link)]/40 p-4">
+	<div class="flex w-full items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true"><Bell class="size-3.5" /></span>New alert</div>
 	<label class="text-xs text-muted-foreground">Watch<select class="input mt-1 block" name="kind" bind:value={kind}>{#each data.kinds as x}<option value={x.kind}>{x.label}</option>{/each}</select></label>
 	<label class="text-xs text-muted-foreground">Threshold<span class="mt-1 flex items-center gap-1"><input class="input w-20 tnum" name="threshold" type="number" step="any" value={k.threshold} />{UNIT[k.unit]}</span></label>
 	<label class="text-xs text-muted-foreground">Over<select class="input mt-1 block" name="window">{#each [7, 14, 28] as w}<option value={String(w)} selected={w === k.window}>{w} days</option>{/each}</select></label>
@@ -71,13 +95,20 @@
 	{:else if k.scopable && scopeKind === 'pages'}
 		<label class="text-xs text-muted-foreground">Page group<select class="input mt-1 block" name="pageGroup">{#each data.pageGroups as g}<option value={String(g.id)}>{g.name}</option>{/each}</select></label>
 	{/if}
-	<button class="btn btn-primary">Add alert</button>
+	<button class="btn btn-primary"><Plus class="size-3.5" />Add alert</button>
+	<button type="button" class="btn btn-ghost" onclick={() => (adding = false)}>Cancel</button>
 	<p class="w-full text-xs text-muted-foreground">{k.rule.replace('{t}', 'N')}. Buckets and page groups are made on the Groups tab.</p>
 </form>
+{/if}
 
-<h3 class="mt-6 mb-2 text-sm font-medium">Where alerts go</h3>
+<h3 class="mt-6 mb-2 flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-violet" aria-hidden="true"><Send class="size-3.5" /></span>Where alerts go</h3>
 <div class="card p-4 text-sm">
-	<p class="mb-2 text-muted-foreground">
+	<div class="mb-3 flex flex-wrap gap-2">
+		<StatusPill tone="info">In the app</StatusPill>
+		<StatusPill tone={data.webhook.site || data.webhook.global ? 'good' : 'muted'}>{data.webhook.site ? 'Own webhook' : data.webhook.global ? 'Default webhook' : 'No webhook'}</StatusPill>
+		<StatusPill tone={data.email.configured ? 'good' : 'muted'}>{data.email.configured ? 'Email on' : 'Email not set up'}</StatusPill>
+	</div>
+	<p class="mb-2 flex items-center gap-1.5 text-muted-foreground"><Webhook class="size-3.5 shrink-0" />
 		{#if data.webhook.site}This site's alerts go to its own webhook, <span class="pii font-mono text-xs">{data.webhook.site}</span>.
 		{:else if data.webhook.global}This site's alerts go to the default webhook (DIGEST_WEBHOOK_URL).
 		{:else}No webhook is set, so alerts are shown in the app only.{/if}
@@ -103,12 +134,10 @@
 	{:else}<p class="text-xs text-muted-foreground">An admin can send this site's alerts to its own Slack channel or Discord.</p>{/if}
 </div>
 
-<Explainer lead="How alert rules work.">
-	<p>Every rule compares the last 7, 14 or 28 complete days with the same number of days before, as the period picker does. Clicks and impressions also have to change by more than day-to-day noise, so a quiet site does not alert on a handful of clicks.</p>
-	<p>An alert is sent once when it opens and ends by itself when the condition stops. Resolve or dismiss it to close it sooner; the rule then stays quiet until the condition has ended and starts again. Only Slack and Discord addresses can be set here; any other webhook goes in DIGEST_WEBHOOK_URL. With SMTP set up in .env, alerts are emailed as well.</p>
-</Explainer>
 
 {#if closed.length}
-	<h3 class="mt-6 mb-2 text-sm font-medium">Recently closed</h3>
-	<AlertList alerts={closed.slice(0, 20)} showSite={false} />
+	<details class="mt-6">
+		<summary class="mb-2 cursor-pointer text-sm font-medium select-none">Recently closed <span class="font-normal text-muted-foreground">· {closed.length}</span></summary>
+		<AlertList alerts={closed.slice(0, 20)} showSite={false} />
+	</details>
 {/if}

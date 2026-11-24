@@ -1,7 +1,7 @@
 import { db, audit } from './db';
 import { config } from './config';
 import { displayName, getSite, type SiteRow } from './clients';
-import { historyCoversPrevious, periodFor, summary, topPages, topQueries, allSites } from './queries';
+import { dailySeries, historyCoversPrevious, periodFor, summary, topPages, topQueries, allSites } from './queries';
 import { postWebhook, webhook, type WebhookFormat } from './digest';
 import { matcherFor } from './groups';
 import { listTracked, rankSeries } from './ranktrack';
@@ -377,7 +377,7 @@ async function deliverPending(fetchImpl: typeof fetch | undefined, now: number):
 }
 
 // ── the list ─────────────────────────────────────────────────────────────────
-export interface AlertEvent { id: number; siteId: number; site: string; kind: AlertKind; positive: boolean; title: string; detail: string | null; openedAt: number; updatedAt: number; active: boolean; status: 'open' | 'resolved' | 'dismissed' | 'cleared'; closedAt: number | null; closedBy: string | null; delivery: string; deliveryMessage: string | null }
+export interface AlertEvent { id: number; siteId: number; ruleId: number | null; site: string; kind: AlertKind; positive: boolean; title: string; detail: string | null; openedAt: number; updatedAt: number; active: boolean; status: 'open' | 'resolved' | 'dismissed' | 'cleared'; closedAt: number | null; closedBy: string | null; delivery: string; deliveryMessage: string | null }
 
 export function listAlerts(o: { siteIds: number[] | null; status?: 'open' | 'closed' | 'all'; siteId?: number; limit?: number }): AlertEvent[] {
 	const where: string[] = [];
@@ -386,8 +386,42 @@ export function listAlerts(o: { siteIds: number[] | null; status?: 'open' | 'clo
 	if (o.siteIds) where.push(`e.site_id IN (${o.siteIds.map(Number).join(',') || '0'})`);
 	if (o.status === 'open') where.push("e.status = 'open'");
 	if (o.status === 'closed') where.push("e.status != 'open'");
-	const rows = db().prepare(`SELECT e.*, s.site_url, s.label FROM alert_events e JOIN sites s ON s.id = e.site_id ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY (e.status = 'open') DESC, e.positive, e.opened_at DESC LIMIT ?`).all(...args, o.limit ?? 300) as { id: number; site_id: number; site_url: string; label: string | null; kind: AlertKind; positive: number; title: string; detail: string | null; opened_at: number; updated_at: number; active: number; status: AlertEvent['status']; closed_at: number | null; closed_by: string | null; delivery: string; delivery_message: string | null }[];
-	return rows.map((r) => ({ id: r.id, siteId: r.site_id, site: r.label || displayName(r.site_url), kind: r.kind, positive: !!r.positive, title: r.title, detail: r.detail, openedAt: r.opened_at, updatedAt: r.updated_at, active: !!r.active, status: r.status, closedAt: r.closed_at, closedBy: r.closed_by, delivery: r.delivery, deliveryMessage: r.delivery_message }));
+	const rows = db().prepare(`SELECT e.*, s.site_url, s.label FROM alert_events e JOIN sites s ON s.id = e.site_id ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY (e.status = 'open') DESC, e.positive, e.opened_at DESC LIMIT ?`).all(...args, o.limit ?? 300) as { id: number; site_id: number; rule_id: number | null; site_url: string; label: string | null; kind: AlertKind; positive: number; title: string; detail: string | null; opened_at: number; updated_at: number; active: number; status: AlertEvent['status']; closed_at: number | null; closed_by: string | null; delivery: string; delivery_message: string | null }[];
+	return rows.map((r) => ({ id: r.id, siteId: r.site_id, ruleId: r.rule_id, site: r.label || displayName(r.site_url), kind: r.kind, positive: !!r.positive, title: r.title, detail: r.detail, openedAt: r.opened_at, updatedAt: r.updated_at, active: !!r.active, status: r.status, closedAt: r.closed_at, closedBy: r.closed_by, delivery: r.delivery, deliveryMessage: r.delivery_message }));
+}
+
+/** The measure a whole-site alert watches, day by day: the window it compared and the same number of days before. */
+export interface AlertTrend { label: string; values: (number | null)[]; split: number; lowerIsBetter: boolean }
+const TREND_OF: Partial<Record<AlertKind, { label: string; pick: (d: { clicks: number; impressions: number; position: number }) => number | null; lowerIsBetter?: boolean }>> = {
+	clicks_drop: { label: 'Clicks', pick: (d) => d.clicks },
+	clicks_rise: { label: 'Clicks', pick: (d) => d.clicks },
+	impressions_drop: { label: 'Impressions', pick: (d) => d.impressions },
+	ctr_drop: { label: 'Click rate', pick: (d) => (d.impressions ? d.clicks / d.impressions : null) },
+	position_drop: { label: 'Average position', pick: (d) => (d.impressions && d.position ? d.position : null), lowerIsBetter: true }
+};
+
+/**
+ * A small chart for each open whole-site alert that watches clicks, impressions, click rate or position (as onsite.so's alert
+ * cards show): the daily values over the rule's window and the window before it, so you can see the step the rule caught.
+ * Alerts on part of the site, or that count things (searches, pages), get no chart rather than a whole-site line that would
+ * not be what the rule measured. At most `max` alerts, open ones first.
+ */
+export function alertTrends(alerts: Pick<AlertEvent, 'id' | 'siteId' | 'ruleId' | 'kind' | 'status'>[], max = 40): Record<number, AlertTrend> {
+	const out: Record<number, AlertTrend> = {};
+	const rule = db().prepare('SELECT window_days, scope_kind FROM alert_rules WHERE id = ?');
+	for (const a of alerts.filter((x) => x.status === 'open').slice(0, max)) {
+		const t = TREND_OF[a.kind];
+		if (!t) continue;
+		const r = a.ruleId ? (rule.get(a.ruleId) as { window_days: number; scope_kind: string | null } | undefined) : undefined;
+		if (r?.scope_kind) continue;
+		const site = getSite(a.siteId);
+		if (!site?.synced_through) continue;
+		const w = r?.window_days ?? alertKind(a.kind)!.window;
+		const end = periodFor(site, w).end;
+		const days = dailySeries(site.id, addDays(end, -(2 * w - 1)), end);
+		out[a.id] = { label: t.label, values: days.map((d) => t.pick(d)), split: days.length - w, lowerIsBetter: !!t.lowerIsBetter };
+	}
+	return out;
 }
 
 export const openAlertCount = (siteIds: number[] | null): { open: number; problems: number } => {

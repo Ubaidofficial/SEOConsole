@@ -2,18 +2,21 @@
 	import { ConfirmButton } from '$lib/components/ui/confirm';
 	import { enhance } from '$app/forms';
 	import { ago } from '$lib/format';
-	import Explainer from '$lib/components/Explainer.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusPill from '$lib/components/StatusPill.svelte';
+	import { BookOpen, History, Key, KeyRound, Plus } from '@lucide/svelte';
 	import McpGuide from '$lib/components/McpGuide.svelte';
 	let { data, form } = $props();
 	const nameOf = (id: number) => data.sites.find((s) => s.id === id)?.name ?? `#${id}`;
 </script>
 
-<h1 class="mb-1 text-lg font-semibold">MCP</h1>
-<Explainer lead="Connect Claude, ChatGPT or any MCP app to your search data. It reads by default, and changes things only where you allow it.">
+<PageHeader page="/agents" level={1} title="MCP" lead="Connect Claude, ChatGPT or any MCP app to your search data. It reads by default, and changes things only where you allow it.">
 	<p>SEOConsole is an MCP server: an AI app can query your Search Console, GA4, Tag Manager, Bing, Clarity and Core Web Vitals data in one place. Connect it next to OpenSEO's MCP: <code>get_openseo_project</code> hands a site's project id to OpenSEO's keyword, rank-tracking and audit tools.</p>
 	<p>A key can also be given the <b>submit</b> permission (push URLs and sitemaps to IndexNow, Bing, Search Console and, for job and livestream pages, Google's Indexing API; start an indexing check), or <b>submit and delete</b>, which adds the few actions that cannot be undone and need a confirming second call. Nothing can delete your data or change a site's content.</p>
 	<p>The table at the bottom lists every change an app made, and every time a key was given or lost a permission.</p>
-</Explainer>
+	{#snippet actions()}<a class="btn btn-primary btn-sm" href="#create-key"><Plus class="size-3.5" />Create a key</a>{/snippet}
+</PageHeader>
 
 <McpGuide url={data.mcpUrl} chatgptCallbacks={data.chatgptCallbacks} publicOrigin={data.publicOrigin} />
 
@@ -28,8 +31,8 @@
 {/if}
 
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-	<section class="card p-4">
-		<h2 class="mb-2 font-medium">Create a key</h2>
+	<section id="create-key" class="card scroll-mt-20 p-4">
+		<h2 class="mb-2 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true"><KeyRound class="size-3.5" /></span>Create a key</h2>
 		<form method="POST" action="?/create" use:enhance class="space-y-3 text-sm">
 			<input class="input w-full" name="name" aria-label="Name" placeholder="Name, e.g. Claude Code (laptop)" required />
 			<fieldset>
@@ -50,7 +53,7 @@
 	</section>
 
 	<section class="card p-4 text-sm">
-		<h2 class="mb-2 font-medium">Using a key</h2>
+		<h2 class="mb-2 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-gray" aria-hidden="true"><BookOpen class="size-3.5" /></span>Using a key</h2>
 		<p class="mt-2 text-xs text-muted-foreground">Send the key as <code>Authorization: Bearer osc_…</code> or <code>x-api-key</code>. Set <code>ORIGIN</code> to your public URL so this shows the right address.</p>
 		<p class="mt-2 text-xs text-muted-foreground"><b>REST API</b> with the same keys: <code class="pii">{data.mcpUrl.replace(/\/mcp$/, '/v1')}</code> lists the endpoints. Read with <code>GET /api/v1/&lt;tool&gt;?site=1</code>; tools that change things take <code>POST</code> with a JSON body.</p>
 		<p class="mt-2 text-xs text-muted-foreground"><b>{data.tools.length} tools</b> ({data.tools.length - data.changeTools.length} only read; {data.writeTools.submit.length} need submit, {data.writeTools.delete.length} need delete).</p>
@@ -60,25 +63,25 @@
 
 
 
-<h2 class="mt-6 mb-2 font-medium">Keys</h2>
+<h2 class="mt-6 mb-2 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-blue" aria-hidden="true"><Key class="size-3.5" /></span>Keys</h2>
 <div class="card overflow-x-auto">
 	<table class="w-full">
 		<thead><tr><th class="th">Name</th><th class="th">Key</th><th class="th">Scope</th><th class="th">Can change things</th><th class="th">Last used</th><th class="th relative"><span class="sr-only">Actions</span></th></tr></thead>
 		<tbody>
 			{#each data.keys as k (k.id)}
 				<tr>
-					<td class="td">{k.name}{#if k.permission === 'submit'}<span class="chip ml-2 !border-[color:var(--warn)]" title="This key may push URLs and sitemaps to search engines.">can submit</span>{:else if k.permission === 'delete'}<span class="chip ml-2 !border-[color:var(--bad)] text-bad" title="This key may also remove a sitemap from Search Console and discard queued submissions (each after a confirming second call).">can submit + delete</span>{/if}{#if k.signInApp}<span class="chip ml-2" title="Created when {k.signInApp} was approved with Sign in. Its token is renewed automatically; revoke it here to cut the app off.">sign-in</span>{/if}</td><td class="td"><code>{k.prefix}…</code></td>
+					<td class="td">{k.name}{#if k.permission === 'submit'}<span class="ml-2"><StatusPill tone="warn" title="This key may push URLs and sitemaps to search engines.">can submit</StatusPill></span>{:else if k.permission === 'delete'}<span class="ml-2"><StatusPill tone="bad" title="This key may also remove a sitemap from Search Console and discard queued submissions (each after a confirming second call).">can submit + delete</StatusPill></span>{/if}{#if k.signInApp}<span class="chip ml-2" title="Created when {k.signInApp} was approved with Sign in. Its token is renewed automatically; revoke it here to cut the app off.">sign-in</span>{/if}</td><td class="td"><code>{k.prefix}…</code></td>
 					<td class="td text-xs"><span class="pii">{k.scope ? k.scope.map(nameOf).join(', ') : 'all sites'}</span></td>
 					<td class="td text-xs"><form method="POST" action="?/permission" use:enhance={() => async ({ update }) => update({ reset: false })} class="flex items-center gap-2"><input type="hidden" name="id" value={k.id} /><label class="sr-only" for="lvl-{k.id}">Permission for {k.name}</label><select id="lvl-{k.id}" name="level" aria-label="Permission for {k.name}" class="input text-xs" disabled={data.readOnly}><option value="read" selected={k.permission === 'read'}>Read only</option><option value="submit" selected={k.permission === 'submit'}>Submit</option><option value="delete" selected={k.permission === 'delete'}>Submit and delete</option></select><button class="btn text-xs">Save</button></form></td>
 					<td class="td text-xs text-muted-foreground">{k.lastUsedAt ? ago(k.lastUsedAt) : 'never'}</td>
 					<td class="td text-right"><form method="POST" action="?/remove" use:enhance><input type="hidden" name="id" value={k.id} /><ConfirmButton title="Revoke this API key?" description="Anything using this key (an agent, a script) loses access immediately." confirmLabel="Revoke key">Revoke</ConfirmButton></form></td>
 				</tr>
-			{:else}<tr><td class="td text-muted-foreground" colspan="6">No keys yet.</td></tr>{/each}
+			{:else}<tr><td class="td" colspan="6"><EmptyState compact icon={Key} title="No keys yet." text="Create one above, then add it to your AI app."><a class="btn btn-primary btn-sm" href="#create-key"><Plus class="size-3.5" />Create a key</a></EmptyState></td></tr>{/each}
 		</tbody>
 	</table>
 </div>
 
-<h2 class="mt-8 mb-1 font-medium">Agent activity</h2>
+<h2 class="mt-8 mb-1 flex items-center gap-2 font-medium"><span class="ibadge ibadge-sm tone-gray" aria-hidden="true"><History class="size-3.5" /></span>Agent activity</h2>
 <p class="mb-2 text-xs text-muted-foreground">Every change an agent made through the MCP, and every time a key or sign-in was given or taken away the right to make changes. Newest first.</p>
 <div class="card overflow-x-auto">
 	<table class="w-full">
@@ -91,7 +94,7 @@
 					<td class="td text-xs"><span class="pii">{a.siteId ? nameOf(a.siteId) : ''}</span></td>
 					<td class="td max-w-[40rem] truncate text-xs text-muted-foreground"><span class="pii" title={a.detail ?? ''}>{a.detail ?? ''}</span></td>
 				</tr>
-			{:else}<tr><td class="td text-muted-foreground" colspan="4">Nothing yet.</td></tr>{/each}
+			{:else}<tr><td class="td" colspan="4"><EmptyState compact icon={History} title="Nothing yet." text="Changes an app makes through a key with the submit permission show up here." /></td></tr>{/each}
 		</tbody>
 	</table>
 </div>

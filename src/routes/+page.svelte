@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
-	import { Bell, Eye, EyeOff, ExternalLink, GitCompare, Pin, RefreshCw, Search, Trash2, Sparkles } from '@lucide/svelte';
+	import { Bell, Eye, EyeOff, ExternalLink, GitCompare, Layers, Pin, RefreshCw, Search, Trash2, Sparkles, TriangleAlert } from '@lucide/svelte';
 	import { ConfirmButton } from '$lib/components/ui/confirm';
 	import PeriodPicker from '$lib/components/PeriodPicker.svelte';
 	import SourceSpark, { type SparkSeries } from '$lib/components/SourceSpark.svelte';
@@ -192,7 +192,7 @@
 	{#if data.portfolio && data.portfolio.now.length > 1}
 		<section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="all-h">
 			<div class="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-				<h2 id="all-h" class="text-base font-semibold tracking-tight">All {data.totals.sites - data.totals.duplicates} sites</h2>
+				<h2 id="all-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><Layers class="size-3.5" /></span>All {data.totals.sites - data.totals.duplicates} sites</h2>
 				<span class="tnum text-2xl font-semibold tracking-tight">{fmtCompact(data.totals.clicks)}</span><span class="text-xs text-muted-foreground">clicks</span>
 				{#if data.totals.clicksDelta != null}<Delta value={data.totals.clicksDelta} {why} /><span class="text-xs text-muted-foreground">vs previous {data.days} days</span>{/if}
 			</div>
@@ -206,7 +206,7 @@
 
 	{#if attention.length}
 		<section class="mb-5" aria-labelledby="att-h">
-			<div class="mb-2 flex items-baseline gap-2"><h2 id="att-h" class="text-base font-semibold tracking-tight">Needs attention</h2><span class="text-xs text-muted-foreground">{attention.length} site{attention.length === 1 ? '' : 's'} with a real fall in clicks or an open alert</span><a class="ml-auto text-xs underline underline-offset-2" href="/alerts">All alerts</a></div>
+			<div class="mb-2 flex items-baseline gap-2"><h2 id="att-h" class="text-base font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-red mr-1.5 align-[-6px]" aria-hidden="true"><TriangleAlert class="size-3.5" /></span>Needs attention</h2><span class="text-xs text-muted-foreground">{attention.length} site{attention.length === 1 ? '' : 's'} with a real fall in clicks or an open alert</span><a class="ml-auto text-xs underline underline-offset-2" href="/alerts">All alerts</a></div>
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
 				{#each attention.slice(0, 4) as c (c.id)}
 					<a href={c.alerts ? `/sites/${c.id}/alerts` : `/sites/${c.id}?days=${data.days}`} class="group flex flex-col rounded-xl border bg-card p-3.5 shadow-xs transition-colors hover:border-foreground/30">

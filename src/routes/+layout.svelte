@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { Toaster, toast } from 'svelte-sonner';
-	import { Bell, Bot, LayoutDashboard, Sparkles, Layers, ListChecks, Map as MapIcon, Plug, RefreshCw, UserCog, Users } from '@lucide/svelte';
+	import { Bell, Bot, ChartLine, ChevronDown, LayoutDashboard, LayoutGrid, Sparkles, Layers, ListChecks, Map as MapIcon, Plug, RefreshCw, UserCog, Users } from '@lucide/svelte';
 	import PrivacyToggle from '$lib/components/privacy-toggle.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import { pageTitle } from '$lib/titles';
@@ -27,21 +27,37 @@
 	}
 
 	let { data, children } = $props();
+	/**
+	 * The bar keeps the four places people go every day: their sites, the to-do list, alerts and Ask. Everything set up once and
+	 * visited now and then (portfolio, sitemaps, connections, agents, accounts, team) sits in the Workspace menu, each with a line on
+	 * what it is for, as onsite.so and Plausible do.
+	 */
 	const links = [
 		['/', 'Dashboard', LayoutDashboard],
-		['/chat', 'Ask', Sparkles],
 		['/actions', 'Actions', ListChecks],
 		['/alerts', 'Alerts', Bell],
-		['/portfolio', 'Portfolio', Layers],
-		['/sitemaps', 'Sitemaps', MapIcon],
-		['/connect', 'Connect', Plug],
-		['/agents', 'MCP', Bot],
-		['/accounts', 'Accounts', Users],
-		['/team', 'Team', UserCog]
+		['/chat', 'Ask', Sparkles]
+	] as const;
+	const workspace = [
+		['/portfolio', 'Portfolio', Layers, 'Every site side by side, groups and cross-site findings'],
+		['/sitemaps', 'Sitemaps', MapIcon, 'All sitemaps across your sites, with their health'],
+		['/updates', 'Google updates', ChartLine, 'Ranking updates, marked on every chart'],
+		['/connect', 'Connect', Plug, 'Link GA4, Bing, Tag Manager, Clarity and more'],
+		['/agents', 'MCP', Bot, 'Let Claude, ChatGPT or Cursor read your data'],
+		['/accounts', 'Accounts', Users, 'The Google accounts that sync your sites'],
+		['/team', 'Team', UserCog, 'Who can see and change what']
 	] as const;
 	// Someone limited to some sites gets only the pages that show nothing from other sites (the server refuses the rest).
 	const SCOPED_LINKS = new Set(['/', '/chat', '/alerts', '/team']);
 	const shown = $derived(data.user?.scoped ? links.filter(([href]) => SCOPED_LINKS.has(href)) : links);
+	const menu = $derived(data.user?.scoped ? workspace.filter(([href]) => SCOPED_LINKS.has(href)) : workspace);
+	const inMenu = $derived(menu.find(([href]) => page.url.pathname.startsWith(href)) ?? null);
+	let wsOpen = $state(false);
+	let wsBox = $state<HTMLDetailsElement>();
+	$effect(() => {
+		void page.url.pathname;
+		wsOpen = false;
+	});
 	const active = (href: string) => (href === '/' ? page.url.pathname === '/' || page.url.pathname.startsWith('/sites') : page.url.pathname.startsWith(href));
 
 	// One place turns every form-action result into a toast, so no action finishes silently.
@@ -66,7 +82,7 @@
 </script>
 
 <svelte:head><title>{pageTitle(page.url.pathname)}</title></svelte:head>
-<svelte:window onkeydown={shortcut} />
+<svelte:window onkeydown={(e) => { shortcut(e); if (e.key === 'Escape') wsOpen = false; }} onclick={(e) => wsOpen && wsBox && !wsBox.contains(e.target as Node) && (wsOpen = false)} />
 
 <Toaster theme={theme.dim ? 'dark' : 'light'} richColors closeButton position="bottom-right" />
 
@@ -77,7 +93,7 @@
 			<img src="/brand/mark-dark.svg" alt="" width="24" height="24" class="hidden size-6 dark:block" />
 			SEOConsole
 		</a>
-		{#if data.authed}<nav class="order-last flex w-full gap-0.5 overflow-x-auto sm:order-none sm:w-auto" aria-label="Main">
+		{#if data.authed}<nav class="order-last flex w-full gap-0.5 overflow-x-auto sm:order-none sm:w-auto sm:overflow-visible" aria-label="Main">
 			{#each shown as [href, label, Icon]}
 				<a
 					{href}
@@ -87,6 +103,19 @@
 					<Icon class="size-3.5" />{label}{#if href === '/chat'}<kbd class="ml-0.5 hidden rounded border px-1 font-sans text-[10px] text-muted-foreground lg:inline" title="Open Ask from any page">{mac ? '⌘J' : 'Ctrl J'}</kbd>{/if}{#if href === '/alerts' && data.alerts.open}<span class="ml-0.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.alerts.problems ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.alerts.open} open alert{data.alerts.open === 1 ? '' : 's'}">{data.alerts.open}</span>{/if}
 				</a>
 			{/each}
+			{#if menu.length}
+				<details class="relative" bind:open={wsOpen} bind:this={wsBox}>
+					<summary class="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap select-none [&::-webkit-details-marker]:hidden {inMenu ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'}"><LayoutGrid class="size-3.5" />{inMenu ? inMenu[1] : 'Workspace'}<ChevronDown class="size-3 opacity-60" /></summary>
+					<div class="fixed inset-x-3 top-full z-50 mt-1 grid gap-0.5 rounded-xl border bg-card p-1.5 shadow-lg sm:absolute sm:inset-x-auto sm:top-full sm:left-0 sm:mt-1.5 sm:w-80" role="menu">
+						{#each menu as [href, label, Icon, about]}
+							<a {href} role="menuitem" aria-current={page.url.pathname.startsWith(href) ? 'page' : undefined} class="flex items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-accent {page.url.pathname.startsWith(href) ? 'bg-accent' : ''}">
+								<span class="ibadge ibadge-sm tone-gray mt-0.5" aria-hidden="true"><Icon class="size-3.5" /></span>
+								<span class="min-w-0"><span class="block text-[13px] font-medium">{label}</span><span class="block text-xs leading-snug text-muted-foreground">{about}</span></span>
+							</a>
+						{/each}
+					</div>
+				</details>
+			{/if}
 		</nav>{/if}
 		<div class="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
 			{#if data.queue.active + data.queue.waiting > 0}

@@ -146,7 +146,13 @@
 	);
 
 	const idx = (date: string) => data.findIndex((d) => date >= d.date && date <= (d.end ?? d.date));
-	const updateMarks = $derived(updates.map((u) => ({ ...u, i: idx(u.date) })).filter((u) => u.i >= 0));
+	/** Google updates and your change-log notes can each be switched off, when the marks crowd a short chart (as SEOTesting does). */
+	let showUpdates = $state(true);
+	let showNotes = $state(true);
+	const updateMarks = $derived(showUpdates ? updates.map((u) => ({ ...u, i: idx(u.date) })).filter((u) => u.i >= 0) : []);
+	const notesIn = $derived(markers.filter((m) => idx(m.date) >= 0));
+	const shownMarkers = $derived(showNotes ? markers : []);
+	const updatesIn = $derived(updates.filter((u) => idx(u.date) >= 0).length);
 	const span = (d: Point[]) => (d.length ? `${fmtDay(d[0].date)} – ${fmtDay(d[d.length - 1].date)}` : '');
 	const ticksX = $derived(data.length ? [...new Set([0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => Math.round(t * (data.length - 1))))] : []);
 	const fmtDay = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -185,6 +191,12 @@
 		{#if grains.length > 1}
 			<span class="seg ml-1" role="group" aria-label="Group by">{#each grains as gr}<button type="button" class="seg-item !py-0.5 !text-xs {g === gr ? 'seg-on' : ''}" aria-pressed={g === gr} onclick={() => (grain = gr)}>{gr === 'day' ? 'Day' : gr === 'week' ? 'Week' : 'Month'}</button>{/each}</span>
 		{/if}
+		{#if updatesIn || notesIn.length}
+			<span class="inline-flex items-center gap-1" role="group" aria-label="Marks on the chart">
+				{#if updatesIn}<button type="button" class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors {showUpdates ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}" aria-pressed={showUpdates} onclick={() => (showUpdates = !showUpdates)} title="Show or hide Google ranking updates"><span class="grid size-3.5 place-items-center rounded-full border text-[8px] font-bold" style="color:var(--c-clicks)">G</span>Updates</button>{/if}
+				{#if notesIn.length}<button type="button" class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors {showNotes ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}" aria-pressed={showNotes} onclick={() => (showNotes = !showNotes)} title="Show or hide your change-log notes"><span class="size-2 rounded-full" style="background:var(--warn)" aria-hidden="true"></span>Notes ({notesIn.length})</button>{/if}
+			</span>
+		{/if}
 		{#if prevOn && data.length}
 			<span class="ml-auto inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground tnum">
 				<span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-4 rounded-full bg-foreground" aria-hidden="true"></span>{span(data)}</span>
@@ -209,7 +221,7 @@
 						{@const i = idx(an.date)}
 						{#if i >= 0}<rect x={x(i) - 4} y={pad.t} width="8" height={innerH} rx="3" fill={an.direction === 'drop' ? 'var(--bad)' : 'var(--good)'} opacity="0.13" />{/if}
 					{/each}
-					{#each markers as mk}
+					{#each shownMarkers as mk}
 						{@const i = idx(mk.date)}
 						{#if i >= 0}
 							<line x1={x(i)} x2={x(i)} y1={pad.t} y2={pad.t + innerH} stroke={mk.color ?? 'var(--warn)'} stroke-width="1" opacity="0.6" />
