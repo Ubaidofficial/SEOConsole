@@ -33,7 +33,7 @@ export const MORE_READ_TOOLS: Tool[] = [
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
 			const r = rankReport(getSite(site.id)!, days(a));
-			return { period: { start: r.start, end: r.end }, tracked: r.rows.length, rows: r.rows.slice(0, limit(a, 100)).map((x) => ({ query: x.query, latest: x.latest && { date: x.latest.date, position: r2(x.latest.position) }, last7: x.week == null ? null : r2(x.week), prev7: x.prevWeek == null ? null : r2(x.prevWeek), change: x.change == null ? null : r2(x.change), best: x.best == null ? null : r2(x.best), clicks: x.clicks, daysTop10: x.daysTop10, daysShown: x.daysShown })) };
+			return { period: { start: r.start, end: r.end }, tracked: r.rows.filter((x) => x.manual).length, fromBuckets: r.rows.filter((x) => !x.manual).length, rows: r.rows.slice(0, limit(a, 100)).map((x) => ({ query: x.query, bucket: x.buckets.length ? x.buckets : undefined, latest: x.latest && { date: x.latest.date, position: r2(x.latest.position) }, last7: x.week == null ? null : r2(x.week), prev7: x.prevWeek == null ? null : r2(x.prevWeek), change: x.change == null ? null : r2(x.change), best: x.best == null ? null : r2(x.best), clicks: x.clicks, daysTop10: x.daysTop10, daysShown: x.daysShown })) };
 		}
 	},
 	{

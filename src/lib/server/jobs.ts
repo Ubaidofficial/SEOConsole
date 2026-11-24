@@ -15,6 +15,7 @@ import { listTests, warmTests } from './seotests';
 import { ensureGa4TestData } from './ga4tests';
 import { runMonthlyReport, runUrgentAlerts, runWeeklyDigest } from './digest';
 import { runAlertRules } from './alerts';
+import { deleteExpiredSites } from './duplicates';
 import { actionsFor } from './actions';
 import { getSite } from './clients';
 import { importGoogleUpdates, lastUpdatesCheck } from './gupdates';
@@ -215,6 +216,8 @@ export function schedulerTick() {
 			enqueue('alerts', async () => void (await runAlertRules()));
 		}
 	}
+	// Removed sites past their 14 days of grace are deleted for good.
+	deleteExpiredSites();
 	// The daily database copy (SQLite's own backup call, checked and pruned); a failure raises an audit entry and one webhook notice a day.
 	if (!process.env.VITEST && backupDue()) enqueue('backup', async () => void (await runBackup()));
 	// AI visibility: prompts due for another answer, one at a time, within the daily cap (they cost money on the owner's API accounts).
@@ -224,7 +227,7 @@ export function schedulerTick() {
 	const sites = d
 		.prepare(
 			`SELECT s.id, s.backfill_done, s.last_sync_at FROM sites s JOIN accounts a ON a.id = s.account_id
-			 WHERE s.hidden = 0 AND a.status = 'active' AND s.permission NOT IN ('siteUnverifiedUser','none')`
+			 WHERE s.hidden = 0 AND s.deleted_at IS NULL AND a.status = 'active' AND s.permission NOT IN ('siteUnverifiedUser','none')`
 		)
 		.all() as { id: number; backfill_done: number; last_sync_at: number | null }[];
 	for (const s of sites) {

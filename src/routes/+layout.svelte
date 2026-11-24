@@ -9,11 +9,22 @@
 	import { privacy } from '$lib/privacy.svelte';
 	import { theme } from '$lib/theme.svelte';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 
+	let mac = $state(true);
 	onMount(() => {
 		privacy.init();
 		theme.init();
+		mac = /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
 	});
+	/** ⌘J (Ctrl+J elsewhere) opens Ask from any page; on a site's pages the question starts with that site's name. */
+	function shortcut(e: KeyboardEvent) {
+		if (!data.authed || e.key.toLowerCase() !== 'j' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+		e.preventDefault();
+		if (page.url.pathname.startsWith('/chat')) return void document.querySelector<HTMLTextAreaElement>('textarea')?.focus();
+		const site = (page.data as { site?: { name?: string } }).site?.name;
+		goto(site ? `/chat?draft=${encodeURIComponent(`About ${site}: `)}` : '/chat');
+	}
 
 	let { data, children } = $props();
 	const links = [
@@ -55,6 +66,7 @@
 </script>
 
 <svelte:head><title>{pageTitle(page.url.pathname)}</title></svelte:head>
+<svelte:window onkeydown={shortcut} />
 
 <Toaster theme={theme.dim ? 'dark' : 'light'} richColors closeButton position="bottom-right" />
 
@@ -72,7 +84,7 @@
 					aria-current={active(href) ? 'page' : undefined}
 					class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors {active(href) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'}"
 				>
-					<Icon class="size-3.5" />{label}{#if href === '/alerts' && data.alerts.open}<span class="ml-0.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.alerts.problems ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.alerts.open} open alert{data.alerts.open === 1 ? '' : 's'}">{data.alerts.open}</span>{/if}
+					<Icon class="size-3.5" />{label}{#if href === '/chat'}<kbd class="ml-0.5 hidden rounded border px-1 font-sans text-[10px] text-muted-foreground lg:inline" title="Open Ask from any page">{mac ? '⌘J' : 'Ctrl J'}</kbd>{/if}{#if href === '/alerts' && data.alerts.open}<span class="ml-0.5 inline-grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold {data.alerts.problems ? 'bg-[color:var(--bad)] text-white' : 'bg-muted text-muted-foreground'}" title="{data.alerts.open} open alert{data.alerts.open === 1 ? '' : 's'}">{data.alerts.open}</span>{/if}
 				</a>
 			{/each}
 		</nav>{/if}

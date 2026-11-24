@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { bareName, coverageMap, isRootPrefix, propertyLabel } from '../src/lib/property';
 import { db, openDb } from '../src/lib/server/db';
 import { portfolioTotals, siteCards } from '../src/lib/server/queries';
-import { hideCoveredDuplicates, hideableDuplicates, purgeRemovedSite } from '../src/lib/server/duplicates';
+import { hideCoveredDuplicates, hideableDuplicates, deleteRemovedNow, purgeRemovedSite } from '../src/lib/server/duplicates';
 import { portfolioStriking } from '../src/lib/server/portfolio';
 
 describe('property labels', () => {
@@ -84,11 +84,14 @@ describe('totals count each site once', () => {
 		expect(cards.find((c) => c.site.id === 2)!.coveredBy).toBeNull();
 	});
 
-	it('purges only properties Search Console no longer lists, with their data', () => {
+	it('removes only properties Search Console no longer lists; their data is kept for 14 days, then deleted with them', () => {
 		expect(purgeRemovedSite(2)).toBe(false); // live: refused
 		expect((db().prepare('SELECT COUNT(*) n FROM sites').get() as { n: number }).n).toBe(3);
 		db().prepare("UPDATE sites SET permission = 'none' WHERE id = 2").run();
 		expect(purgeRemovedSite(2)).toBe(true);
+		// restorable for 14 days ("Recently removed"); deleteRemovedNow (or the scheduler, after 14 days) deletes it with its data
+		expect((db().prepare('SELECT COUNT(*) n FROM site_daily WHERE site_id = 2').get() as { n: number }).n).toBe(1);
+		expect(deleteRemovedNow(2)).toBe(true);
 		expect((db().prepare('SELECT COUNT(*) n FROM sites WHERE id = 2').get() as { n: number }).n).toBe(0);
 		expect((db().prepare('SELECT COUNT(*) n FROM site_daily WHERE site_id = 2').get() as { n: number }).n).toBe(0); // cascaded
 		expect((db().prepare('SELECT COUNT(*) n FROM site_daily WHERE site_id = 1').get() as { n: number }).n).toBe(1); // others untouched

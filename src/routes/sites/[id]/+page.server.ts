@@ -14,7 +14,8 @@ import { createTest, evaluateTestCached, mainResult, suggestControlMatched, test
 import { queueFor } from '$lib/server/actions';
 import { planFrom, positionBuckets } from '$lib/plan';
 import { hourlyReport } from '$lib/server/hourly';
-import { brandByDay, bucketPanel, devices, movers, newAndLost } from '$lib/server/overview';
+import { aiVisits, brandByDay, bucketPanel, countries, devices, movers, newAndLost } from '$lib/server/overview';
+import { ga4 as ga4Summary } from '$lib/server/dashboard';
 
 /**
  * Clicks from searches that contain the brand against all the others, now and in the period before. Non-brand clicks are the ones
@@ -31,7 +32,7 @@ function brandSplit(site: Parameters<typeof brandTerms>[0] & { id: number; backf
 	return { now: sum(p.start, p.end), prev: historyCoversPrevious(site as never, p.prevStart) ? sum(p.prevStart, p.prevEnd) : null, terms };
 }
 
-export const load: PageServerLoad = async ({ params, parent }) => {
+export const load: PageServerLoad = async ({ params, parent, url }) => {
 	const { days } = await parent();
 	const site = getSite(Number(params.id))!;
 	const period = periodFor(site, days);
@@ -87,7 +88,16 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		annotationTests,
 		series: dailySeries(site.id, period.start, period.end),
 		// the period before, day by day, for the dashed line under this one (only when that period is really stored)
-		prevSeries: historyCoversPrevious(site, period.prevStart) ? dailySeries(site.id, period.prevStart, period.prevEnd) : null,
+		// or, with ?cmp=year, the same weekdays one year earlier (364 days back), when the stored history reaches that far
+		compare: (() => {
+			const yearStart = addDays(period.start, -364);
+			const yearOk = historyCoversPrevious(site, yearStart);
+			const wantYear = url.searchParams.get('cmp') === 'year';
+			return { mode: wantYear && yearOk ? ('year' as const) : ('prev' as const), yearOk };
+		})(),
+		prevSeries: url.searchParams.get('cmp') === 'year' && historyCoversPrevious(site, addDays(period.start, -364))
+			? dailySeries(site.id, addDays(period.start, -364), addDays(period.end, -364))
+			: historyCoversPrevious(site, period.prevStart) ? dailySeries(site.id, period.prevStart, period.prevEnd) : null,
 		// Every source's daily line on one calendar, for the "All traffic" chart (only when GA4 or Bing is linked).
 		allTraffic: (() => {
 			const links = linksFor(site.id);
@@ -107,6 +117,14 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 			devices: devices(site, period),
 			brandDays: brandByDay(site, period),
 			buckets: bucketPanel(site, period, days),
+			countries: countries(site, period),
+			// GA4: AI-assistant visits, channels and key events, when GA4 is linked and has synced
+			ga4: (() => {
+				if (!linksFor(site.id).ga4) return { linked: false as const };
+				const g = ga4Summary(site as never, days);
+				if (!g.synced) return { linked: true as const, synced: false as const };
+				return { linked: true as const, synced: true as const, window: g.window, sessions: g.sessions, channels: g.channels.slice(0, 6), keyEvents: g.keyEventsByName, ai: aiVisits(site, days) };
+			})(),
 			brandTerms: brandTerms(site)
 		}
 	};

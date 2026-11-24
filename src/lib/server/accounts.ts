@@ -67,7 +67,7 @@ export async function syncAccountSites(accountId: number): Promise<number> {
 	const sites = await clientForAccount(acc).listSites();
 	const upsert = d.prepare(
 		`INSERT INTO sites (account_id, site_url, permission, created_at) VALUES (?,?,?,?)
-		 ON CONFLICT(account_id, site_url) DO UPDATE SET permission = excluded.permission`
+		 ON CONFLICT(account_id, site_url) DO UPDATE SET permission = excluded.permission, deleted_at = NULL`
 	);
 	const seen = new Set<string>();
 	const known = new Set((d.prepare('SELECT site_url FROM sites WHERE account_id = ?').all(accountId) as { site_url: string }[]).map((r) => r.site_url));

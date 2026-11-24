@@ -57,8 +57,8 @@ export const actions: Actions = {
 			return fail(502, { error: e instanceof Error ? e.message : 'Google refused the removal.' });
 		}
 		audit('site.removed_from_google', { accountId: site.account_id, detail: site.site_url });
-		forgetSite(site.id);
-		db().prepare('DELETE FROM sites WHERE id = ?').run(site.id);
+		// The stored history is kept for 14 days ("Recently removed" on the dashboard), then deleted by the scheduler.
+		db().prepare("UPDATE sites SET permission = 'none', deleted_at = ? WHERE id = ?").run(Date.now(), site.id);
 		redirect(303, '/');
 	}
 };

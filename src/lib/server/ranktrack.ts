@@ -2,6 +2,7 @@ import { db, audit } from './db';
 import type { SiteRow } from './clients';
 import { addDays } from './dates';
 import { periodFor, siteEnd } from './queries';
+import { bucketTracked } from './groups';
 
 /**
  * Rank tracking from Search Console's own data: the daily average Google position of the searches you choose, across every country
@@ -93,10 +94,16 @@ export interface RankRow {
 	/** daily positions over the chosen period, for the sparkline */
 	series: (number | null)[];
 	addedAt: number;
+	/** added by hand (can be removed here), or followed because it is one of a bucket's biggest searches */
+	manual: boolean;
+	buckets: string[];
 }
 
 export function rankReport(site: Pick<SiteRow, 'id' | 'synced_through'>, days: number): { rows: RankRow[]; start: string; end: string } {
-	const tracked = listTracked(site.id);
+	const manual = listTracked(site.id);
+	const fromBuckets = bucketTracked(site);
+	const have = new Set(manual.map((t) => t.query));
+	const tracked = [...manual, ...[...fromBuckets.keys()].filter((q) => !have.has(q)).map((query) => ({ query, addedAt: 0 }))];
 	const end = siteEnd(site);
 	const p = periodFor(site, days);
 	// the series covers the period, and at least the last 14 days so the week-on-week change can always be worked out
@@ -120,7 +127,9 @@ export function rankReport(site: Pick<SiteRow, 'id' | 'synced_through'>, days: n
 			daysTop10: shown.filter((x) => x.position! <= 10.5).length,
 			daysShown: shown.length,
 			series: inPeriod.map((x) => x.position),
-			addedAt
+			addedAt,
+			manual: have.has(query),
+			buckets: fromBuckets.get(query) ?? []
 		};
 	});
 	return { rows, start: p.start, end };

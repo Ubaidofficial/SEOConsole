@@ -89,12 +89,23 @@
 			{#if data.webhook.site}<button class="btn text-muted-foreground" name="remove" value="1">Use the default</button>{/if}
 		</form>
 		<form method="POST" action="?/testWebhook" use:enhance class="mt-2"><button class="btn btn-sm">Send a test alert</button></form>
+		<div class="mt-4 border-t pt-3" style="border-color:var(--border)">
+			{#if data.email.configured}
+				<form method="POST" action="?/emails" use:enhance class="flex flex-wrap items-center gap-2">
+					<input class="input w-[min(32rem,100%)] text-xs" name="emails" value={data.email.site} placeholder={data.email.defaults ? `Empty = the ${data.email.defaults} default address${data.email.defaults === 1 ? '' : 'es'} (ALERT_EMAIL_TO)` : 'you@example.com, team@example.com'} aria-label="Email this site's alerts to" />
+					<button class="btn">Save emails</button>
+				</form>
+				<p class="mt-1 text-xs text-muted-foreground">Alerts are also emailed, one message per site per check, up to 10 addresses.</p>
+			{:else}
+				<p class="text-xs text-muted-foreground">Email alerts need SMTP_URL and ALERT_EMAIL_FROM in .env; then you can choose recipients here.</p>
+			{/if}
+		</div>
 	{:else}<p class="text-xs text-muted-foreground">An admin can send this site's alerts to its own Slack channel or Discord.</p>{/if}
 </div>
 
 <Explainer lead="How alert rules work.">
 	<p>Every rule compares the last 7, 14 or 28 complete days with the same number of days before, as the period picker does. Clicks and impressions also have to change by more than day-to-day noise, so a quiet site does not alert on a handful of clicks.</p>
-	<p>An alert is sent once when it opens and ends by itself when the condition stops. Resolve or dismiss it to close it sooner; the rule then stays quiet until the condition has ended and starts again. Only Slack and Discord addresses can be set here; any other webhook goes in DIGEST_WEBHOOK_URL. There is no email delivery.</p>
+	<p>An alert is sent once when it opens and ends by itself when the condition stops. Resolve or dismiss it to close it sooner; the rule then stays quiet until the condition has ended and starts again. Only Slack and Discord addresses can be set here; any other webhook goes in DIGEST_WEBHOOK_URL. With SMTP set up in .env, alerts are emailed as well.</p>
 </Explainer>
 
 {#if closed.length}

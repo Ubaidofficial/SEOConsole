@@ -10,6 +10,7 @@ import { ALERT_KINDS, ALERT_WINDOWS, MAX_CUSTOM_ALERTS, SCOPE_LABEL, alertKind, 
 import { pagePath } from '../rules';
 import { safeRegex } from '../trends';
 import { chatSafe } from '../digest';
+import { mailConfig, parseRecipients, sendMail } from './mail';
 
 /**
  * Alerts from rules. Each site has the built-in rules (one per kind, created on first use, thresholds editable, each can be switched
@@ -359,7 +360,7 @@ async function deliverPending(fetchImpl: typeof fetch | undefined, now: number):
 		if (!groups.has(key)) groups.set(key, { target, rows: [] });
 		groups.get(key)!.rows.push(r);
 	}
-	let delivered = 0;
+	let delivered = await emailPending(now);
 	const mark = d.prepare('UPDATE alert_events SET delivery = ?, delivery_message = ? WHERE id = ?');
 	for (const g of groups.values()) {
 		// Discord cuts a message at 2,000 characters: send in batches of a few
@@ -418,3 +419,43 @@ export function reopenAlert(id: number, siteIds: number[] | null): boolean {
 }
 
 export { ruleText };
+
+// ── email ────────────────────────────────────────────────────────────────────
+/** A site's own alert recipients, else ALERT_EMAIL_TO; empty when email is not set up. */
+export function recipientsFor(site: Pick<SiteRow, 'alert_emails'>): string[] {
+	const cfg = mailConfig();
+	if (!cfg) return [];
+	const own = parseRecipients(site.alert_emails).list;
+	return own.length ? own : cfg.defaultTo;
+}
+
+export function setSiteEmails(siteId: number, raw: string): { ok: true; list: string[] } | { error: string } {
+	const r = parseRecipients(raw);
+	if (r.bad.length) return { error: `Not an email address: ${r.bad.slice(0, 3).join(', ')}` };
+	db().prepare('UPDATE sites SET alert_emails = ? WHERE id = ?').run(r.list.length ? r.list.join(', ') : null, siteId);
+	audit(r.list.length ? 'alert emails set' : 'alert emails removed', { siteId, detail: r.list.length ? `${r.list.length} recipient(s)` : undefined });
+	return { ok: true, list: r.list };
+}
+
+/** Email the alerts that opened and were not emailed yet (failed ones are retried for a day), one message per site. */
+async function emailPending(now: number): Promise<number> {
+	if (!mailConfig()) return 0;
+	const d = db();
+	const rows = d.prepare("SELECT e.id, e.site_id siteId, e.title, e.detail, e.positive, s.site_url, s.label, s.alert_emails FROM alert_events e JOIN sites s ON s.id = e.site_id WHERE e.status = 'open' AND e.emailed != 1 AND e.opened_at > ? ORDER BY e.opened_at").all(now - 86_400_000) as { id: number; siteId: number; title: string; detail: string | null; positive: number; site_url: string; label: string | null; alert_emails: string | null }[];
+	const bySite = new Map<number, typeof rows>();
+	for (const r of rows) bySite.set(r.siteId, [...(bySite.get(r.siteId) ?? []), r]);
+	const mark = d.prepare('UPDATE alert_events SET emailed = ? WHERE id = ?');
+	let sent = 0;
+	for (const [, list] of bySite) {
+		const to = recipientsFor(list[0]);
+		if (!to.length) continue;
+		const name = list[0].label || displayName(list[0].site_url);
+		const problems = list.filter((x) => !x.positive).length;
+		const subject = `${name}: ${problems ? `${problems} alert${problems === 1 ? '' : 's'}` : 'good news'} · ${list[0].title}${list.length > 1 ? ` and ${list.length - 1} more` : ''}`;
+		const text = [...list.map((x) => `${x.positive ? '▲' : '▼'} ${x.title}\n  ${x.detail ?? ''}`), '', config.origin ? `Open: ${config.origin}/sites/${list[0].siteId}/alerts` : '', '', 'Sent by SEOConsole. Change who gets these on the site\'s Alerts tab.'].join('\n');
+		const r = await sendMail(to, subject, text);
+		for (const x of list) mark.run(r.ok ? 1 : 2, x.id);
+		if (r.ok) sent += list.length;
+	}
+	return sent;
+}

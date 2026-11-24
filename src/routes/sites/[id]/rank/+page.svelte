@@ -21,7 +21,7 @@
 
 <div class="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
 	<h2 class="text-base font-semibold">Rank tracking</h2>
-	<span class="text-xs text-muted-foreground">{data.rows.length} of {data.max.total} searches · {top10} on page one this week · {data.start} → {data.end}</span>
+	<span class="text-xs text-muted-foreground">{data.rows.filter((r) => r.manual).length} of {data.max.total} searches{#if data.rows.some((r) => !r.manual)} + {data.rows.filter((r) => !r.manual).length} from buckets{/if} · {top10} on page one this week · {data.start} → {data.end}</span>
 	{#if data.rows.length}
 		<label class="ml-auto text-xs text-muted-foreground">Sort <select class="input" bind:value={sort}><option value="latest">Position</option><option value="change">Biggest fall</option><option value="clicks">Clicks</option><option value="query">A–Z</option></select></label>
 	{/if}
@@ -51,7 +51,7 @@
 			<tbody>
 				{#each rows as r (r.query)}
 					<tr class="border-b last:border-0" style="border-color:var(--border)">
-						<td class="max-w-72 truncate px-3 py-2"><a class="hover:underline {isBranded(r.query, data.brandTerms) ? 'pii' : ''}" href="queries?re={encodeURIComponent('^' + r.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$')}">{r.query}</a></td>
+						<td class="max-w-72 truncate px-3 py-2"><a class="hover:underline {isBranded(r.query, data.brandTerms) ? 'pii' : ''}" href="queries?re={encodeURIComponent('^' + r.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$')}">{r.query}</a>{#if r.buckets.length}<span class="ml-1.5 text-[11px] text-muted-foreground" title="Followed because it is one of the 8 biggest searches of this keyword bucket">· {r.buckets.join(', ')}</span>{/if}</td>
 						<td class="tnum px-3 py-2 text-right font-medium" title={r.latest ? `on ${r.latest.date}` : 'No impression in the stored days'}>{pos(r.latest?.position)}</td>
 						<td class="tnum px-3 py-2 text-right">{pos(r.week)}</td>
 						<td class="tnum px-3 py-2 text-right {r.change == null ? 'text-muted-foreground' : r.change >= 0.5 ? 'text-good' : r.change <= -0.5 ? 'text-bad' : 'text-muted-foreground'}">{r.change == null ? '–' : (r.change > 0 ? '+' : '') + r.change.toFixed(1)}</td>
@@ -59,7 +59,7 @@
 						<td class="px-3 py-1"><RankSpark values={r.series} /></td>
 						<td class="tnum px-3 py-2 text-right">{fmtInt(r.clicks)}</td>
 						<td class="tnum px-3 py-2 text-right text-muted-foreground">{r.daysTop10}/{r.daysShown}</td>
-						<td class="px-2 py-2"><form method="POST" action="?/remove" use:enhance><input type="hidden" name="query" value={r.query} /><button class="text-muted-foreground hover:text-foreground" aria-label="Stop tracking this search" title="Stop tracking"><X class="size-3.5" /></button></form></td>
+						<td class="px-2 py-2">{#if r.manual}<form method="POST" action="?/remove" use:enhance><input type="hidden" name="query" value={r.query} /><button class="text-muted-foreground hover:text-foreground" aria-label="Stop tracking this search" title="Stop tracking"><X class="size-3.5" /></button></form>{/if}</td>
 					</tr>
 				{/each}
 			</tbody>

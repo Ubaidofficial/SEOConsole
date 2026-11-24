@@ -7,7 +7,10 @@
 	import { enhance } from '$app/forms';
 	import RuleGroupEditor from '$lib/components/RuleGroupEditor.svelte';
 	import Chart from '$lib/components/Chart.svelte';
-	let { data } = $props();
+	import { Sparkles } from '@lucide/svelte';
+	let { data, form } = $props();
+	let suggesting = $state(false);
+	const isAdmin = $derived(page.data.user?.role === 'owner' || page.data.user?.role === 'admin');
 	let editing = $state<number | 'new' | null>(null);
 	let chartFor = $state<{ id: number; name: string } | null>(null);
 	let chart = $state<any[]>([]);
@@ -38,8 +41,42 @@
 	{@const bucket = data.mine.kind === 'bucket'}
 	<div class="mb-3 flex flex-wrap items-center gap-3">
 		<p class="text-xs text-muted-foreground">{bucket ? 'Searches sorted into topics by your own rules. A search can sit in several buckets.' : 'Pages sorted into sections by your own rules on the path. A page can sit in several groups.'} Click a row for its daily chart.</p>
-		{#if canEdit && editing !== 'new'}<button class="btn ml-auto" onclick={() => (editing = 'new')}>{bucket ? 'New bucket' : 'New page group'}</button>{/if}
+		{#if canEdit}
+			<div class="ml-auto flex gap-2">
+				<form method="POST" action="?/suggest" use:enhance={() => { suggesting = true; return async ({ update }) => { await update({ reset: false }); suggesting = false; }; }}><button class="btn" disabled={suggesting} title={data.aiReady ? 'Your AI provider (the one Ask uses) reads your top searches and pages and proposes buckets, page groups and brand terms. Nothing is saved until you tick and add.' : 'Proposes buckets from your topic clusters and page groups from your folders. Set up Ask to have an AI propose them.'}><Sparkles class="size-3.5" />{suggesting ? 'Suggesting…' : data.aiReady ? 'Suggest with AI' : 'Suggest'}</button></form>
+				{#if editing !== 'new'}<button class="btn" onclick={() => (editing = 'new')}>{bucket ? 'New bucket' : 'New page group'}</button>{/if}
+			</div>
+		{/if}
 	</div>
+	{#if form?.suggestions}
+		{@const sg = form.suggestions}
+		<section class="card mb-4 p-4" aria-labelledby="sg-h">
+			<div class="mb-2 flex flex-wrap items-baseline gap-x-3"><h2 id="sg-h" class="font-medium">Suggestions</h2><span class="text-xs text-muted-foreground">{sg.source === 'ai' ? 'from AI' : 'from your topic clusters and folders'} · tick what to keep</span></div>
+			{#if sg.note}<p class="mb-3 text-xs text-muted-foreground">{sg.note}</p>{/if}
+			{#if sg.brandTerms.length}
+				<form method="POST" action="?/useBrand" use:enhance class="mb-4 flex flex-wrap items-center gap-2 text-sm">
+					<span class="text-muted-foreground">Brand terms:</span>
+					{#each sg.brandTerms as t}<label class="chip gap-1.5"><input type="checkbox" name="term" value={t} checked />{t}</label>{/each}
+					{#if isAdmin}<button class="btn btn-sm">Use as brand terms</button>{:else}<span class="text-xs text-muted-foreground">An admin can set these in Settings.</span>{/if}
+				</form>
+			{/if}
+			<form method="POST" action="?/acceptSuggestions" use:enhance={() => async ({ update }) => { await update(); }} class="grid gap-4 lg:grid-cols-2">
+				{#each [['bucket', 'Keyword buckets', sg.buckets, 'searches'], ['pages', 'Page groups', sg.pageGroups, 'pages']] as const as [kind, label, list, unit]}
+					<div>
+						<h3 class="mb-1.5 text-sm font-medium">{label}</h3>
+						{#if list.length}
+							<ul class="space-y-1.5">
+								{#each list as x}
+									<li><label class="flex items-start gap-2 text-sm"><input type="checkbox" name="pick" value={JSON.stringify({ kind, name: x.name, set: x.set })} checked class="mt-1" /><span class="min-w-0 flex-1"><b class="font-medium">{x.name}</b> <span class="tnum text-xs text-muted-foreground">· {x.matches} {unit}, {x.clicks.toLocaleString('en-US')} clicks</span><span class="pii block truncate text-xs text-muted-foreground">{x.examples.join(' · ')}</span></span></label></li>
+								{/each}
+							</ul>
+						{:else}<p class="text-xs text-muted-foreground">None to suggest.</p>{/if}
+					</div>
+				{/each}
+				{#if sg.buckets.length + sg.pageGroups.length}<div class="lg:col-span-2"><button class="btn btn-primary">Add the ticked ones</button></div>{/if}
+			</form>
+		</section>
+	{/if}
 	{#if editing === 'new'}<div class="mb-4"><RuleGroupEditor kind={data.mine.kind} onDone={() => (editing = null)} /></div>{/if}
 	{#if data.mine.rows.length}
 		{#if !data.mine.comparable}<p class="mb-2 text-xs text-warn">Change against the previous period is hidden: that period is not downloaded yet.</p>{/if}
@@ -61,8 +98,10 @@
 					<div class="flex flex-wrap items-center gap-2 text-sm">
 						<span class="font-medium">{g.name}</span>
 						<a class="text-xs text-muted-foreground hover:underline" href="{bucket ? 'queries' : 'pages'}?days={data.days}&{bucket ? 'bucket' : 'group'}={g.id}">open in {bucket ? 'Queries' : 'Pages'}</a>
+						{#if bucket}<a class="text-xs text-muted-foreground hover:underline" href="rank?days={data.days}" title="Its 8 biggest searches are followed on the Rank tracking tab">{g.track ? 'top 8 rank-tracked' : 'not rank-tracked'}</a>{/if}
 						{#if canEdit}
-							<button class="btn btn-sm ml-auto" onclick={() => (editing = editing === g.id ? null : g.id)}>{editing === g.id ? 'Close' : 'Edit'}</button>
+							{#if bucket}<form method="POST" action="?/toggleTrack" use:enhance class="ml-auto"><input type="hidden" name="id" value={g.id} /><input type="hidden" name="on" value={g.track ? '0' : '1'} /><button class="btn btn-sm" aria-pressed={g.track}>{g.track ? 'Stop tracking' : 'Track top 8'}</button></form>{/if}
+							<button class="btn btn-sm {bucket ? '' : 'ml-auto'}" onclick={() => (editing = editing === g.id ? null : g.id)}>{editing === g.id ? 'Close' : 'Edit'}</button>
 							<form method="POST" action="?/deleteGroup" use:enhance><input type="hidden" name="id" value={g.id} /><button class="btn btn-sm text-muted-foreground">Remove</button></form>
 						{/if}
 					</div>

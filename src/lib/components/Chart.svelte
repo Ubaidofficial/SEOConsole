@@ -7,13 +7,13 @@
 	 * the date axis, the markers and one hover crosshair. (One plot with every series scaled to its own hidden range made the lines'
 	 * crossings meaningless and left the axis numbers true for one series only.) Position runs top-down, 1 at the top.
 	 */
-	interface Point { date: string; clicks: number; impressions: number; position: number }
+	interface Point { date: string; clicks: number; impressions: number; position: number; /** last day of a week or month bucket */ end?: string }
 	interface Marker { date: string; label: string; color?: string }
 	type Key = 'clicks' | 'impressions' | 'position';
 
 	let {
-		data,
-		prev = null,
+		data: rawData,
+		prev: rawPrev = null,
 		updates = [],
 		markers = [],
 		anomalies = [],
@@ -39,6 +39,40 @@
 		/** The last N days are provisional (Search Console revises them) and drawn dashed. */
 		dashed?: number;
 	} = $props();
+
+	/**
+	 * Day, week or month: longer periods read better summed by week or month. Weeks start on Monday; the first and last buckets can be
+	 * partial (the tooltip shows their dates). The previous period is bucketed day for day with this one, so the two stay comparable.
+	 */
+	type Grain = 'day' | 'week' | 'month';
+	let grain = $state<Grain>('day');
+	const grains = $derived<Grain[]>(rawData.length >= 75 ? ['day', 'week', 'month'] : rawData.length >= 21 ? ['day', 'week'] : ['day']);
+	const g = $derived(grains.includes(grain) ? grain : 'day');
+	const keyOf = (d: string, gr: Grain) => {
+		if (gr === 'day') return d;
+		if (gr === 'month') return d.slice(0, 7);
+		const t = new Date(d + 'T00:00:00Z');
+		t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
+		return t.toISOString().slice(0, 10);
+	};
+	/** Index ranges of rawData that make up each bucket. */
+	const buckets = $derived.by(() => {
+		const out: { from: number; to: number }[] = [];
+		rawData.forEach((p, i) => {
+			const last = out[out.length - 1];
+			if (last && keyOf(rawData[last.from].date, g) === keyOf(p.date, g)) last.to = i;
+			else out.push({ from: i, to: i });
+		});
+		return out;
+	});
+	const sumOf = (pts: Point[], date: string, end: string): Point => {
+		let c = 0, im = 0, pw = 0;
+		for (const p of pts) (c += p.clicks, im += p.impressions, pw += p.position * p.impressions);
+		return { date, end, clicks: c, impressions: im, position: im ? pw / im : 0 };
+	};
+	const data = $derived(g === 'day' ? rawData : buckets.map((b) => sumOf(rawData.slice(b.from, b.to + 1), rawData[b.from].date, rawData[b.to].date)));
+	const prev = $derived(!rawPrev || g === 'day' || rawPrev.length !== rawData.length ? rawPrev : buckets.map((b) => sumOf(rawPrev.slice(b.from, b.to + 1), rawPrev[b.from].date, rawPrev[b.to].date)));
+	const dashedN = $derived(g === 'day' ? dashed : dashed > 0 ? 1 : 0);
 
 	const BASE: { key: Key; label: string; color: string }[] = [
 		{ key: 'clicks', label: 'Clicks', color: 'var(--c-clicks)' },
@@ -82,7 +116,7 @@
 			const ticks = pos ? niceTicks(lo, Math.ceil(Math.max(...vals, lo + 1) + 0.5)) : niceTicks(0, Math.max(1, ...vals));
 			const hi = Math.max(ticks[ticks.length - 1] ?? 1, pos ? lo + 1 : 1);
 			const y = (v: number) => pad.t + (pos ? (v - lo) / (hi - lo) : 1 - v / hi) * innerH;
-			const cut = Math.max(1, data.length - dashed);
+			const cut = Math.max(1, data.length - dashedN);
 			let solid = '';
 			let tail = '';
 			let pen = false;
@@ -111,12 +145,14 @@
 		})
 	);
 
-	const idx = (date: string) => data.findIndex((d) => d.date === date);
+	const idx = (date: string) => data.findIndex((d) => date >= d.date && date <= (d.end ?? d.date));
 	const updateMarks = $derived(updates.map((u) => ({ ...u, i: idx(u.date) })).filter((u) => u.i >= 0));
 	const span = (d: Point[]) => (d.length ? `${fmtDay(d[0].date)} – ${fmtDay(d[d.length - 1].date)}` : '');
 	const ticksX = $derived(data.length ? [...new Set([0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => Math.round(t * (data.length - 1))))] : []);
 	const fmtDay = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-	const fmtLong = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+	const fmtLong1 = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+	/** A day, or a bucket's first and last day. */
+	const fmtLong = (d: string, end?: string) => (end && end !== d ? `${fmtDay(d)} – ${fmtDay(end)}, ${end.slice(0, 4)}` : fmtLong1(d));
 	const fmtTick = (k: Key, v: number) => (k === 'position' ? String(v) : fmtCompact(Math.round(v)));
 	const fmtVal = (k: Key, p: Point) => (k === 'position' ? (p.position ? fmtPos(p.position) : '–') : fmtInt(p[k]));
 
@@ -146,6 +182,9 @@
 				<span class="size-2 rounded-full transition-opacity" style="background:{m.color};opacity:{isOn ? 1 : 0.3}"></span>{m.label}
 			</button>
 		{/each}
+		{#if grains.length > 1}
+			<span class="seg ml-1" role="group" aria-label="Group by">{#each grains as gr}<button type="button" class="seg-item !py-0.5 !text-xs {g === gr ? 'seg-on' : ''}" aria-pressed={g === gr} onclick={() => (grain = gr)}>{gr === 'day' ? 'Day' : gr === 'week' ? 'Week' : 'Month'}</button>{/each}</span>
+		{/if}
 		{#if prevOn && data.length}
 			<span class="ml-auto inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground tnum">
 				<span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-4 rounded-full bg-foreground" aria-hidden="true"></span>{span(data)}</span>
@@ -205,14 +244,14 @@
 		{#if hover !== null}
 			{@const p = data[hover]}
 			<div class="pointer-events-none absolute z-10 rounded-lg border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md" style="top:44px;left:{tipLeft}px;min-width:10.5rem">
-				<div class="mb-1.5 font-medium">{fmtLong(p.date)}{#if hover >= data.length - dashed}<span class="ml-1 font-normal text-muted-foreground">· provisional</span>{/if}</div>
+				<div class="mb-1.5 font-medium">{fmtLong(p.date, p.end)}{#if hover >= data.length - dashedN}<span class="ml-1 font-normal text-muted-foreground">· provisional</span>{/if}</div>
 				{#each active as m}
 					<div class="flex items-center justify-between gap-4 tnum">
 						<span class="inline-flex items-center gap-1.5 text-muted-foreground"><span class="size-2 rounded-full" style="background:{m.color}"></span>{m.label}</span>
 						<span class="font-medium text-foreground">{fmtVal(m.key, p)}{#if prevOn}<span class="ml-1.5 font-normal text-muted-foreground">vs {fmtVal(m.key, prev![hover])}</span>{/if}</span>
 					</div>
 				{/each}
-				{#if prevOn}<div class="mt-1 text-[11px] text-muted-foreground">vs {fmtLong(prev![hover].date)}</div>{/if}
+				{#if prevOn}<div class="mt-1 text-[11px] text-muted-foreground">vs {fmtLong(prev![hover].date, prev![hover].end)}</div>{/if}
 				{#each updateMarks.filter((u) => u.i === hover) as u}<div class="mt-1 text-[11px] text-muted-foreground">Google: {u.label}</div>{/each}
 			</div>
 		{/if}

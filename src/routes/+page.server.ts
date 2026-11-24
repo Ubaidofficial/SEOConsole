@@ -8,7 +8,7 @@ import { listAccounts, syncAccountSites } from '$lib/server/accounts';
 import { displayName } from '$lib/server/clients';
 import { ctrOf, pctChangeMin, positionShift } from '$lib/analytics';
 import { allLinks } from '$lib/server/links';
-import { hideCoveredDuplicates, hideableDuplicates, purgeRemovedSite } from '$lib/server/duplicates';
+import { deleteRemovedNow, hideCoveredDuplicates, hideableDuplicates, purgeRemovedSite, recentlyRemoved, restoreSite, RESTORE_DAYS } from '$lib/server/duplicates';
 import { onboardingFor, setOnboardingHidden } from '$lib/server/onboarding';
 import { enqueueIndexMonitor } from '$lib/server/jobs';
 import { getSite } from '$lib/server/clients';
@@ -80,7 +80,9 @@ export const load: PageServerLoad = ({ url, locals }) => {
 		accounts: listAccounts()
 			.filter((a) => scope === null || cards.some((c) => c.site.account_id === a.id))
 			.map((a) => ({ id: a.id, label: a.label ?? a.email, status: a.status })),
-		portfolio: portfolioSeries(counted.map((c) => c.site.id), latest, days, totals.comparable),
+		portfolio: portfolioSeries(counted.map((c) => c.site.id), latest, days, totals.comparable, url.searchParams.get('cmp') === 'year' && counted.every((c) => c.site.backfilled_to != null && c.site.backfilled_to <= addDays(c.period.start, -364)) ? 'year' : 'prev', counted.length > 0 && counted.every((c) => c.site.backfilled_to != null && c.site.backfilled_to <= addDays(c.period.start, -364))),
+		removed: hasRole(locals?.user?.role, 'admin') ? recentlyRemoved(scope).map((r) => ({ ...r, name: displayName(r.siteUrl) })) : [],
+		restoreDays: RESTORE_DAYS,
 		tagList: [...new Set(cards.flatMap((c) => (c.site.tags ? c.site.tags.split(',').filter(Boolean) : [])))].sort(),
 		cards: cards.map((c) => ({
 			id: c.site.id,
@@ -190,7 +192,25 @@ export const actions: Actions = {
 		try {
 			const id = intParam((await request.formData()).get('id'));
 			if (!purgeRemovedSite(id)) return fail(400, { error: 'Only properties removed from Search Console can be deleted here.' });
-			return { ok: 'Deleted the stored data for that removed property.' };
+			return { ok: `Moved to Recently removed: it can be restored for ${RESTORE_DAYS} days.` };
+		} catch {
+			return fail(400, { error: 'Invalid site' });
+		}
+	},
+	/** Bring a removed site back, with its history. */
+	restoreSite: async ({ request }) => {
+		try {
+			const id = intParam((await request.formData()).get('id'));
+			return restoreSite(id) ? { ok: 'Restored, with its history.' } : fail(400, { error: 'That site is not in Recently removed.' });
+		} catch {
+			return fail(400, { error: 'Invalid site' });
+		}
+	},
+	/** Delete a removed site and its history now, instead of waiting for its days of grace to pass. */
+	deleteRemoved: async ({ request }) => {
+		try {
+			const id = intParam((await request.formData()).get('id'));
+			return deleteRemovedNow(id) ? { ok: 'Deleted for good.' } : fail(400, { error: 'That site is not in Recently removed.' });
 		} catch {
 			return fail(400, { error: 'Invalid site' });
 		}
@@ -218,7 +238,7 @@ export const actions: Actions = {
  * Every counted site's clicks and impressions added up by day, on one calendar ending at the newest data day, and the same for the
  * period before (when every counted site has it stored), for the chart above the site cards.
  */
-function portfolioSeries(ids: number[], latest: string | null, days: number, comparable: boolean) {
+function portfolioSeries(ids: number[], latest: string | null, days: number, comparable: boolean, mode: 'prev' | 'year' = 'prev', yearOk = false) {
 	if (!ids.length || !latest) return null;
 	const end = latest;
 	const start = addDays(end, -(days - 1));
@@ -236,5 +256,6 @@ function portfolioSeries(ids: number[], latest: string | null, days: number, com
 			return { date, clicks: a.clicks, impressions: a.impressions, position: a.impressions ? a.pw / a.impressions : 0 };
 		});
 	};
-	return { now: sum(start, end), prev: comparable ? sum(addDays(start, -days), addDays(start, -1)) : null, updates: updatesBetween(start, end).map((u) => ({ date: u.begin, label: u.name })) };
+	const prev = mode === 'year' ? sum(addDays(start, -364), addDays(end, -364)) : comparable ? sum(addDays(start, -days), addDays(start, -1)) : null;
+	return { now: sum(start, end), prev, mode, yearOk, updates: updatesBetween(start, end).map((u) => ({ date: u.begin, label: u.name })) };
 }

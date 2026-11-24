@@ -3,6 +3,8 @@ import type { Actions, PageServerLoad } from './$types';
 import { getSite } from '$lib/server/clients';
 import { config } from '$lib/server/config';
 import { requireRole, hasRole } from '$lib/server/roles';
+import { setSiteEmails } from '$lib/server/alerts';
+import { mailConfig } from '$lib/server/mail';
 import { addCustomRule, closeAlerts, deleteCustomRule, listAlerts, listRules, maskedWebhook, renderAlerts, reopenAlert, runAlertRules, scopeText, setSiteWebhook, siteWebhook, updateRule } from '$lib/server/alerts';
 import { postWebhook, webhook } from '$lib/server/digest';
 import { listGroups } from '$lib/server/groups';
@@ -24,6 +26,10 @@ export const load: PageServerLoad = ({ params, locals }) => {
 		tracked: listTracked(site.id).length,
 		alerts: listAlerts({ siteIds: null, siteId: site.id, status: 'all', limit: 60 }),
 		webhook: { site: maskedWebhook(site.alert_webhook), global: !!webhook().url },
+		email: (() => {
+			const cfg = mailConfig();
+			return { configured: !!cfg, site: site.alert_emails ?? '', defaults: cfg?.defaultTo.length ?? 0 };
+		})(),
 		canAdmin: hasRole(locals.user?.role, 'admin')
 	};
 };
@@ -53,6 +59,12 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const r = setSiteWebhook(Number(params.id), f.get('remove') ? '' : String(f.get('url') ?? ''));
 		return 'error' in r ? fail(400, { error: r.error }) : { ok: f.get('remove') ? 'This site\'s alerts go to the default webhook again.' : 'Alerts for this site now go to that webhook.' };
+	},
+	/** Who gets this site's alerts by email (admin). Empty = ALERT_EMAIL_TO. */
+	emails: async ({ params, request, locals }) => {
+		requireRole(locals, 'admin');
+		const r = setSiteEmails(Number(params.id), String((await request.formData()).get('emails') ?? ''));
+		return 'error' in r ? fail(400, { error: r.error }) : { ok: r.list.length ? `Alerts for this site are emailed to ${r.list.length} address${r.list.length === 1 ? '' : 'es'}.` : 'This site uses the default recipients (ALERT_EMAIL_TO).' };
 	},
 	testWebhook: async ({ params, locals }) => {
 		requireRole(locals, 'admin');
