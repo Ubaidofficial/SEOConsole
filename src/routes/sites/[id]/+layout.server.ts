@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { getSite, displayName } from '$lib/server/clients';
 import { daysParam } from '$lib/server/params';
-import { historyCoversPrevious, periodFor, siteEnd, summary } from '$lib/server/queries';
+import { allSites, historyCoversPrevious, periodFor, siteEnd, summary } from '$lib/server/queries';
 import { db } from '$lib/server/db';
 import { ctrOf, pctChangeMin, positionShift } from '$lib/analytics';
 import { config } from '$lib/server/config';
@@ -13,7 +13,7 @@ import { queueFor } from '$lib/server/actions';
 import { authorityOf } from '$lib/server/authority';
 import { cardTraffic, ga4UsersFor } from '$lib/server/traffic';
 
-export const load: LayoutServerLoad = ({ params, url }) => {
+export const load: LayoutServerLoad = ({ params, url, locals }) => {
 	const site = getSite(Number(params.id));
 	if (!site) error(404, 'Unknown site');
 	const acc = db().prepare('SELECT email, label, status FROM accounts WHERE id = ?').get(site.account_id) as { email: string; label: string | null; status: string };
@@ -37,8 +37,15 @@ export const load: LayoutServerLoad = ({ params, url }) => {
 	} catch {
 		/* the tab still works; only the badge is missing */
 	}
+	// The site switcher: every site this person may open, by name (hidden and removed sites are left out, as on the dashboard).
+	const scope = locals?.user?.siteIds ?? null;
+	const switcher = allSites()
+		.filter((s) => !scope || scope.includes(s.id))
+		.map((s) => ({ id: s.id, name: s.label || displayName(s.site_url), account: s.account_label ?? s.account_email }))
+		.sort((a, b) => a.name.localeCompare(b.name));
 	return {
 		actionBadge,
+		switcher,
 		linked: { bing: !!links.bing, ga4: !!links.ga4, gtm: !!links.gtm, clarity: !!links.clarity, ai: enabledEngines().length > 0 },
 		openseo: links.openseo ? { name: links.openseo.label, url: openSeoProjectUrl(links.openseo.integration_id, links.openseo.external_id) } : null,
 		site: {
@@ -69,12 +76,14 @@ export const load: LayoutServerLoad = ({ params, url }) => {
 			ctr: ctrOf(now),
 			position: now.position,
 			comparable,
+			// the previous period's own numbers, shown as "vs 12.3K" beside each change (only when that period is fully stored)
+			prev: comparable ? { clicks: prev.clicks, impressions: prev.impressions, ctr: solid ? ctrOf(prev) : null, position: prev.position } : null,
 			clicksDelta: comparable ? pctChangeMin(now.clicks, prev.clicks, 10) : null,
 			impressionsDelta: comparable ? pctChangeMin(now.impressions, prev.impressions, 100) : null,
 			ctrDelta: solid ? pctChangeMin(ctrOf(now), ctrOf(prev), 1e-9) : null,
 			positionDelta: comparable ? positionShift(now, prev) : null,
-			ga4: traffic.ga4 && { sessions: traffic.ga4.value, delta: delta(traffic.ga4), comparable: traffic.ga4.comparable, window: traffic.ga4.window, users: users?.activeUsers ?? null, newUsers: users?.newUsers ?? null },
-			bing: traffic.bing && { clicks: traffic.bing.value, delta: delta(traffic.bing), comparable: traffic.bing.comparable, window: traffic.bing.window }
+			ga4: traffic.ga4 && { sessions: traffic.ga4.value, prev: traffic.ga4.comparable ? traffic.ga4.prev : null, delta: delta(traffic.ga4), comparable: traffic.ga4.comparable, window: traffic.ga4.window, users: users?.activeUsers ?? null, newUsers: users?.newUsers ?? null },
+			bing: traffic.bing && { clicks: traffic.bing.value, prev: traffic.bing.comparable ? traffic.bing.prev : null, delta: delta(traffic.bing), comparable: traffic.bing.comparable, window: traffic.bing.window }
 		}
 	};
 };
