@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Bell, Mail, Pencil, Plus, RefreshCw, Send, ShieldCheck, Sliders, Trash2, Webhook } from '@lucide/svelte';
+	import { page } from '$app/state';
+	import { Bell, BellOff, Mail, Pencil, Plus, RefreshCw, Send, ShieldCheck, Sliders, Trash2, Webhook } from '@lucide/svelte';
 	import AlertList from '$lib/components/AlertList.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
@@ -12,8 +13,24 @@
 	const UNIT: Record<string, string> = { '%': '%', places: 'places', count: '', pp: 'points' };
 	const builtin = $derived(data.rules.filter((r) => r.builtin));
 	const custom = $derived(data.rules.filter((r) => !r.builtin));
-	const open = $derived(data.alerts.filter((a) => a.status === 'open'));
-	const closed = $derived(data.alerts.filter((a) => a.status !== 'open'));
+	/** The tab's link keeps the period and anything else already in the address. */
+	const showHref = (key: string) => {
+		const q = new URLSearchParams(page.url.search);
+		q.set('show', key);
+		return `?${q}`;
+	};
+	const tabs = [['open', 'Open'], ['resolved', 'Resolved'], ['dismissed', 'Dismissed'], ['cleared', 'Ended by itself']] as const;
+	const EMPTY = { open: 'No open alerts for this site.', resolved: 'No resolved alerts yet.', dismissed: 'No dismissed alerts.', cleared: 'No alerts have ended by themselves yet.' };
+	const FORMAT: Record<string, string> = { slack: 'Slack', discord: 'Discord' };
+	/** Where this site's alerts are posted, in a few words: its own webhook, the default one, and email. */
+	const destination = $derived.by(() => {
+		const parts: string[] = [];
+		const f = FORMAT[data.webhook.format ?? ''];
+		if (data.webhook.site) parts.push(`its own ${f ? f + ' ' : ''}webhook`);
+		else if (data.webhook.global) parts.push(`the default ${f ? f + ' ' : ''}webhook`);
+		if (data.email.configured && data.email.recipients) parts.push('email');
+		return parts;
+	});
 	const onCount = $derived(data.rules.filter((r) => r.enabled).length);
 	let adding = $state(false);
 	let editing = $state<number | null>(null);
@@ -21,7 +38,7 @@
 </script>
 
 {#snippet ruleRow(r: (typeof data.rules)[number])}
-	<form method="POST" action="?/rule" use:enhance={() => async ({ update }) => { await update({ reset: false }); editing = null; }} class="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
+	<form id="rule-{r.id}" method="POST" action="?/rule" use:enhance={() => async ({ update }) => { await update({ reset: false }); editing = null; }} class="scroll-mt-20 target:bg-accent/60 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
 		<input type="hidden" name="id" value={r.id} />
 		<label class="relative inline-flex shrink-0 cursor-pointer items-center" title={r.enabled ? 'On: click to switch off' : 'Off: click to switch on'}>
 			<input type="hidden" name="enabled" value="0" />
@@ -49,7 +66,7 @@
 {/snippet}
 
 <PageHeader tab="/alerts" title="Alerts" lead="Rules check this site every hour and open an alert when something moves more than normal.">
-	{#snippet meta()}<StatusPill tone={open.some((a) => !a.positive) ? 'bad' : open.length ? 'good' : 'muted'}>{open.length} open</StatusPill><span class="text-xs text-muted-foreground">{onCount} of {data.rules.length} rules on</span>{/snippet}
+	{#snippet meta()}<StatusPill tone={data.openNow.problems ? 'bad' : data.openNow.open ? 'good' : 'muted'}>{data.openNow.open} open</StatusPill><span class="text-xs text-muted-foreground">{onCount} of {data.rules.length} rules on</span>{/snippet}
 	{#snippet actions()}
 		<form method="POST" action="?/check" use:enhance={() => { checking = true; return async ({ update }) => { await update(); checking = false; }; }}><button class="btn btn-sm" disabled={checking}><RefreshCw class="size-3.5 {checking ? 'animate-spin' : ''}" />{checking ? 'Checking…' : 'Check now'}</button></form>
 		<button type="button" class="btn btn-primary btn-sm" aria-expanded={adding} onclick={() => { adding = !adding; if (adding) queueMicrotask(() => document.getElementById('new-alert')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })); }}><Plus class="size-3.5" />New alert</button>
@@ -58,7 +75,26 @@
 	<p>An alert is sent once when it opens and ends by itself when the condition stops. Resolve or dismiss it to close it sooner; the rule then stays quiet until the condition has ended and starts again. Only Slack and Discord addresses can be set here; any other webhook goes in DIGEST_WEBHOOK_URL. With SMTP set up in .env, alerts are emailed as well.</p>
 </PageHeader>
 
-<AlertList alerts={open} trends={data.trends} showSite={false} empty="No open alerts for this site." />
+<div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+	<nav class="seg" aria-label="Which alerts">
+		{#each tabs as [key, label] (key)}
+			{#if key !== 'cleared' || data.counts.cleared || data.show === 'cleared'}
+				<a class="seg-item {data.show === key ? 'seg-on' : ''}" aria-current={data.show === key ? 'page' : undefined} href={showHref(key)} data-sveltekit-noscroll>{label} · <span class="tnum">{data.counts[key]}</span></a>
+			{/if}
+		{/each}
+	</nav>
+	<div class="flex items-center gap-1.5 text-xs text-muted-foreground sm:ml-auto">
+		{#if destination.length}
+			{#if data.webhook.site || data.webhook.global}<Webhook class="size-3.5 shrink-0" />{:else}<Mail class="size-3.5 shrink-0" />{/if}
+			<span>Alerts post to <span class="font-medium text-foreground">{destination.join(' and ')}</span></span>
+		{:else}
+			<BellOff class="size-3.5 shrink-0" /><span>Alerts show here only</span>
+		{/if}
+		<span aria-hidden="true">·</span><a class="text-link hover:underline" href="#where">Change</a>
+	</div>
+</div>
+
+<AlertList alerts={data.alerts} cards={data.cards} showSite={false} empty={EMPTY[data.show]} />
 
 <h3 class="mt-6 mb-2 flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-amber" aria-hidden="true"><ShieldCheck class="size-3.5" /></span>Built-in rules <span class="font-normal text-muted-foreground">· on for every site; switch one off or edit its threshold</span></h3>
 <div class="divide-y rounded-xl border bg-card" style="border-color:var(--border)">{#each builtin as r (r.id)}{@render ruleRow(r)}{/each}</div>
@@ -101,7 +137,7 @@
 </form>
 {/if}
 
-<h3 class="mt-6 mb-2 flex items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-violet" aria-hidden="true"><Send class="size-3.5" /></span>Where alerts go</h3>
+<h3 id="where" class="mt-6 mb-2 flex scroll-mt-20 items-center gap-2 text-sm font-medium"><span class="ibadge ibadge-sm tone-violet" aria-hidden="true"><Send class="size-3.5" /></span>Where alerts go</h3>
 <div class="card p-4 text-sm">
 	<div class="mb-3 flex flex-wrap gap-2">
 		<StatusPill tone="info">In the app</StatusPill>
@@ -134,10 +170,3 @@
 	{:else}<p class="text-xs text-muted-foreground">An admin can send this site's alerts to its own Slack channel or Discord.</p>{/if}
 </div>
 
-
-{#if closed.length}
-	<details class="mt-6">
-		<summary class="mb-2 cursor-pointer text-sm font-medium select-none">Recently closed <span class="font-normal text-muted-foreground">· {closed.length}</span></summary>
-		<AlertList alerts={closed.slice(0, 20)} showSite={false} />
-	</details>
-{/if}

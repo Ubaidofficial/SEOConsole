@@ -143,7 +143,7 @@ export const SOURCE_LINK: Record<string, 'ga4' | 'bing' | 'gtm' | 'clarity' | 'a
 /** How the site tabs are grouped under More: a caption and the tab paths under it. Every tab appears in exactly one group (a test checks it). */
 export const SITE_TAB_GROUPS = [
 	['Traffic', ['', '/queries', '/pages', '/rank', '/trends', '/groups', '/segments', '/types']],
-	['Findings', ['/insights', '/quickwins', '/actions', '/alerts', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests']],
+	['Findings', ['/quickwins', '/actions', '/alerts', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests', '/insights']],
 	['Indexing', ['/submit', '/request', '/indexing', '/indexnow', '/sitemaps', '/inspect']],
 	['Sources', ['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai']],
 	['Site', ['/settings']]

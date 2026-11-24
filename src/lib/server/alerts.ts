@@ -1,11 +1,11 @@
 import { db, audit } from './db';
 import { config } from './config';
 import { displayName, getSite, type SiteRow } from './clients';
-import { dailySeries, historyCoversPrevious, periodFor, summary, topPages, topQueries, allSites } from './queries';
+import { dailySeries, fillDays, historyCoversPrevious, pageHistory, periodFor, queryHistory, summary, topPages, topQueries, allSites, type DayRow } from './queries';
 import { postWebhook, webhook, type WebhookFormat } from './digest';
 import { matcherFor } from './groups';
-import { listTracked, rankSeries } from './ranktrack';
-import { addDays } from './dates';
+import { listTracked, rankSeries, type RankDay } from './ranktrack';
+import { addDays, type Period } from './dates';
 import { ALERT_KINDS, ALERT_WINDOWS, MAX_CUSTOM_ALERTS, SCOPE_LABEL, alertKind, clampThreshold, countChangeReal, pctOf, ruleText, type AlertKind, type ScopeKind } from '../alerts';
 import { pagePath } from '../rules';
 import { safeRegex } from '../trends';
@@ -167,6 +167,43 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 const short = (u: string) => (u.length > 70 ? u.slice(0, 67) + '…' : u);
 const list = (xs: string[], dim: 'query' | 'page') => xs.map((x) => (dim === 'page' ? short(pagePath(x)) : `“${short(x)}”`)).join(', ');
 
+/** The pages that dropped out of Google's index since `since` (ms), newest first, with the coverage state Google gave. */
+function deindexedSince(siteId: number, since: number) {
+	return db().prepare("SELECT url, at, detail FROM index_events WHERE site_id = ? AND kind = 'deindexed' AND at >= ? ORDER BY at DESC").all(siteId, since) as { url: string; at: number; detail: string | null }[];
+}
+
+/** The tracked searches that fell over a rule's window (null when nothing is tracked), each with its daily positions over both windows. */
+function trackedFalls(siteId: number, r: AlertRule, end: string): { tracked: number; fell: { query: string; before: number; now: number | null; days: RankDay[] }[] } | null {
+	const qs = listTracked(siteId).map((t) => t.query);
+	if (!qs.length) return null;
+	const s = rankSeries(siteId, qs, addDays(end, -(2 * r.windowDays - 1)), end);
+	const fell: { query: string; before: number; now: number | null; days: RankDay[] }[] = [];
+	for (const [q, days] of s) {
+		const avg = (xs: typeof days) => { let i = 0, pw = 0; for (const x of xs) if (x.position != null) (i += x.impressions, pw += x.position * x.impressions); return i ? pw / i : null; };
+		const now = avg(days.slice(-r.windowDays));
+		const before = avg(days.slice(0, -r.windowDays));
+		if (before == null) continue;
+		if ((now == null && before <= 10.5) || (now != null && (now - before >= r.threshold || (before <= 10.5 && now > 10.5)))) fell.push({ query: q, before, now, days });
+	}
+	return { tracked: qs.length, fell };
+}
+
+/** What a counting rule (top10_lost, top3_new, pages_drop) counts: the searches or pages it caught, biggest first. */
+function countHits(rd: Reader, r: AlertRule, p: Period): { dim: 'query' | 'page'; hits: Item[]; nowBy: Map<string, Item>; prevBy: Map<string, Item> } | null {
+	const prefer = r.kind === 'pages_drop' ? 'page' : 'query';
+	const cur = scoped(rd, r, p.start, p.end, prefer);
+	const prev = scoped(rd, r, p.prevStart, p.prevEnd, prefer);
+	if (!cur || !prev) return null;
+	const nowBy = new Map(cur.items.map((x) => [x.key, x]));
+	const prevBy = new Map(prev.items.map((x) => [x.key, x]));
+	let hits: Item[] = [];
+	if (r.kind === 'top10_lost') hits = prev.items.filter((x) => x.impressions >= 10 && x.position <= 10.5 && !((nowBy.get(x.key)?.impressions ?? 0) > 0 && nowBy.get(x.key)!.position <= 10.5));
+	if (r.kind === 'top3_new') hits = cur.items.filter((x) => x.impressions >= 10 && x.position <= 3.5 && !((prevBy.get(x.key)?.impressions ?? 0) > 0 && prevBy.get(x.key)!.position <= 3.5));
+	if (r.kind === 'pages_drop') hits = prev.items.filter((x) => x.clicks >= 10 && (nowBy.get(x.key)?.clicks ?? 0) <= x.clicks / 2);
+	hits.sort((a, b) => (r.kind === 'pages_drop' ? b.clicks - a.clicks : b.impressions - a.impressions));
+	return { dim: cur.dim, hits, nowBy, prevBy };
+}
+
 export function evaluateRule(rd: Reader, r: AlertRule, nowMs = Date.now()): Verdict {
 	const k = alertKind(r.kind)!;
 	const site = rd.site;
@@ -177,48 +214,27 @@ export function evaluateRule(rd: Reader, r: AlertRule, nowMs = Date.now()): Verd
 	if (!site.synced_through) return no('no data yet');
 
 	if (r.kind === 'deindexed') {
-		const since = nowMs - r.windowDays * 86_400_000;
-		const urls = db().prepare("SELECT url FROM index_events WHERE site_id = ? AND kind = 'deindexed' AND at >= ? ORDER BY at DESC").all(site.id, since) as { url: string }[];
-		const uniq = [...new Set(urls.map((u) => u.url))];
+		const uniq = [...new Set(deindexedSince(site.id, nowMs - r.windowDays * 86_400_000).map((u) => u.url))];
 		return uniq.length >= r.threshold ? { fire: true, title, detail: `${uniq.length} page${uniq.length === 1 ? '' : 's'} dropped out of Google’s index in the last ${r.windowDays} days: ${list(uniq.slice(0, 3), 'page')}${uniq.length > 3 ? '…' : ''}` } : no();
 	}
 
 	if (r.kind === 'tracked_drop') {
-		const qs = listTracked(site.id).map((t) => t.query);
-		if (!qs.length) return no('no tracked searches');
-		const end = p.end;
-		const s = rankSeries(site.id, qs, addDays(end, -(2 * r.windowDays - 1)), end);
-		const fell: string[] = [];
-		for (const [q, days] of s) {
-			const avg = (xs: typeof days) => { let i = 0, pw = 0; for (const x of xs) if (x.position != null) (i += x.impressions, pw += x.position * x.impressions); return i ? pw / i : null; };
-			const now = avg(days.slice(-r.windowDays));
-			const before = avg(days.slice(0, -r.windowDays));
-			if (before == null) continue;
-			if ((now == null && before <= 10.5) || (now != null && (now - before >= r.threshold || (before <= 10.5 && now > 10.5)))) fell.push(`“${short(q)}” ${before.toFixed(1)} → ${now == null ? 'not shown' : now.toFixed(1)}`);
-		}
+		const t = trackedFalls(site.id, r, p.end);
+		if (!t) return no('no tracked searches');
+		const fell = t.fell.map((f) => `“${short(f.query)}” ${f.before.toFixed(1)} → ${f.now == null ? 'not shown' : f.now.toFixed(1)}`);
 		return fell.length ? { fire: true, title, detail: `${fell.length} tracked search${fell.length === 1 ? '' : 'es'} fell over the ${span}: ${fell.slice(0, 4).join('; ')}${fell.length > 4 ? '…' : ''}` } : no();
 	}
 
 	if (!historyCoversPrevious(site, p.prevStart)) return no('previous period not downloaded yet');
 
 	if (r.kind === 'top10_lost' || r.kind === 'top3_new' || r.kind === 'pages_drop') {
-		const prefer = r.kind === 'pages_drop' ? 'page' : 'query';
-		const cur = scoped(rd, r, p.start, p.end, prefer);
-		const prev = scoped(rd, r, p.prevStart, p.prevEnd, prefer);
-		if (!cur || !prev) return no('its bucket or group was removed');
-		const nowBy = new Map(cur.items.map((x) => [x.key, x]));
-		const what = cur.dim === 'query' ? 'search' : 'page';
-		let hits: Item[] = [];
-		if (r.kind === 'top10_lost') hits = prev.items.filter((x) => x.impressions >= 10 && x.position <= 10.5 && !((nowBy.get(x.key)?.impressions ?? 0) > 0 && nowBy.get(x.key)!.position <= 10.5));
-		if (r.kind === 'top3_new') {
-			const before = new Map(prev.items.map((x) => [x.key, x]));
-			hits = cur.items.filter((x) => x.impressions >= 10 && x.position <= 3.5 && !((before.get(x.key)?.impressions ?? 0) > 0 && before.get(x.key)!.position <= 3.5));
-		}
-		if (r.kind === 'pages_drop') hits = prev.items.filter((x) => x.clicks >= 10 && (nowBy.get(x.key)?.clicks ?? 0) <= x.clicks / 2);
+		const h = countHits(rd, r, p);
+		if (!h) return no('its bucket or group was removed');
+		const { hits } = h;
+		const what = h.dim === 'query' ? 'search' : 'page';
 		if (hits.length < r.threshold) return no();
-		hits.sort((a, b) => (r.kind === 'pages_drop' ? b.clicks - a.clicks : b.impressions - a.impressions));
 		const verb = r.kind === 'top10_lost' ? 'left the top 10' : r.kind === 'top3_new' ? 'reached the top 3' : 'lost half their clicks or more';
-		return { fire: true, title, detail: `${hits.length} ${what}${hits.length === 1 ? '' : r.kind === 'pages_drop' ? 's' : what === 'search' ? 'es' : 's'} ${verb} over the ${span}: ${list(hits.slice(0, 3).map((h) => h.key), cur.dim)}${hits.length > 3 ? '…' : ''}` };
+		return { fire: true, title, detail: `${hits.length} ${what}${hits.length === 1 ? '' : r.kind === 'pages_drop' ? 's' : what === 'search' ? 'es' : 's'} ${verb} over the ${span}: ${list(hits.slice(0, 3).map((x) => x.key), h.dim)}${hits.length > 3 ? '…' : ''}` };
 	}
 
 	// totals: the whole site from the accurate daily totals, a scope from its searches or pages
@@ -379,13 +395,16 @@ async function deliverPending(fetchImpl: typeof fetch | undefined, now: number):
 // ── the list ─────────────────────────────────────────────────────────────────
 export interface AlertEvent { id: number; siteId: number; ruleId: number | null; site: string; kind: AlertKind; positive: boolean; title: string; detail: string | null; openedAt: number; updatedAt: number; active: boolean; status: 'open' | 'resolved' | 'dismissed' | 'cleared'; closedAt: number | null; closedBy: string | null; delivery: string; deliveryMessage: string | null }
 
-export function listAlerts(o: { siteIds: number[] | null; status?: 'open' | 'closed' | 'all'; siteId?: number; limit?: number }): AlertEvent[] {
+export type AlertShow = 'open' | 'resolved' | 'dismissed' | 'cleared';
+export const ALERT_SHOWS: readonly AlertShow[] = ['open', 'resolved', 'dismissed', 'cleared'];
+
+export function listAlerts(o: { siteIds: number[] | null; status?: AlertShow | 'closed' | 'all'; siteId?: number; limit?: number }): AlertEvent[] {
 	const where: string[] = [];
 	const args: (string | number)[] = [];
 	if (o.siteId) (where.push('e.site_id = ?'), args.push(o.siteId));
 	if (o.siteIds) where.push(`e.site_id IN (${o.siteIds.map(Number).join(',') || '0'})`);
-	if (o.status === 'open') where.push("e.status = 'open'");
 	if (o.status === 'closed') where.push("e.status != 'open'");
+	else if (o.status && o.status !== 'all') (where.push('e.status = ?'), args.push(o.status));
 	const rows = db().prepare(`SELECT e.*, s.site_url, s.label FROM alert_events e JOIN sites s ON s.id = e.site_id ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY (e.status = 'open') DESC, e.positive, e.opened_at DESC LIMIT ?`).all(...args, o.limit ?? 300) as { id: number; site_id: number; rule_id: number | null; site_url: string; label: string | null; kind: AlertKind; positive: number; title: string; detail: string | null; opened_at: number; updated_at: number; active: number; status: AlertEvent['status']; closed_at: number | null; closed_by: string | null; delivery: string; delivery_message: string | null }[];
 	return rows.map((r) => ({ id: r.id, siteId: r.site_id, ruleId: r.rule_id, site: r.label || displayName(r.site_url), kind: r.kind, positive: !!r.positive, title: r.title, detail: r.detail, openedAt: r.opened_at, updatedAt: r.updated_at, active: !!r.active, status: r.status, closedAt: r.closed_at, closedBy: r.closed_by, delivery: r.delivery, deliveryMessage: r.delivery_message }));
 }
@@ -421,6 +440,221 @@ export function alertTrends(alerts: Pick<AlertEvent, 'id' | 'siteId' | 'ruleId' 
 		const days = dailySeries(site.id, addDays(end, -(2 * w - 1)), end);
 		out[a.id] = { label: t.label, values: days.map((d) => t.pick(d)), split: days.length - w, lowerIsBetter: !!t.lowerIsBetter };
 	}
+	return out;
+}
+
+// ── evidence for the alert cards ─────────────────────────────────────────────
+/** Where each kind of alert is dealt with: the group shown on its card, and the site tab its main button opens. */
+export const ALERT_FIX: Record<AlertKind, { group: string; tab: string; action: string }> = {
+	clicks_drop: { group: 'Clicks', tab: '/diagnose', action: 'Open Diagnose' },
+	clicks_rise: { group: 'Clicks', tab: '/trends', action: 'Open Trends' },
+	impressions_drop: { group: 'Impressions', tab: '/diagnose', action: 'Open Diagnose' },
+	position_drop: { group: 'Position', tab: '/diagnose', action: 'Open Diagnose' },
+	ctr_drop: { group: 'Click rate', tab: '/diagnose', action: 'Open Diagnose' },
+	top10_lost: { group: 'Rankings', tab: '/trends', action: 'Open Trends' },
+	top3_new: { group: 'Rankings', tab: '/trends', action: 'Open Trends' },
+	pages_drop: { group: 'Content decay', tab: '/decay', action: 'Open Content decay' },
+	deindexed: { group: 'Indexing', tab: '/inspect', action: 'Inspect' },
+	tracked_drop: { group: 'Rank tracking', tab: '/rank', action: 'Open Rank tracking' }
+};
+export const alertFix = (kind: AlertKind, siteId: number) => {
+	const f = ALERT_FIX[kind] ?? { group: 'Alert', tab: '/alerts', action: 'Open Alerts' };
+	return { group: f.group, href: `/sites/${siteId}${f.tab}`, label: f.action };
+};
+
+export interface AlertFact { label: string; value: string }
+/** One page's (or search's) daily clicks over the window before and the window the rule compared (from index `split`). */
+export interface EvidenceSeries { key: string; before: number; now: number; pct: number | null; values: number[]; split: number }
+export type AlertEvidence =
+	| { type: 'pages'; dim: 'query' | 'page'; total: number; items: EvidenceSeries[]; facts: AlertFact[] }
+	| { type: 'index'; from: number; to: number; total: number; urls: { url: string; at: number; state: string; back: boolean }[]; facts: AlertFact[] }
+	| { type: 'searches'; dim: 'query' | 'page'; total: number; items: { key: string; before: number | null; now: number | null }[]; facts: AlertFact[] }
+	| { type: 'tracked'; total: number; tracked: number; items: { key: string; before: number; now: number | null; values: (number | null)[]; split: number }[]; facts: AlertFact[] }
+	| { type: 'trend'; scope: string; trend: AlertTrend; facts: AlertFact[] };
+
+/** The rule an alert came from; a builtin's defaults (whole site) when the rule has gone. */
+function ruleOf(a: Pick<AlertEvent, 'siteId' | 'ruleId' | 'kind'>): AlertRule {
+	const row = a.ruleId ? (db().prepare('SELECT * FROM alert_rules WHERE id = ?').get(a.ruleId) as RuleRow | undefined) : undefined;
+	if (row) return toRule(row);
+	const k = alertKind(a.kind)!;
+	return { id: 0, siteId: a.siteId, kind: a.kind, builtin: true, name: null, threshold: k.threshold, windowDays: k.window, scopeKind: null, scopeValue: null, enabled: true };
+}
+
+const windowText = (r: AlertRule) => (r.kind === 'deindexed' ? `last ${r.windowDays} days` : `last ${r.windowDays} days vs ${r.windowDays} before`);
+const plural = (n: number, one: string, many = one + 's') => `${fmt(n)} ${n === 1 ? one : many}`;
+/** More query keys than this and a scoped alert's daily line is left out rather than read key by key. */
+const MAX_SCOPE_KEYS = 3000;
+
+/** A scoped rule's measure day by day, summed over exactly the searches or pages it judged (both windows). */
+function scopedDaily(rd: Reader, r: AlertRule, p: Period): DayRow[] | null {
+	const a = scoped(rd, r, p.start, p.end, 'query');
+	const b = scoped(rd, r, p.prevStart, p.prevEnd, 'query');
+	if (!a || !b) return null;
+	const keys = [...new Set([...a.items, ...b.items].map((x) => x.key))];
+	if (keys.length > MAX_SCOPE_KEYS) return null;
+	const col = a.dim === 'page' ? 'page' : 'query';
+	const by = new Map<string, { c: number; i: number; pw: number }>();
+	for (let i = 0; i < keys.length; i += 400) {
+		const chunk = keys.slice(i, i + 400);
+		const rows = db()
+			.prepare(`SELECT date, SUM(clicks) c, SUM(impressions) i, SUM(position * impressions) pw FROM sa_rows WHERE site_id = ? AND ${col} IN (${chunk.map(() => '?').join(',')}) AND date BETWEEN ? AND ? GROUP BY date`)
+			.all(rd.site.id, ...chunk, p.prevStart, p.end) as { date: string; c: number; i: number; pw: number }[];
+		for (const x of rows) {
+			const m = by.get(x.date) ?? { c: 0, i: 0, pw: 0 };
+			(m.c += x.c), (m.i += x.i), (m.pw += x.pw);
+			by.set(x.date, m);
+		}
+	}
+	return fillDays([...by].map(([date, m]) => ({ date, clicks: m.c, impressions: m.i, position: m.i ? m.pw / m.i : 0 }) as DayRow), p.prevStart, p.end);
+}
+
+/** Totals of a run of days, the position weighted by impressions. */
+const total = (days: DayRow[]): M => {
+	let c = 0, i = 0, pw = 0;
+	for (const d of days) (c += d.clicks, i += d.impressions, pw += (d.position || 0) * d.impressions);
+	return { clicks: c, impressions: i, position: i ? pw / i : 0 };
+};
+
+function evidenceOf(rd: Reader, a: Pick<AlertEvent, 'siteId' | 'ruleId' | 'kind'>, r: AlertRule, nowMs: number): AlertEvidence | null {
+	const site = rd.site;
+	const p = periodFor(site, r.windowDays);
+	const win: AlertFact = { label: 'Window', value: windowText(r) };
+
+	if (a.kind === 'deindexed') {
+		const since = nowMs - r.windowDays * 86_400_000;
+		const rows = deindexedSince(site.id, since);
+		if (!rows.length) return null;
+		const latest = new Map<string, { at: number; detail: string | null }>();
+		for (const x of rows) if (!latest.has(x.url)) latest.set(x.url, x); // newest first
+		const first = Math.min(...rows.map((x) => x.at));
+		const urls = [...latest].slice(0, 8);
+		const backAt = db().prepare("SELECT MAX(at) m FROM index_events WHERE site_id = ? AND url = ? AND kind = 'indexed'");
+		const out = urls.map(([url, x]) => {
+			const back = ((backAt.get(site.id, url) as { m: number | null }).m ?? 0) > x.at;
+			return { url, at: x.at, state: back ? 'Back in the index' : x.detail || 'Not indexed', back };
+		});
+		const days = (nowMs - first) / 86_400_000;
+		return {
+			type: 'index', from: since, to: nowMs, total: latest.size, urls: out,
+			facts: [{ label: 'Out of Google for', value: days < 1 ? 'under a day' : plural(Math.floor(days), 'day') }, { label: 'Pages', value: fmt(latest.size) }, win]
+		};
+	}
+
+	if (a.kind === 'tracked_drop') {
+		const t = trackedFalls(site.id, r, p.end);
+		if (!t?.fell.length) return null;
+		const items = [...t.fell]
+			.sort((x, y) => (y.now ?? 101) - y.before - ((x.now ?? 101) - x.before))
+			.slice(0, 6)
+			.map((f) => ({ key: f.query, before: f.before, now: f.now, values: f.days.map((d) => d.position), split: f.days.length - r.windowDays }));
+		return { type: 'tracked', total: t.fell.length, tracked: t.tracked, items, facts: [{ label: 'Fell', value: `${fmt(t.fell.length)} of ${plural(t.tracked, 'tracked search', 'tracked searches')}` }, win] };
+	}
+
+	if (!historyCoversPrevious(site, p.prevStart)) return null;
+
+	if (a.kind === 'pages_drop' || a.kind === 'top10_lost' || a.kind === 'top3_new') {
+		const h = countHits(rd, r, p);
+		if (!h?.hits.length) return null;
+		const noun = h.dim === 'page' ? 'Pages' : 'Searches';
+		if (a.kind === 'pages_drop') {
+			const items = h.hits.slice(0, 4).map((x) => {
+				const now = h.nowBy.get(x.key)?.clicks ?? 0;
+				const hist = h.dim === 'page' ? pageHistory(site.id, x.key, p.prevStart, p.end) : queryHistory(site.id, x.key, p.prevStart, p.end);
+				const days = fillDays(hist, p.prevStart, p.end);
+				return { key: x.key, before: x.clicks, now, pct: x.clicks ? ((now - x.clicks) / x.clicks) * 100 : null, values: days.map((d) => d.clicks), split: days.length - r.windowDays };
+			});
+			const lost = h.hits.reduce((s, x) => s + x.clicks - (h.nowBy.get(x.key)?.clicks ?? 0), 0);
+			return { type: 'pages', dim: h.dim, total: h.hits.length, items, facts: [{ label: noun, value: fmt(h.hits.length) }, { label: 'Clicks lost', value: fmt(lost) }, win] };
+		}
+		const pos = (m: Map<string, Item>, k: string) => {
+			const x = m.get(k);
+			return x && x.impressions > 0 ? x.position : null;
+		};
+		const items = h.hits.slice(0, 6).map((x) => ({ key: x.key, before: pos(h.prevBy, x.key), now: pos(h.nowBy, x.key) }));
+		return { type: 'searches', dim: h.dim, total: h.hits.length, items, facts: [{ label: noun, value: fmt(h.hits.length) }, win] };
+	}
+
+	const t = TREND_OF[a.kind];
+	if (!t) return null;
+	const days = r.scopeKind ? scopedDaily(rd, r, p) : dailySeries(site.id, p.prevStart, p.end);
+	if (!days?.length) return null;
+	const split = days.length - r.windowDays;
+	const now = total(days.slice(split));
+	const prev = total(days.slice(0, split));
+	const facts: AlertFact[] = [];
+	if (a.kind === 'ctr_drop') {
+		const x = now.impressions ? (now.clicks / now.impressions) * 100 : 0, y = prev.impressions ? (prev.clicks / prev.impressions) * 100 : 0;
+		facts.push({ label: 'Click rate', value: `${y.toFixed(1)}% → ${x.toFixed(1)}%` }, { label: 'Change', value: `${x - y > 0 ? '+' : '−'}${Math.abs(x - y).toFixed(1)} points` });
+	} else if (a.kind === 'position_drop') {
+		facts.push({ label: 'Average position', value: `${prev.position.toFixed(1)} → ${now.position.toFixed(1)}` }, { label: 'Change', value: now.position >= prev.position ? `${(now.position - prev.position).toFixed(1)} places worse` : `${(prev.position - now.position).toFixed(1)} places better` });
+	} else {
+		const m = a.kind === 'impressions_drop' ? 'impressions' : 'clicks';
+		const pct = prev[m] ? ((now[m] - prev[m]) / prev[m]) * 100 : null;
+		facts.push({ label: t.label, value: `${fmt(prev[m])} → ${fmt(now[m])}` }, ...(pct == null ? [] : [{ label: 'Change', value: `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(0)}%` }]));
+	}
+	return { type: 'trend', scope: scopeText(site.id, r), trend: { label: t.label, values: days.map((d) => t.pick(d)), split, lowerIsBetter: !!t.lowerIsBetter }, facts: [...facts, win] };
+}
+
+/**
+ * What each OPEN alert's rule saw, for the evidence panel of its card (as onsite.so shows it): the pages that lost clicks with their
+ * daily clicks, the URLs that left the index and when, the searches that moved with their position before and now, or the measure's
+ * daily line (whole site, or summed over exactly the searches or pages a scoped rule judged). It re-reads the rule's window and scope
+ * with the same code the rule uses. Closed alerts get none; at most `max` alerts, a few items each, so the page stays fast.
+ */
+export function alertEvidence(alerts: Pick<AlertEvent, 'id' | 'siteId' | 'ruleId' | 'kind' | 'status'>[], max = 40, nowMs = Date.now()): Record<number, AlertEvidence> {
+	const out: Record<number, AlertEvidence> = {};
+	const readers = new Map<number, Reader | null>();
+	for (const a of alerts.filter((x) => x.status === 'open').slice(0, max)) {
+		if (!alertKind(a.kind)) continue;
+		if (!readers.has(a.siteId)) {
+			const site = getSite(a.siteId);
+			readers.set(a.siteId, site?.synced_through ? new Reader(site) : null);
+		}
+		const rd = readers.get(a.siteId);
+		if (!rd) continue;
+		try {
+			const e = evidenceOf(rd, a, ruleOf(a), nowMs);
+			if (e) out[a.id] = e;
+		} catch {
+			/* a removed group or a bad pattern: the card simply has no evidence */
+		}
+	}
+	return out;
+}
+
+/** Everything an alert card shows besides the alert itself: its group, where to fix it, the rule behind it, key facts and evidence. */
+export interface AlertCard { group: string; fix: { href: string; label: string }; rule: { name: string; href: string } | null; facts: AlertFact[]; evidence: AlertEvidence | null }
+
+export function alertCards(alerts: Pick<AlertEvent, 'id' | 'siteId' | 'ruleId' | 'kind' | 'status'>[], max = 40): Record<number, AlertCard> {
+	const ev = alertEvidence(alerts, max);
+	const out: Record<number, AlertCard> = {};
+	const rules = new Map<number, AlertRule>();
+	for (const a of alerts) {
+		const k = alertKind(a.kind);
+		if (!k) continue;
+		const key = a.ruleId ?? -a.id;
+		if (!rules.has(key)) rules.set(key, ruleOf(a));
+		const r = rules.get(key)!;
+		const scope = r.scopeKind ? ` · ${scopeText(a.siteId, r)}` : '';
+		const e = ev[a.id] ?? null;
+		out[a.id] = {
+			...(({ group, href, label }) => ({ group, fix: { href, label } }))(alertFix(a.kind, a.siteId)),
+			rule: r.id ? { name: (r.name || ruleText(k, r.threshold)) + scope, href: `/sites/${a.siteId}/alerts#rule-${r.id}` } : null,
+			facts: e?.facts ?? [{ label: 'Window', value: windowText(r) }],
+			evidence: e
+		};
+	}
+	return out;
+}
+
+/** How many alerts are open, resolved, dismissed and ended by themselves, for the tabs above the list. */
+export function alertCounts(o: { siteIds: number[] | null; siteId?: number }): Record<AlertShow, number> {
+	const where: string[] = [];
+	const args: number[] = [];
+	if (o.siteId) (where.push('site_id = ?'), args.push(o.siteId));
+	if (o.siteIds) where.push(`site_id IN (${o.siteIds.map(Number).join(',') || '0'})`);
+	const out: Record<AlertShow, number> = { open: 0, resolved: 0, dismissed: 0, cleared: 0 };
+	for (const r of db().prepare(`SELECT status, COUNT(*) n FROM alert_events ${where.length ? 'WHERE ' + where.join(' AND ') : ''} GROUP BY status`).all(...args) as { status: AlertShow; n: number }[]) if (r.status in out) out[r.status] = r.n;
 	return out;
 }
 

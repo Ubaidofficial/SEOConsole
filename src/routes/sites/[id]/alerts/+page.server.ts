@@ -3,34 +3,40 @@ import type { Actions, PageServerLoad } from './$types';
 import { getSite } from '$lib/server/clients';
 import { config } from '$lib/server/config';
 import { requireRole, hasRole } from '$lib/server/roles';
-import { setSiteEmails } from '$lib/server/alerts';
 import { mailConfig } from '$lib/server/mail';
-import { addCustomRule, alertTrends, closeAlerts, deleteCustomRule, listAlerts, listRules, maskedWebhook, renderAlerts, reopenAlert, runAlertRules, scopeText, setSiteWebhook, siteWebhook, updateRule } from '$lib/server/alerts';
+import { ALERT_SHOWS, addCustomRule, alertCards, alertCounts, closeAlerts, deleteCustomRule, listAlerts, listRules, maskedWebhook, openAlertCount, recipientsFor, renderAlerts, reopenAlert, runAlertRules, scopeText, setSiteEmails, setSiteWebhook, siteWebhook, updateRule, type AlertShow } from '$lib/server/alerts';
 import { postWebhook, webhook } from '$lib/server/digest';
 import { listGroups } from '$lib/server/groups';
 import { listTracked } from '$lib/server/ranktrack';
 import { ALERT_KINDS, alertKind, ruleText } from '$lib/alerts';
 import { displayName } from '$lib/server/clients';
 
-export const load: PageServerLoad = ({ params, locals }) => {
+export const load: PageServerLoad = ({ params, locals, url }) => {
 	const site = getSite(Number(params.id))!;
 	const rules = listRules(site.id).map((r) => {
 		const k = alertKind(r.kind)!;
 		return { ...r, label: k.label, text: ruleText(k, r.threshold), unit: k.unit, positive: k.positive, scope: scopeText(site.id, r) };
 	});
-	const alerts = listAlerts({ siteIds: null, siteId: site.id, status: 'all', limit: 60 });
+	const raw = url.searchParams.get('show');
+	const show: AlertShow = raw === 'closed' ? 'resolved' : (ALERT_SHOWS as readonly string[]).includes(raw ?? '') ? (raw as AlertShow) : 'open';
+	const alerts = listAlerts({ siteIds: null, siteId: site.id, status: show, limit: 60 });
+	const own = siteWebhook(site.alert_webhook);
+	const global = webhook();
 	return {
 		rules,
-		trends: alertTrends(alerts),
+		show,
+		counts: alertCounts({ siteIds: null, siteId: site.id }),
+		openNow: openAlertCount([site.id]),
+		cards: alertCards(alerts),
 		kinds: ALERT_KINDS.map((k) => ({ kind: k.kind, label: k.label, unit: k.unit, threshold: k.threshold, window: k.window, scopable: k.scopable, rule: k.rule })),
 		buckets: listGroups(site.id, 'bucket').map((g) => ({ id: g.id, name: g.name })),
 		pageGroups: listGroups(site.id, 'pages').map((g) => ({ id: g.id, name: g.name })),
 		tracked: listTracked(site.id).length,
 		alerts,
-		webhook: { site: maskedWebhook(site.alert_webhook), global: !!webhook().url },
+		webhook: { site: maskedWebhook(site.alert_webhook), global: !!global.url, format: own && !('error' in own) ? own.format : global.url ? global.format : null },
 		email: (() => {
 			const cfg = mailConfig();
-			return { configured: !!cfg, site: site.alert_emails ?? '', defaults: cfg?.defaultTo.length ?? 0 };
+			return { configured: !!cfg, site: site.alert_emails ?? '', defaults: cfg?.defaultTo.length ?? 0, recipients: recipientsFor(site).length };
 		})(),
 		canAdmin: hasRole(locals.user?.role, 'admin')
 	};
