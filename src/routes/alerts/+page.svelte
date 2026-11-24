@@ -8,6 +8,8 @@
 	let { data } = $props();
 	let checking = $state(false);
 	const href = (o: Record<string, string>) => `?${new URLSearchParams({ show: data.show, ...(data.site ? { site: String(data.site) } : {}), ...o })}`;
+	const tabs = [['open', 'Open'], ['resolved', 'Resolved'], ['dismissed', 'Dismissed'], ['cleared', 'Ended by itself']] as const;
+	const EMPTY = { open: 'No open alerts.', resolved: 'No resolved alerts yet.', dismissed: 'No dismissed alerts.', cleared: 'No alerts have ended by themselves yet.' };
 	const openIds = $derived(data.alerts.filter((a) => a.status === 'open').map((a) => a.id));
 </script>
 
@@ -24,8 +26,11 @@
 
 <div class="mb-4 flex flex-wrap items-center gap-3">
 	<nav class="seg" aria-label="Which alerts">
-		<a class="seg-item {data.show === 'open' ? 'seg-on' : ''}" aria-current={data.show === 'open' ? 'page' : undefined} href={href({ show: 'open' })}>Open · {data.counts.open}</a>
-		<a class="seg-item {data.show === 'closed' ? 'seg-on' : ''}" aria-current={data.show === 'closed' ? 'page' : undefined} href={href({ show: 'closed' })}>Closed · {data.counts.closed}</a>
+		{#each tabs as [key, label] (key)}
+			{#if key !== 'cleared' || data.counts.cleared || data.show === 'cleared'}
+				<a class="seg-item {data.show === key ? 'seg-on' : ''}" aria-current={data.show === key ? 'page' : undefined} href={href({ show: key })}>{label} · <span class="tnum">{data.counts[key]}</span></a>
+			{/if}
+		{/each}
 	</nav>
 	{#if data.sites.length > 1}
 		<select class="input" aria-label="Site" value={data.site ? String(data.site) : ''} onchange={(e) => { const u = new URL(page.url); const v = e.currentTarget.value; v ? u.searchParams.set('site', v) : u.searchParams.delete('site'); goto(u.pathname + u.search); }}>
@@ -35,4 +40,4 @@
 	{/if}
 </div>
 
-<AlertList alerts={data.alerts} trends={data.trends} empty={data.show === 'open' ? 'No open alerts.' : 'No closed alerts yet.'} />
+<AlertList alerts={data.alerts} cards={data.cards} empty={EMPTY[data.show]} />

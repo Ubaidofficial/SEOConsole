@@ -3,6 +3,7 @@ import type { SiteRow } from './clients';
 import { addDays } from './dates';
 import { periodFor, siteEnd } from './queries';
 import { bucketTracked } from './groups';
+import { POSITION_BUCKETS } from '../plan';
 
 /**
  * Rank tracking from Search Console's own data: the daily average Google position of the searches you choose, across every country
@@ -97,9 +98,66 @@ export interface RankRow {
 	/** added by hand (can be removed here), or followed because it is one of a bucket's biggest searches */
 	manual: boolean;
 	buckets: string[];
+	/** the page that earned this search the most clicks in the period (most impressions when none had a click) */
+	landing: string | null;
 }
 
-export function rankReport(site: Pick<SiteRow, 'id' | 'synced_through'>, days: number): { rows: RankRow[]; start: string; end: string } {
+/** The tracked searches as a whole, this week (the last 7 days) against the 7 before. */
+export interface RankSummary {
+	tracked: number;
+	/** the average of each search's position this week, over the searches shown this week */
+	position: number | null;
+	/** the average of each search's move against the week before, over the searches shown in both weeks; positive = better (moved up) */
+	change: number | null;
+	/** searches whose position this week is in the top 3, and the same count for the week before */
+	top3: number;
+	top3Prev: number;
+}
+
+/** How many tracked searches sat in each position band on one day: Top 3, 4–10, 11–20, 21+ (as POSITION_BUCKETS) and not shown. */
+export interface RankBandDay { date: string; bands: [number, number, number, number]; none: number }
+
+export interface RankReport {
+	rows: RankRow[];
+	start: string;
+	end: string;
+	summary: RankSummary;
+	bands: RankBandDay[];
+	/** tracked searches per keyword bucket that follows them, biggest first, and how many were added by hand */
+	bucketCounts: { name: string; count: number }[];
+	manualCount: number;
+}
+
+/** The page with the most clicks (then impressions) for each search between `start` and `end`. */
+export function landingPages(siteId: number, queries: string[], start: string, end: string): Map<string, string> {
+	const best = new Map<string, { page: string; c: number; i: number }>();
+	for (let i = 0; i < queries.length; i += 400) {
+		const chunk = queries.slice(i, i + 400);
+		const rows = db()
+			.prepare(`SELECT query q, page, SUM(clicks) c, SUM(impressions) i FROM sa_rows WHERE site_id = ? AND date BETWEEN ? AND ? AND query IN (${chunk.map(() => '?').join(',')}) GROUP BY query, page`)
+			.all(siteId, start, end, ...chunk) as { q: string; page: string; c: number; i: number }[];
+		for (const r of rows) {
+			const b = best.get(r.q);
+			if (!b || r.c > b.c || (r.c === b.c && (r.i > b.i || (r.i === b.i && r.page < b.page)))) best.set(r.q, { page: r.page, c: r.c, i: r.i });
+		}
+	}
+	return new Map([...best].filter(([, b]) => b.c > 0 || b.i > 0).map(([q, b]) => [q, b.page]));
+}
+
+const TOP3 = POSITION_BUCKETS[0].max;
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, x) => a + x, 0) / xs.length : null);
+
+export function summarise(rows: Pick<RankRow, 'week' | 'prevWeek' | 'change'>[]): RankSummary {
+	return {
+		tracked: rows.length,
+		position: mean(rows.flatMap((r) => (r.week == null ? [] : [r.week]))),
+		change: mean(rows.flatMap((r) => (r.change == null ? [] : [r.change]))),
+		top3: rows.filter((r) => r.week != null && r.week <= TOP3).length,
+		top3Prev: rows.filter((r) => r.prevWeek != null && r.prevWeek <= TOP3).length
+	};
+}
+
+export function rankReport(site: Pick<SiteRow, 'id' | 'synced_through'>, days: number): RankReport {
 	const manual = listTracked(site.id);
 	const fromBuckets = bucketTracked(site);
 	const have = new Set(manual.map((t) => t.query));
@@ -109,6 +167,7 @@ export function rankReport(site: Pick<SiteRow, 'id' | 'synced_through'>, days: n
 	// the series covers the period, and at least the last 14 days so the week-on-week change can always be worked out
 	const start = p.start < addDays(end, -13) ? p.start : addDays(end, -13);
 	const series = rankSeries(site.id, tracked.map((t) => t.query), start, end);
+	const landing = landingPages(site.id, tracked.map((t) => t.query), p.start, end);
 	const rows = tracked.map(({ query, addedAt }): RankRow => {
 		const s = series.get(query) ?? [];
 		const inPeriod = s.filter((x) => x.date >= p.start);
@@ -129,10 +188,33 @@ export function rankReport(site: Pick<SiteRow, 'id' | 'synced_through'>, days: n
 			series: inPeriod.map((x) => x.position),
 			addedAt,
 			manual: have.has(query),
-			buckets: fromBuckets.get(query) ?? []
+			buckets: fromBuckets.get(query) ?? [],
+			landing: landing.get(query) ?? null
 		};
 	});
-	return { rows, start: p.start, end };
+	// one pass over the daily positions already loaded: every tracked search lands in exactly one band (or "not shown") each day
+	const dates: string[] = [];
+	for (let d = p.start; d <= end; d = addDays(d, 1)) dates.push(d);
+	const bands: RankBandDay[] = dates.map((date) => ({ date, bands: [0, 0, 0, 0], none: 0 }));
+	for (const r of rows) {
+		r.series.forEach((x, i) => {
+			const b = bands[i];
+			if (!b) return;
+			if (x == null) b.none++;
+			else b.bands[Math.max(0, POSITION_BUCKETS.findIndex((k) => x <= k.max))]++;
+		});
+	}
+	const per = new Map<string, number>();
+	for (const r of rows) for (const b of r.buckets) per.set(b, (per.get(b) ?? 0) + 1);
+	return {
+		rows,
+		start: p.start,
+		end,
+		summary: summarise(rows),
+		bands,
+		bucketCounts: [...per].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+		manualCount: rows.filter((r) => r.manual).length
+	};
 }
 
 /** Searches worth tracking that are not tracked yet: the biggest by impressions on page one or two in the last 28 days. */

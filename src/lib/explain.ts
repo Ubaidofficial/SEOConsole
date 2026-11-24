@@ -88,6 +88,7 @@ export const PORTFOLIO_TAB_EXPLAIN: Record<string, string> = {
 export const SITE_TABS = [
 	['', 'Overview', 'Your plan for the next two weeks, then the traffic chart, unusual days and your change log.'],
 	['/dashboard', 'All sources', 'Search Console, GA4, Bing and Clarity on one screen: traffic by channel, top sources, countries, devices, top pages and queries, and how visitors behave.'],
+	['/insights', 'Insights', 'Every report for this site on one page, each with its headline number: findings, traffic breakdowns, indexing tools and tests.'],
 	['/quickwins', 'Quick wins', 'The easiest improvements first: titles to rewrite, searches one push from page 1, questions you already rank for, and quick fixes.'],
 	['/actions', 'Actions', 'This site\'s to-do list, in the order to do it.'],
 	['/queries', 'Queries', 'Search queries, with quick filters, keyword buckets and saved views.'],
@@ -128,12 +129,12 @@ export const syncModeLabel = (mode: string) => SYNC_MODE_LABEL[mode] ?? mode;
 export const SYNC_RUNS_EXPLAIN = 'Every run re-pulls the newest few days, because Google revises recent figures. Until your history is complete (up to the 16 months Google keeps), a run also pulls one more chunk of 45 days further back, so a new site shows a string of "Sync + backfill" rows within the first minutes. Days is how many days were pulled in that run.';
 
 /**
- * The tab row has two parts. First the work tabs: the plan, the findings people act on, the two tables they look things up in, and
- * indexing. Then every source, each with its logo: "All sources" (all of them on one screen), GA4, Bing, Tag Manager, Clarity and AI
- * answers. A connected source shows a green dot; one that is not shows a hollow dot and opens on its Connect prompt. Everything else sits
- * under "More" (grouped as below). A tab opened from More still shows in the row while it is open.
+ * The tab row (as onsite.so's): the plan, the to-do list, the two tables, rank tracking, indexing, the Insights page (every other
+ * report as a card with its headline number) and alerts. The sources sit in one "Sources" menu with their logos (a connected source
+ * shows a green dot; one that is not, a hollow dot, and opens on its Connect prompt), and Settings is the gear at the end. A tab
+ * opened from Insights shows in the row while it is open, so you can always see where you are.
  */
-export const SITE_PRIMARY_TABS = ['', '/actions', '/quickwins', '/queries', '/pages', '/indexing'] as const;
+export const SITE_PRIMARY_TABS = ['', '/actions', '/queries', '/pages', '/rank', '/indexing', '/insights', '/alerts'] as const;
 /** Source tabs in row order, all always shown. */
 export const SITE_SOURCE_TABS = ['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai'] as const;
 /** What makes a source tab "connected" (All sources has no link of its own). AI answers is connected once an AI provider key is set up. */
@@ -142,7 +143,7 @@ export const SOURCE_LINK: Record<string, 'ga4' | 'bing' | 'gtm' | 'clarity' | 'a
 /** How the site tabs are grouped under More: a caption and the tab paths under it. Every tab appears in exactly one group (a test checks it). */
 export const SITE_TAB_GROUPS = [
 	['Traffic', ['', '/queries', '/pages', '/rank', '/trends', '/groups', '/segments', '/types']],
-	['Findings', ['/quickwins', '/actions', '/alerts', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests']],
+	['Findings', ['/quickwins', '/actions', '/alerts', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests', '/insights']],
 	['Indexing', ['/submit', '/request', '/indexing', '/indexnow', '/sitemaps', '/inspect']],
 	['Sources', ['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai']],
 	['Site', ['/settings']]

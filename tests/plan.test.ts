@@ -39,17 +39,17 @@ describe('the two-week plan a site report opens on', () => {
 });
 
 describe('the site tab bar', () => {
-	it('shows a short row of real tabs, starting with the plan, and keeps every other tab reachable under More', () => {
+	it('shows a short row of real tabs, starting with the plan, and keeps every other tab reachable from the Insights page', () => {
 		const all = SITE_TABS.map(([t]) => t as string);
 		expect(SITE_PRIMARY_TABS[0]).toBe('');
 		expect(SITE_PRIMARY_TABS.length).toBeLessThanOrEqual(8);
 		for (const t of SITE_PRIMARY_TABS) expect(all, t).toContain(t);
 		const grouped = SITE_TAB_GROUPS.flatMap(([, paths]) => [...paths] as string[]);
 		for (const t of all) expect(grouped, t).toContain(t); // the More menu is built from the groups
-		// the findings people act on and the two tables; Opportunities and Tests are reached through Quick wins / Actions and More
-		for (const t of ['/quickwins', '/actions', '/queries', '/pages']) expect(SITE_PRIMARY_TABS, t).toContain(t);
+		// the to-do list, the two tables and the Insights page, where every other report (Quick wins, Opportunities, Tests…) is a card
+		for (const t of ['/actions', '/queries', '/pages', '/insights']) expect(SITE_PRIMARY_TABS, t).toContain(t);
 	});
-	it('every source is on the row, after the work tabs, and each one but All sources says whether it is connected', () => {
+	it('every source is in the Sources menu, apart from the work tabs, and each one but All sources says whether it is connected', () => {
 		expect(SITE_SOURCE_TABS).toEqual(['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai']);
 		for (const t of SITE_SOURCE_TABS.slice(1)) expect(SOURCE_LINK[t], t).toBeTruthy();
 		for (const t of SITE_SOURCE_TABS) expect(SITE_PRIMARY_TABS as readonly string[], t).not.toContain(t);

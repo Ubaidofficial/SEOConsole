@@ -42,7 +42,8 @@ import {
 	Blocks,
 	Megaphone,
 	MousePointerClick,
-	Tag
+	Tag,
+	LayoutGrid
 } from '@lucide/svelte';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,6 +53,7 @@ export type Icon = Component<any>;
 export const TAB_ICON: Record<string, Icon> = {
 	'': LayoutDashboard,
 	'/dashboard': Blocks,
+	'/insights': LayoutGrid,
 	'/quickwins': Zap,
 	'/actions': ListChecks,
 	'/queries': Search,
