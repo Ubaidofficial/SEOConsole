@@ -26,9 +26,9 @@
 	]);
 </script>
 
-<div class="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
-	<a class="chip {yoy ? '' : 'chip-on'}" href={link('period')}>vs the previous period</a>
-	<a class="chip {yoy ? 'chip-on' : ''}" href={link('yoy')} title="The same weekdays one year earlier: catches the slow slide a month-on-month view misses">vs the same time last year</a>
+<div class="seg mb-3">
+	<a class="seg-item {yoy ? '' : 'seg-on'}" aria-current={yoy ? undefined : 'page'} href={link('period')}>vs the previous period</a>
+	<a class="seg-item {yoy ? 'seg-on' : ''}" aria-current={yoy ? 'page' : undefined} href={link('yoy')} title="The same weekdays one year earlier: catches the slow slide a month-on-month view misses">vs the same time last year</a>
 </div>
 <Explainer lead="Pages that lost clicks, and passed a significance test.">
 	<p>Pages that lost 25%+ of clicks versus the {yoy ? 'same period a year earlier' : 'previous period'} <i>and</i> pass a significance test (a ±2σ Poisson check), so ordinary noise on low-traffic pages is ignored.

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db, openDb } from '../src/lib/server/db';
 import { compileRuleSet, describeRuleSet, pagePath, parseRuleSet, quickFilter, QUICK_FILTERS } from '../src/lib/rules';
-import { ALERT_KINDS, attentionOf, clampThreshold, alertKind } from '../src/lib/alerts';
+import { ALERT_KINDS, attentionOf, clampThreshold, alertKind, daysAhead, trendOf } from '../src/lib/alerts';
+import { fmtStat } from '../src/lib/format';
 import { addCustomRule, closeAlerts, listAlerts, listRules, runAlertRules, setSiteWebhook, siteWebhook, updateRule } from '../src/lib/server/alerts';
 import { cleanViewParams, deleteGroup, groupsReportFor, listViews, matcherFor, saveGroup, saveView } from '../src/lib/server/groups';
 import { MAX_ADD_AT_ONCE, listTracked, rankReport, trackQueries, untrackQueries } from '../src/lib/server/ranktrack';
@@ -244,5 +245,26 @@ describe('Google update impact, not-found pages, needs a look', () => {
 		expect(c(980, 1000)).toBeNull();
 		expect(c(7, 10)).toBeNull();
 		expect(c(500, 1000, false)).toBeNull();
+	});
+});
+
+describe('dashboard directions and numbers', () => {
+	it('Growing, Steady or Declining only for a real change of 5% or more, nothing without a fair comparison', () => {
+		const t = (now: number, prev: number, comparable = true) => trendOf({ comparable, now: { clicks: now }, prev: { clicks: prev } });
+		expect(t(1200, 1000)).toBe('growing');
+		expect(t(800, 1000)).toBe('declining');
+		expect(t(1030, 1000)).toBe('steady');
+		expect(t(12, 10)).toBe('steady'); // a 20% rise on a handful of clicks is noise
+		expect(t(8, 6)).toBeNull(); // too few clicks to say
+		expect(t(2000, 1000, false)).toBeNull();
+	});
+	it('counts the days this period beat the same day of the period before', () => {
+		expect(daysAhead([5, 3, 9, 1], [4, 3, 2, 8])).toEqual({ up: 2, of: 4 });
+		expect(daysAhead([1, 2], [0])).toEqual({ up: 1, of: 1 });
+	});
+	it('stat cards keep exact numbers below 100,000 and shorten the rest', () => {
+		expect(fmtStat(15779)).toBe('15,779');
+		expect(fmtStat(889984)).toBe('890K');
+		expect(fmtStat(46_700_000)).toBe('46.7M');
 	});
 });

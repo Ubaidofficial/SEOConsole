@@ -12,13 +12,19 @@
 	import RankMix from '$lib/components/viz/RankMix.svelte';
 	import SegBar from '$lib/components/viz/SegBar.svelte';
 	import { POSITION_BUCKETS } from '$lib/plan';
+	import MoverPanel from '$lib/components/viz/MoverPanel.svelte';
+	import DayBars from '$lib/components/viz/DayBars.svelte';
+	import Donut from '$lib/components/viz/Donut.svelte';
+	import Sparkline from '$lib/components/Sparkline.svelte';
+	import { isBranded } from '$lib/analytics';
+	import { fmtCompact } from '$lib/format';
 
 	let { data, form } = $props();
 	const markers = $derived([
-		...data.annotations.map((a) => ({ date: a.date, label: `${a.title}`, color: a.kind === 'experiment' ? 'var(--c-impr)' : 'var(--warn)' })),
-		// Google's ranking updates: the day each one started rolling out
-		...data.googleUpdates.map((u) => ({ date: u.begin, label: `Google: ${u.name}`, color: 'var(--c-pos)' }))
+		...data.annotations.map((a) => ({ date: a.date, label: `${a.title}`, color: a.kind === 'experiment' ? 'var(--c-impr)' : 'var(--warn)' }))
 	]);
+	// Google's ranking updates: a "G" on the date axis on the day each one started rolling out
+	const updates = $derived(data.googleUpdates.map((u) => ({ date: u.begin, label: u.name })));
 	const today = new Date().toISOString().slice(0, 10);
 	let chartView = $state('');
 	const hasAll = $derived(!!data.allTraffic && data.allTraffic.chart.dates.length > 1);
@@ -52,6 +58,16 @@
 				prefix = '';
 			}
 		};
+	};
+	const P = $derived(data.panels);
+	const branded = (k: string) => isBranded(k, data.panels.brandTerms);
+	const pathOf = (u: string) => {
+		try {
+			const x = new URL(u);
+			return x.pathname + x.search;
+		} catch {
+			return u;
+		}
 	};
 	const dot = (k: string) => (k === 'experiment' ? 'var(--c-impr)' : k === 'migration' ? 'var(--bad)' : k === 'other' || k === 'detected' ? 'var(--muted-foreground)' : 'var(--warn)');
 </script>
@@ -108,9 +124,9 @@
 <section class="mb-5 rounded-2xl border bg-card p-5 shadow-xs">
 	<div class="mb-3 flex items-baseline justify-between gap-3">
 		<h2 class="text-base font-semibold tracking-tight">{data.allTraffic ? 'Search Console' : 'Traffic'}</h2>
-		<p class="text-xs text-muted-foreground">Shaded bands = unusual days · dots = your change log · dashed end = last 2 days (Google may still revise them)</p>
+		<p class="text-xs text-muted-foreground">Dashed line = the period before · G = a Google update · dots = your change log · shaded = unusual days</p>
 	</div>
-	<Chart data={data.series} {markers} anomalies={data.anomalies} />
+	<Chart data={data.series} prev={data.prevSeries} {updates} {markers} anomalies={data.anomalies} />
 	</section>
 {/if}
 
@@ -131,9 +147,63 @@
 			<p class="mb-3 text-xs text-muted-foreground">Non-brand clicks are the ones SEO work moves.</p>
 			<div class="flex items-baseline gap-2"><span class="text-2xl font-semibold">{fmtInt(b.now.other)}</span><span class="text-xs text-muted-foreground">non-brand clicks</span>{#if d != null}<span class="tnum text-xs font-medium {d >= 0 ? 'text-good' : 'text-bad'}">{fmtSigned(d)}</span>{/if}</div>
 			{#if total}<div class="mt-3"><SegBar title="Clicks from brand and non-brand searches" format={(v) => `${fmtInt(v)} clicks`} parts={[{ label: 'Non-brand', value: b.now.other, color: 'var(--chart-1)' }, { label: 'Brand', value: b.now.brand, color: 'var(--chart-2)' }]} /></div>{/if}
+			{#if data.panels.brandDays && data.panels.brandDays.some((x) => x.brand + x.other > 0)}
+				<div class="mt-4"><DayBars days={data.panels.brandDays.map((x) => x.date)} series={[{ label: 'Non-brand', color: 'var(--chart-1)', values: data.panels.brandDays.map((x) => x.other) }, { label: 'Brand', color: 'var(--chart-2)', values: data.panels.brandDays.map((x) => x.brand) }]} height={70} unit=" clicks" legend={false} /></div>
+			{/if}
 			<p class="mt-2 text-[11px] text-muted-foreground">Brand = contains <span class="pii">{b.terms.join(', ')}</span>. <a class="underline" href="/sites/{page.params.id}/settings">Change</a> · <a class="underline" href="/sites/{page.params.id}/queries?b=nonbrand">See non-brand searches</a></p>
 		{:else}
 			<p class="text-sm text-muted-foreground">Set your brand terms in <a class="underline" href="/sites/{page.params.id}/settings">Settings</a> to split brand from non-brand clicks.</p>
+		{/if}
+	</section>
+</div>
+
+
+<div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+	<MoverPanel title="Top searches" unit="searches" href="/sites/{page.params.id}/queries?days={data.days}" rows={P.queries} comparable={P.queries.comparable} pii={branded} />
+	<MoverPanel title="Top pages" unit="pages" href="/sites/{page.params.id}/pages?days={data.days}" rows={P.pages} comparable={P.pages.comparable} label={pathOf} pii={() => true} />
+</div>
+
+{#if P.newLost}
+	{@const nl = P.newLost}
+	<div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="new-h">
+			<div class="mb-2 flex flex-wrap items-baseline gap-x-3"><h2 id="new-h" class="text-base font-semibold tracking-tight">New searches</h2><span class="text-xs text-muted-foreground">shown this period, not in the one before</span></div>
+			<div class="mb-3 flex items-baseline gap-4"><span class="tnum text-3xl font-semibold tracking-tight {nl.added.count ? 'text-good' : ''}">{fmtInt(nl.added.count)}</span><span class="tnum text-xs text-muted-foreground"><b class="text-foreground">{nl.added.top10}</b> of them in the top 10</span></div>
+			{#if nl.added.count}<DayBars days={nl.added.byDay.days} series={[{ label: 'New searches', color: 'var(--good)', values: nl.added.byDay.counts }]} height={64} />{:else}<p class="text-sm text-muted-foreground">Every search shown this period was shown in the one before too.</p>{/if}
+			{#if nl.added.top.length}<ul class="mt-3 space-y-1 text-[13px]">{#each nl.added.top as r}<li class="flex gap-3"><span class="min-w-0 flex-1 truncate {branded(r.query) ? 'pii' : ''}">{r.query}</span><span class="tnum text-xs text-muted-foreground">pos {fmtPos(r.position)} · {fmtCompact(r.impressions)} impr.</span></li>{/each}</ul>{/if}
+		</section>
+		<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="lost-h">
+			<div class="mb-2 flex flex-wrap items-baseline gap-x-3"><h2 id="lost-h" class="text-base font-semibold tracking-tight">Lost searches</h2><span class="text-xs text-muted-foreground">shown in the period before, not in this one</span></div>
+			<div class="mb-3 flex items-baseline gap-4"><span class="tnum text-3xl font-semibold tracking-tight {nl.lost.count ? 'text-bad' : ''}">{fmtInt(nl.lost.count)}</span><span class="tnum text-xs text-muted-foreground"><b class="text-foreground">{nl.lost.top10}</b> had been in the top 10 · {fmtInt(nl.lost.clicks)} clicks before</span></div>
+			{#if nl.lost.count}<DayBars days={nl.lost.byDay.days} series={[{ label: 'Last seen', color: 'var(--bad)', values: nl.lost.byDay.counts }]} height={64} />{:else}<p class="text-sm text-muted-foreground">No search from the period before has disappeared.</p>{/if}
+			{#if nl.lost.top.length}<ul class="mt-3 space-y-1 text-[13px]">{#each nl.lost.top as r}<li class="flex gap-3"><span class="min-w-0 flex-1 truncate {branded(r.query) ? 'pii' : ''}">{r.query}</span><span class="tnum text-xs text-muted-foreground">was pos {fmtPos(r.position)} · {fmtInt(r.clicks)} clicks</span></li>{/each}</ul>{/if}
+		</section>
+	</div>
+{/if}
+
+<div class="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+	<section class="rounded-2xl border bg-card p-5 shadow-xs" aria-labelledby="dev-h">
+		<h2 id="dev-h" class="mb-3 text-base font-semibold tracking-tight">Devices</h2>
+		{#if P.devices.length}
+			{@const total = P.devices.reduce((a, d) => a + d.clicks, 0)}
+			<Donut center={fmtCompact(total)} sub="clicks" parts={P.devices.map((d, i) => ({ label: d.device.toLowerCase(), value: d.clicks, color: ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)'][i % 3], note: d.prev ? fmtSigned(d.clicks / d.prev - 1, 0) : undefined }))} />
+		{:else}<p class="text-sm text-muted-foreground">No data in this period yet.</p>{/if}
+	</section>
+	<section class="rounded-2xl border bg-card p-5 shadow-xs lg:col-span-2" aria-labelledby="bkt-h">
+		<div class="mb-3 flex flex-wrap items-baseline gap-x-3"><h2 id="bkt-h" class="text-base font-semibold tracking-tight"><a class="hover:underline" href="/sites/{page.params.id}/groups?view=buckets&days={data.days}">Keyword buckets</a></h2>{#if P.buckets.count}<span class="text-xs text-muted-foreground">{P.buckets.count} bucket{P.buckets.count === 1 ? '' : 's'}</span>{/if}</div>
+		{#if P.buckets.rows.length}
+			{@const bmax = Math.max(1, ...P.buckets.rows.map((r) => r.clicks))}
+			<ul class="space-y-2.5">
+				{#each P.buckets.rows as r (r.id)}
+					<li class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3">
+						<div class="min-w-0"><a class="block truncate text-[13px] hover:underline" href="/sites/{page.params.id}/queries?days={data.days}&bucket={r.id}">{r.name} <span class="text-muted-foreground">· {fmtInt(r.members)} searches</span></a><div class="mt-1 h-1.5 rounded-full bg-muted"><div class="h-full rounded-full bg-[color:var(--c-clicks)]" style="width:{Math.max(2, (r.clicks / bmax) * 100)}%"></div></div></div>
+						<div class="tnum text-right text-[13px]"><div class="font-medium">{fmtCompact(r.clicks)}</div>{#if r.deltaPct != null}<div class="text-[11px] {r.deltaPct >= 0 ? 'text-good' : 'text-bad'}">{fmtSigned(r.deltaPct, 0)}</div>{/if}</div>
+						<Sparkline values={r.spark} width={84} height={24} />
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="text-sm text-muted-foreground">Group searches into topics (everything with “shoe”, a pasted list, a pattern) to see each topic's clicks and trend here. <a class="underline" href="/sites/{page.params.id}/groups?view=buckets">Make a bucket</a></p>
 		{/if}
 	</section>
 </div>

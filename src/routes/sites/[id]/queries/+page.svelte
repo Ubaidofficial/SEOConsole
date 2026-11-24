@@ -42,6 +42,7 @@
 		{ key: 'impressions', label: 'Impressions', type: 'int' as const },
 		{ key: 'ctr', label: 'CTR', type: 'pct' as const },
 		{ key: 'position', label: 'Position', type: 'pos' as const },
+		{ key: 'trend', label: 'Trend', type: 'spark' as const, title: 'Clicks by day over the period (shown for the 200 biggest searches)' },
 		...(data.openseo?.known ? [{ key: 'volume', label: 'Volume', type: 'int' as const, title: 'Monthly searches for this query in the market of the linked OpenSEO project (from DataForSEO through OpenSEO). A dash: not fetched yet, or too small to measure.' }, { key: 'kd', label: 'KD', type: 'int' as const, title: 'Keyword difficulty from OpenSEO, 0 to 100: how hard the top results are to outrank' }] : [])
 	]);
 </script>

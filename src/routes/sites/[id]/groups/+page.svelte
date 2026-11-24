@@ -24,13 +24,15 @@
 	const cell = (v: number, max: number) => (max > 0 ? Math.min(1, v / max) : 0);
 </script>
 
-<nav class="mb-4 flex flex-wrap items-center gap-1.5" aria-label="Group views">
-	{#each views as [v, label]}<a class="chip {data.view === v ? 'chip-on' : ''}" href={href({ view: v })} data-sveltekit-noscroll>{label}</a>{/each}
+<div class="mb-4 flex flex-wrap items-center gap-3">
+	<nav class="seg" aria-label="Group views">
+		{#each views as [v, label]}<a class="seg-item {data.view === v ? 'seg-on' : ''}" aria-current={data.view === v ? 'page' : undefined} href={href({ view: v })} data-sveltekit-noscroll>{label}</a>{/each}
+	</nav>
 	{#if data.view === 'folders' || (data.view === 'heatmap' && data.by === 'group')}
-		<span class="ml-3 text-xs text-muted-foreground">Folder depth</span>
-		{#each [1, 2, 3] as d}<a class="chip {data.depth === d ? 'chip-on' : ''}" href={href({ depth: d })} data-sveltekit-noscroll>{d}</a>{/each}
+		<span class="text-xs text-muted-foreground">Folder depth</span>
+		<nav class="seg" aria-label="Folder depth">{#each [1, 2, 3] as d}<a class="seg-item {data.depth === d ? 'seg-on' : ''}" aria-current={data.depth === d ? 'page' : undefined} href={href({ depth: d })} data-sveltekit-noscroll>{d}</a>{/each}</nav>
 	{/if}
-</nav>
+</div>
 
 {#if data.mine}
 	{@const bucket = data.mine.kind === 'bucket'}
@@ -84,8 +86,7 @@
 {:else if data.view === 'heatmap' && data.heatmap}
 	<div class="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
 		<span>Rows:</span>
-		<a class="chip {data.by === 'group' ? 'chip-on' : ''}" href={href({ by: 'group' })} data-sveltekit-noscroll>Folders</a>
-		<a class="chip {data.by === 'page' ? 'chip-on' : ''}" href={href({ by: 'page' })} data-sveltekit-noscroll>Pages</a>
+		<span class="seg"><a class="seg-item {data.by === 'group' ? 'seg-on' : ''}" aria-current={data.by === 'group' ? 'page' : undefined} href={href({ by: 'group' })} data-sveltekit-noscroll>Folders</a><a class="seg-item {data.by === 'page' ? 'seg-on' : ''}" aria-current={data.by === 'page' ? 'page' : undefined} href={href({ by: 'page' })} data-sveltekit-noscroll>Pages</a></span>
 		<span class="ml-2">Complete calendar months only (a part-month would look like a collapse). Each row is shaded against its own best month, so a fading row lightens to the right.</span>
 	</div>
 	{#if data.heatmap.months.length < 2 || !data.heatmap.rows.length}

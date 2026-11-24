@@ -4,6 +4,9 @@ import { getSite } from '$lib/server/clients';
 import { pageInsights } from '$lib/server/pageinsights';
 import { PERIODS } from '$lib/periods';
 import { deleteView, listGroups, listViews, matcherFor, saveView } from '$lib/server/groups';
+import { sparks } from '$lib/server/overview';
+import { periodFor, topPages } from '$lib/server/queries';
+import { pagePath } from '$lib/rules';
 
 export const load: PageServerLoad = async ({ params, parent, url }) => {
 	const { days } = await parent();
@@ -11,12 +14,20 @@ export const load: PageServerLoad = async ({ params, parent, url }) => {
 	const r = pageInsights(site, days);
 	const groupId = Number(url.searchParams.get('group')) || null;
 	const inGroup = groupId ? matcherFor(site.id, 'pages', groupId) : null;
+	// a daily line of Google clicks for the 200 biggest pages, matched on the path (as the table joins its sources)
+	const p = periodFor(site, days);
+	const daily = new Map<string, number[]>();
+	for (const [url, v] of sparks(site.id, 'page', topPages(site.id, p.start, p.end, {}, 200).map((x) => x.page), p)) {
+		const k = pagePath(url);
+		const have = daily.get(k);
+		daily.set(k, have ? have.map((n, i) => n + v[i]) : v);
+	}
 	return {
 		sources: { google: r.google, bing: r.bing, ga4: r.ga4, ai: r.ai, clarity: r.clarity, all: r.all, views: r.views },
 		period: r.period,
 		periods: [...PERIODS],
 		allPeriod: (PERIODS as readonly number[]).includes(days),
-		rows: r.rows.filter((x) => (groupId ? !!inGroup && inGroup(x.url) : true)).map((x) => ({ ...x, gCtr: x.gClicks != null && x.gImpr ? x.gClicks / x.gImpr : null })),
+		rows: r.rows.filter((x) => (groupId ? !!inGroup && inGroup(x.url) : true)).map((x) => ({ ...x, gCtr: x.gClicks != null && x.gImpr ? x.gClicks / x.gImpr : null, gTrend: daily.get(pagePath(x.url)) ?? null })),
 		group: groupId,
 		groupMissing: !!groupId && !inGroup,
 		pageGroups: listGroups(site.id, 'pages').map((g) => ({ id: g.id, name: g.name })),

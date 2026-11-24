@@ -13,6 +13,8 @@
 
 	let {
 		data,
+		prev = null,
+		updates = [],
 		markers = [],
 		anomalies = [],
 		height = 280,
@@ -22,6 +24,10 @@
 		dashed = 2
 	}: {
 		data: Point[];
+		/** The previous period of the same length, day by day, drawn dashed under this period's line (null when it is not stored). */
+		prev?: Point[] | null;
+		/** Google ranking updates, shown as a small "G" on the date axis on the day each began. */
+		updates?: { date: string; label: string }[];
 		markers?: Marker[];
 		anomalies?: { date: string; direction: string }[];
 		/** height of the whole chart when one measure is shown; with more, each panel gets a share of a little more room */
@@ -65,10 +71,12 @@
 		return out;
 	}
 
+	/** The previous period lined up day by day with this one (the same length, so day i of each is the same weekday). */
+	const prevOn = $derived(!!prev && prev.length === data.length && prev.some((p) => p.clicks + p.impressions > 0));
 	const panels = $derived(
 		active.map((m) => {
 			const pos = m.key === 'position';
-			const vals = data.map((d) => d[m.key]).filter((v) => !pos || v > 0);
+			const vals = [...data, ...(prevOn ? prev! : [])].map((d) => d[m.key]).filter((v) => !pos || v > 0);
 			// volume starts at 0; position spans its own range with a little air, 1 at the top
 			const lo = pos ? Math.max(1, Math.floor(Math.min(...vals, 99) - 0.5)) : 0;
 			const ticks = pos ? niceTicks(lo, Math.ceil(Math.max(...vals, lo + 1) + 0.5)) : niceTicks(0, Math.max(1, ...vals));
@@ -90,11 +98,22 @@
 			});
 			const outline = data.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[m.key]).toFixed(1)}`).join('');
 			const area = pos || data.length < 2 ? '' : `${outline}L${x(data.length - 1).toFixed(1)},${pad.t + innerH}L${x(0).toFixed(1)},${pad.t + innerH}Z`;
-			return { ...m, pos, ticks: ticks.filter((t) => t >= lo && t <= hi + 1e-9), y, solid, tail, area };
+			let before = '';
+			if (prevOn) {
+				let down = false;
+				prev!.forEach((p, i) => {
+					if (pos && !p.position) return void (down = false);
+					before += `${down ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[m.key]).toFixed(1)}`;
+					down = true;
+				});
+			}
+			return { ...m, pos, ticks: ticks.filter((t) => t >= lo && t <= hi + 1e-9), y, solid, tail, area, before };
 		})
 	);
 
 	const idx = (date: string) => data.findIndex((d) => d.date === date);
+	const updateMarks = $derived(updates.map((u) => ({ ...u, i: idx(u.date) })).filter((u) => u.i >= 0));
+	const span = (d: Point[]) => (d.length ? `${fmtDay(d[0].date)} – ${fmtDay(d[d.length - 1].date)}` : '');
 	const ticksX = $derived(data.length ? [...new Set([0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => Math.round(t * (data.length - 1))))] : []);
 	const fmtDay = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 	const fmtLong = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -127,6 +146,12 @@
 				<span class="size-2 rounded-full transition-opacity" style="background:{m.color};opacity:{isOn ? 1 : 0.3}"></span>{m.label}
 			</button>
 		{/each}
+		{#if prevOn && data.length}
+			<span class="ml-auto inline-flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground tnum">
+				<span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-4 rounded-full bg-foreground" aria-hidden="true"></span>{span(data)}</span>
+				<span class="inline-flex items-center gap-1.5"><span class="w-4 border-t-2 border-dashed border-muted-foreground" aria-hidden="true"></span>{span(prev!)}</span>
+			</span>
+		{/if}
 	</div>
 
 	{#if data.length === 0}
@@ -152,7 +177,9 @@
 							{#if k === 0}<circle cx={x(i)} cy={pad.t + 4} r="4.5" fill={mk.color ?? 'var(--warn)'} stroke="var(--card)" stroke-width="2"><title>{mk.date}: {mk.label}</title></circle>{/if}
 						{/if}
 					{/each}
+					{#each updateMarks as u}<line x1={x(u.i)} x2={x(u.i)} y1={pad.t} y2={pad.t + innerH} stroke="var(--muted-foreground)" stroke-width="1" stroke-dasharray="2 3" opacity="0.45" />{/each}
 					{#if s.area}<path d={s.area} fill={s.color} opacity="0.1" />{/if}
+					{#if s.before}<path d={s.before} fill="none" stroke={s.color} stroke-width="1.5" stroke-dasharray="4 4" stroke-linejoin="round" opacity="0.55" />{/if}
 					<path d={s.solid} fill="none" stroke={s.color} stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
 					{#if s.tail}<path d={s.tail} fill="none" stroke={s.color} stroke-width="2" stroke-dasharray="3 4" stroke-linecap="round" opacity="0.7" />{/if}
 					<!-- the panel's name, top left, so each axis says what it measures -->
@@ -166,6 +193,10 @@
 						{#each ticksX as t}
 							<text x={x(t)} y={panelH + axisH - 8} font-size="10.5" fill="var(--muted-foreground)" text-anchor={t === 0 ? 'start' : t === data.length - 1 ? 'end' : 'middle'}>{fmtDay(data[t].date)}</text>
 						{/each}
+						<!-- Google updates: a "G" on the date axis on the day each began rolling out -->
+						{#each updateMarks as u}
+							<g transform="translate({x(u.i)},{pad.t + innerH})"><circle r="7.5" fill="var(--card)" stroke="var(--border)" stroke-width="1" /><text y="3.6" font-size="9.5" font-weight="700" text-anchor="middle" fill="var(--c-clicks)">G</text><title>{fmtDay(u.date)}: {u.label}</title></g>
+						{/each}
 					{/if}
 				</svg>
 			{/each}
@@ -178,9 +209,11 @@
 				{#each active as m}
 					<div class="flex items-center justify-between gap-4 tnum">
 						<span class="inline-flex items-center gap-1.5 text-muted-foreground"><span class="size-2 rounded-full" style="background:{m.color}"></span>{m.label}</span>
-						<span class="font-medium text-foreground">{fmtVal(m.key, p)}</span>
+						<span class="font-medium text-foreground">{fmtVal(m.key, p)}{#if prevOn}<span class="ml-1.5 font-normal text-muted-foreground">vs {fmtVal(m.key, prev![hover])}</span>{/if}</span>
 					</div>
 				{/each}
+				{#if prevOn}<div class="mt-1 text-[11px] text-muted-foreground">vs {fmtLong(prev![hover].date)}</div>{/if}
+				{#each updateMarks.filter((u) => u.i === hover) as u}<div class="mt-1 text-[11px] text-muted-foreground">Google: {u.label}</div>{/each}
 			</div>
 		{/if}
 	{/if}

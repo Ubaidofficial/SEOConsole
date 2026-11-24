@@ -34,3 +34,6 @@ export const fmtMoney = (n: number | null | undefined, currency?: string | null)
 		return `${n.toLocaleString('en-US', { maximumFractionDigits: digits })} ${currency}`;
 	}
 };
+
+/** A stat-card number: exact below 100,000 (15,779), short above it (889.8K, 46.7M); the exact figure goes in the hover title. */
+export const fmtStat = (n: number) => (Math.abs(n) >= 100_000 ? fmtCompact(n) : fmtInt(n));

@@ -43,6 +43,7 @@
 		{ key: 'gImpr', label: 'Impr.', type: 'int' as const, deltaKey: 'gImprD', title: 'Google impressions and their change', ...G },
 		{ key: 'gCtr', label: 'CTR', type: 'pct' as const, ...G },
 		{ key: 'gPos', label: 'Pos', type: 'pos' as const, title: 'Average Google position, weighted by impressions', ...G },
+		{ key: 'gTrend', label: 'Trend', type: 'spark' as const, title: 'Google clicks by day over the period (shown for the 200 biggest pages)', ...G },
 		...(data.sources.bing.hasData
 			? [
 					{ key: 'bClicks', label: 'Clicks', type: 'int' as const, deltaKey: 'bClicksD', title: 'Bing clicks, with the change against the previous period', ...B },
@@ -87,7 +88,7 @@
 	const cols = $derived.by(() => {
 		const page = ['path'];
 		switch (view) {
-			case 'google': return pick([...page, 'gClicks', 'gImpr', 'gCtr', 'gPos']);
+			case 'google': return pick([...page, 'gClicks', 'gImpr', 'gCtr', 'gPos', 'gTrend']);
 			case 'ga4': return pick([...page, 'tViews', 'title', 'tSessions', 'tTop', 'aSessions', 'aEngaged', 'aKeyEvents']);
 			case 'bing': return pick([...page, 'bClicks', 'bImpr', 'bPos']);
 			case 'ai': return pick([...page, 'aiSessions', 'aiEngaged', 'aiTop']);

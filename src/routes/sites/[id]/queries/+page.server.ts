@@ -9,6 +9,7 @@ import { POSITION_BUCKETS } from '$lib/plan';
 import { QUICK_FILTERS, quickFilter } from '$lib/rules';
 import { deleteView, listGroups, listViews, matcherFor, saveView } from '$lib/server/groups';
 import { listTracked, trackQueries } from '$lib/server/ranktrack';
+import { sparks } from '$lib/server/overview';
 
 /**
  * A search filter written as a regular expression, like Search Console's own "custom (regex)" filter. Case-insensitive. Patterns are
@@ -60,8 +61,10 @@ export const load: PageServerLoad = async ({ params, parent, url }) => {
 		.filter((r) => (bucketId ? !!inBucket && inBucket(r.query) : true))
 		.filter((r) => (pos ? r.position > posMin && r.position <= pos.max : true))
 		.filter((r) => (inc.re ? inc.re.test(r.query) : true) && (exc.re ? !exc.re.test(r.query) : true));
+	// a daily line for the biggest searches shown (one query for all of them); the rest show a dash
+	const daily = sparks(site.id, 'query', rows.slice(0, 200).map((r) => r.query), p);
 	return {
-		rows,
+		rows: rows.map((r) => ({ ...r, trend: daily.get(r.query) ?? null })),
 		b,
 		qf: qf?.key ?? '',
 		quickFilters: QUICK_FILTERS.map((f) => ({ key: f.key, label: f.label, hint: f.hint })),

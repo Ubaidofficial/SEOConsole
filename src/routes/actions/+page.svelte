@@ -35,10 +35,10 @@
 	<div class="card p-6 text-center text-sm text-muted-foreground">Nothing to do across your sites right now, or no data has synced yet.</div>
 {:else}
 	<div class="card mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 p-3">
-		<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Show">
-			<button class="chip {only === 'all' ? 'chip-on' : ''}" onclick={() => (only = 'all')}>All ({data.items.length})</button>
-			<button class="chip {only === 'blocking' ? 'chip-on' : ''}" onclick={() => (only = 'blocking')} disabled={!blocking} title="Things that stop a site earning or stop you measuring it">Blocking ({blocking})</button>
-			<button class="chip {only === 'quick' ? 'chip-on' : ''}" onclick={() => (only = 'quick')} disabled={!quick} title="Low-effort items that are not blocking">Quick wins ({quick})</button>
+		<div class="seg" role="group" aria-label="Show">
+			<button class="seg-item {only === 'all' ? 'seg-on' : ''}" aria-pressed={only === 'all'} onclick={() => (only = 'all')}>All ({data.items.length})</button>
+			<button class="seg-item {only === 'blocking' ? 'seg-on' : ''}" aria-pressed={only === 'blocking'} onclick={() => (only = 'blocking')} disabled={!blocking} title="Things that stop a site earning or stop you measuring it">Blocking ({blocking})</button>
+			<button class="seg-item {only === 'quick' ? 'seg-on' : ''}" aria-pressed={only === 'quick'} onclick={() => (only = 'quick')} disabled={!quick} title="Low-effort items that are not blocking">Quick wins ({quick})</button>
 		</div>
 		{#if sites.length > 1}
 			<select class="input pii max-w-64" bind:value={site} aria-label="Site">
