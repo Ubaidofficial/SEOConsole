@@ -36,3 +36,12 @@ describe('follow-up suggestions', () => {
 		expect(splitFollowUps(t).followUps).toEqual([]);
 	});
 });
+
+describe('content brief topic words', () => {
+	it('drops years and the words that describe the whole site', async () => {
+		const { topicWords, mainWords } = await import('../src/lib/server/brief');
+		const site = [...Array.from({ length: 30 }, (_, i) => `topic${i} books 2024`), 'sailing books', 'best sailing books', 'cryptography books 2024', 'leadership books', ...Array.from({ length: 10 }, (_, i) => `misc${i} novel`)];
+		expect(topicWords(mainWords('sailing books 2024'), site)).toEqual(['sailing']);
+		expect(topicWords(mainWords('sailing books 2024'), ['a', 'b'])).toEqual(['sailing', 'book']); // too few searches to judge "book"
+	});
+});
