@@ -326,7 +326,7 @@
 					</div>
 				{:else}
 					{#if c.spark.length > 1}
-						<SourceSpark series={seriesOf(c)} class="mt-5" />
+						<SourceSpark series={seriesOf(c)} dates={c.traffic.chart.dates} class="relative z-10 mt-5" />
 						{#if c.daysUp}<p class="tnum mt-1.5 text-xs text-muted-foreground">More clicks than the period before on <b class="font-medium text-foreground">{c.daysUp.up}</b> of {c.daysUp.of} days <span class="opacity-70">· dashed line</span></p>{/if}
 						{#if c.traffic.ga4 || c.traffic.bing}
 							<!-- Legend: names, totals and changes in text ink beside a colour swatch, so a line is never told apart by colour alone. -->
@@ -364,7 +364,7 @@
 	</div>
 	{/if}
 	<p class="mt-6 text-xs text-muted-foreground">
-		<span title="Each source keeps its own newest days (Search Console lags about 2 days, Pacific time), so a line can stop a day early. GA4 sessions already include most Google clicks: the lines overlap, they do not add up.">Lines on one scale: <span class="font-medium" style="color:var(--src-gsc)">green</span> Google clicks, <span class="font-medium" style="color:var(--src-ga4)">orange</span> GA4 sessions (every channel), <span class="font-medium" style="color:var(--src-bing)">blue</span> Bing clicks. GA4 already includes most Google clicks, so they overlap, not add up. Dashed = days still being revised.</span>
+		<span title="Each source keeps its own newest days (Search Console lags about 2 days, Pacific time), so a line can stop a day early. GA4 sessions already include most Google clicks: the lines overlap, they do not add up.">Lines: <span class="font-medium" style="color:var(--src-gsc)">green</span> Google clicks, <span class="font-medium" style="color:var(--src-ga4)">orange</span> GA4 sessions (every channel), <span class="font-medium" style="color:var(--src-bing)">blue</span> Bing clicks. GA4 already includes most Google clicks, so they overlap, not add up. A much bigger source gets its own row and scale. Hover for a day's numbers.</span>
 		<a class="underline underline-offset-2" href="?days={data.days}&hidden={data.showHidden ? 0 : 1}">{data.showHidden ? 'Hide' : 'Show'} hidden sites</a>
 	</p>
 	{#if data.cards.some((c) => c.authority.dr || c.authority.da)}<p class="mt-1 text-xs text-muted-foreground"><AuthorityCredit dr={data.cards.some((c) => c.authority.dr)} da={data.cards.some((c) => c.authority.da)} /> Circles show DR and DA out of 100: {BANDS_TEXT} (this app's own bands, not Ahrefs' or Moz's).</p>{/if}
