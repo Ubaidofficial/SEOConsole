@@ -146,7 +146,7 @@
 {#if open}
 	<div class="card mt-3 scroll-mt-4 p-4" bind:this={detail}>
 		<div class="mb-2 flex flex-wrap items-center gap-2"><span class="font-medium">“<span class="pii">{open}</span>” — all stored history</span>
-			{#if data.tracked.includes(open)}<a class="chip ml-auto" href="rank?days={page.url.searchParams.get('days') ?? 28}">Tracked</a>{:else if canEdit}<form class="ml-auto" method="POST" action="?/track" use:enhance><input type="hidden" name="query" value={open} /><button class="btn btn-sm" title="Follow its daily position on the Rank tracking tab">Track position</button></form>{/if}
+			<a class="btn btn-sm ml-auto" href="brief?q={encodeURIComponent(open)}" title="What to write or rewrite for this search, from your own data (no credits)">Content brief</a>{#if data.tracked.includes(open)}<a class="chip" href="rank?days={page.url.searchParams.get('days') ?? 28}">Tracked</a>{:else if canEdit}<form method="POST" action="?/track" use:enhance><input type="hidden" name="query" value={open} /><button class="btn btn-sm" title="Follow its daily position on the Rank tracking tab">Track position</button></form>{/if}
 		</div>
 		{#if loading}<p class="text-muted-foreground">Loading…</p>{:else}
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">

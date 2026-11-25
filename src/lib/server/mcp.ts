@@ -3,7 +3,7 @@ import { type PerfFilters, allSites, brandTerms, fittedCurve, historyCoversPrevi
 import { ALL_TYPES, SEARCH_TYPES, type SearchType } from '../searchTypes';
 import { cruxIntegration, cruxLatest } from './crux';
 import { rate, VITALS } from '../vitals';
-import { clientForSite, displayName } from './clients';
+import { clientForSite, displayName, getSite } from './clients';
 import { inspectUrls, storedInspection, MAX_INSPECT_URLS, type InspectOutcome } from './inspect';
 import { inProperty } from '../property';
 import { pageInsights } from './pageinsights';
@@ -16,7 +16,7 @@ import { openSeoProjectUrl } from './connect';
 import { authenticate, permits, presentedKey, type Permission } from './apikeys';
 import { consumeConfirmation, issueConfirmation, CONFIRM_TTL_MS } from './confirm';
 import { config } from './config';
-import { hostKey } from './hosts';
+import { hostKey, hostsMatch } from './hosts';
 import { coverageMap } from '../property';
 import { gtmSnapshot, trackingHealth } from './tracking';
 import { tagTypeLabel } from './gtm';
@@ -38,6 +38,8 @@ import { linkReport } from './internallinks';
 import { sitemapCoverage } from './sitemapcov';
 import { portfolioQueue, queueFor } from './actions';
 import { learnedWeights, listOutcomes, outcomeStats } from './outcomes';
+import { healthScore } from '../health';
+import { contentBrief } from './brief';
 import { contractStatus } from './contracts';
 import { agentStatus } from './agentstatus';
 
@@ -214,7 +216,7 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_overview',
-		description: 'Clicks/impressions/CTR/position for a window vs the previous window, across Google Search Console, Bing and GA4 organic sessions where connected, plus the share of anonymised queries.',
+		description: 'Clicks/impressions/CTR/position for a window vs the previous window, across Google Search Console, Bing and GA4 organic sessions where connected, plus the share of anonymised queries and a 0-100 technical health score.',
 		schema: { ...siteArg, ...daysArg },
 		run: (a, sites) => {
 			const site = resolveSite(sites, a.site);
@@ -234,7 +236,11 @@ const TOOLS: Tool[] = [
 				period: { start: p.start, end: p.end, previous: { start: p.prevStart, end: p.prevEnd } },
 				google: { clicks: g.clicks, impressions: g.impressions, ctr: r2(ctrOf(g) * 100) + '%', position: r2(g.position), clicksChange: pctChange(g.clicks, gp.clicks), impressionsChange: pctChange(g.impressions, gp.impressions), anonymisedClickShare: anonymisedShare(site.id, p.start, p.end) },
 				bing: l.bing ? { clicks: bn.c ?? 0, impressions: bn.i ?? 0, clicksChange: pctChange(bn.c ?? 0, bp.c ?? 0) } : null,
-				ga4OrganicSearch: l.ga4 ? { sessions: gn.s ?? 0, keyEvents: gn.k ?? 0, sessionsChange: pctChange(gn.s ?? 0, gpv.s ?? 0) } : null
+				ga4OrganicSearch: l.ga4 ? { sessions: gn.s ?? 0, keyEvents: gn.k ?? 0, sessionsChange: pctChange(gn.s ?? 0, gpv.s ?? 0) } : null,
+				technicalHealth: (() => {
+					const h = healthScore(queueFor(site).open);
+					return { score: h.score, grade: h.grade, rule: '100 minus 20 per blocking technical finding and about 4 per other one (more when many clicks are at stake)', findings: h.findings.slice(0, 8).map((f) => ({ type: f.type, title: f.title, blocking: f.blocking, penalty: f.penalty })) };
+				})()
 			};
 		}
 	},
@@ -1342,6 +1348,17 @@ const TOOLS: Tool[] = [
 			const site = resolveSite(sites, a.site);
 			const q = quickWins(site, days(a));
 			return { site: displayName(site.site_url), days: q.days, groups: q.groups.map((g) => ({ group: g.key, title: g.title, found: g.total, effort: 'low', why: g.why, how: g.how, tab: g.tab, top: g.rows })) };
+		}
+	},
+	{
+		name: 'create_content_brief',
+		description: 'Content brief for one search from stored data (no credits): verdict (create, optimize, consolidate, or rework `page`) with why, related searches and questions to cover, an outline, pages to link from, volume if known.',
+		schema: { ...siteArg, query: { type: 'string' }, page: { type: 'string', description: 'Optional: a page URL to rework' } },
+		run: (a, sites) => {
+			const site = getSite(resolveSite(sites, a.site).id)!;
+			const page = a.page ? String(a.page) : undefined;
+			if (page && (!/^https?:\/\//.test(page) || !hostsMatch(page, site.site_url))) throw new Error('`page` must be a URL on this site.');
+			return contentBrief(site, String(a.query ?? ''), { page });
 		}
 	}
 ];

@@ -101,3 +101,50 @@ describe('learning from outcomes', () => {
 		expect(rankActions(items, { decay: 0.6, striking: 1.4 }).map((x) => x.key)).toEqual(['c', 'b', 'a']);
 	});
 });
+
+describe('the weekly digest by email', () => {
+	it('is emailed to DIGEST_EMAIL_TO (else ALERT_EMAIL_TO) when SMTP is set, alongside the webhook', async () => {
+		const { setMailSender } = await import('../src/lib/server/mail');
+		const { runWeeklyDigest, digestEmailTo } = await import('../src/lib/server/digest');
+		const keep = { s: process.env.SMTP_URL, f: process.env.ALERT_EMAIL_FROM, d: process.env.DIGEST_EMAIL_TO, w: process.env.DIGEST_WEBHOOK_URL };
+		const sent: { to: string[]; subject: string; text: string }[] = [];
+		try {
+			delete process.env.DIGEST_WEBHOOK_URL;
+			expect(digestEmailTo()).toEqual([]); // no SMTP: nothing
+			process.env.SMTP_URL = 'smtp://mail.example.com:587';
+			process.env.ALERT_EMAIL_FROM = 'SEOConsole <seo@example.com>';
+			process.env.DIGEST_EMAIL_TO = 'owner@example.com';
+			setMailSender(async (m) => void sent.push(m));
+			const r = await runWeeklyDigest({ force: true });
+			expect(r.created).toBe(true);
+			expect(sent).toHaveLength(1);
+			expect(sent[0].to).toEqual(['owner@example.com']);
+			expect(sent[0].subject).toMatch(/weekly digest/);
+			expect(sent[0].text).toMatch(/SEO digest, week ending/);
+		} finally {
+			setMailSender(null);
+			for (const [k, v] of [['SMTP_URL', keep.s], ['ALERT_EMAIL_FROM', keep.f], ['DIGEST_EMAIL_TO', keep.d], ['DIGEST_WEBHOOK_URL', keep.w]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
+		}
+	});
+});
+
+describe('content brief', () => {
+	it('optimise when a page already ranks; create when none does; rework a given page', async () => {
+		const { contentBrief, mainWords } = await import('../src/lib/server/brief');
+		const site = getSite(1)!;
+		const top = db().prepare("SELECT query, page, SUM(impressions) i, SUM(position*impressions)/SUM(impressions) p FROM sa_rows WHERE site_id = 1 GROUP BY query, page HAVING p <= 15 ORDER BY i DESC LIMIT 1").get() as { query: string; page: string };
+		const b = contentBrief(site, top.query);
+		expect(['optimize', 'consolidate']).toContain(b.verdict);
+		expect(b.targetPage).toBeTruthy();
+		expect(b.stats.impressions).toBeGreaterThan(0);
+		expect(b.outline.h1.toLowerCase()).toBe(top.query);
+		for (const r of b.related) expect(r.query).not.toBe(top.query);
+		const none = contentBrief(site, 'zzqx unheard of search');
+		expect(none.verdict).toBe('create');
+		expect(none.targetPage).toBeNull();
+		expect(none.why).toMatch(/None of your pages/);
+		expect(contentBrief(site, top.query, { page: top.page })).toMatchObject({ verdict: 'rework', targetPage: top.page });
+		expect(() => contentBrief(site, '   ')).toThrow(/Name the search/);
+		expect(mainWords('the best running shoes for women')).toEqual(['running', 'shoe', 'women']);
+	});
+});

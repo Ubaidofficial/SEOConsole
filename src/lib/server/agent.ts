@@ -23,11 +23,14 @@ import { callFor, chatAuth, chatEffort, mayUse, type ModelCall } from './chat';
 import { chooseProvider, chatSetupProblem } from './chatconfig';
 import { postWebhook, webhook } from './digest';
 import type { CurrentUser } from './roles';
+import type { ActionItem, ActionType } from '../actions';
+import { queueFor } from './actions';
+import { getSite } from './clients';
 
 type Msg = Anthropic.Beta.BetaMessageParam;
 type ToolResult = Anthropic.Beta.BetaToolResultBlockParam;
 
-import { agentEnabled, agentHourUtc, agentMaxRounds, agentRunsPerDay, runsToday } from './agentstatus';
+import { agentEnabled, agentHourUtc, agentMaxRounds, agentRunsPerDay, dayStart, runsToday } from './agentstatus';
 export { agentEnabled, agentHourUtc, agentMaxRounds, agentRunsPerDay, runsToday, setAgentEnabled } from './agentstatus';
 
 export const MAX_PROPOSALS_PER_RUN = 5;
@@ -44,6 +47,67 @@ const NO_LIVE_READS = new Set(['inspect_url', 'check_sitemap', 'get_sitemaps']);
 /** The agent as the tool layer sees it: read only, one site, its own id for the limits. */
 const agentAuth = (siteId: number): ToolAuth => ({ id: -900, name: 'Agent', permission: 'read', canWrite: false, scope: [siteId] }) as ToolAuth;
 
+/**
+ * Specialists: the same loop with a narrower brief and fewer tools, so each run goes deeper on one kind of problem and costs less
+ * context. Each day the steward picks, per site, the specialists whose kind of finding is open (blocking findings count five
+ * times), up to AGENT_SPECIALISTS_PER_SITE; with nothing open, the Performance specialist takes the daily look. "All-round" is
+ * the generalist (every read), for Run now.
+ */
+export type SpecialistKey = 'technical' | 'performance' | 'keyword' | 'content' | 'geo';
+export interface Specialist { key: SpecialistKey; name: string; focus: string; reads: string[]; proposals: string[]; triggers: ActionType[] }
+export const SPECIALISTS: Specialist[] = [
+	{
+		key: 'technical', name: 'Technical',
+		focus: 'anything that stops Google reaching, indexing or showing pages: indexing, sitemaps, robots.txt, broken links, Core Web Vitals and tracking. Start with get_overview (its technicalHealth) and get_action_queue.',
+		reads: ['get_overview', 'get_action_queue', 'get_alerts', 'get_indexing_status', 'get_sitemap_coverage', 'get_sitemap_lastmod_health', 'get_publishing_health', 'get_link_health', 'get_web_vitals', 'get_not_found_pages', 'get_submission_status', 'get_onpage_check', 'get_tracking_health', 'get_indexing_quotas'],
+		proposals: ['submit_sitemap', 'submit_urls_for_indexing', 'submit_indexnow', 'inspect_and_submit_urls', 'watch_urls', 'read_sitemaps', 'run_onpage_check', 'build_request_indexing_queue', 'mark_action'],
+		triggers: ['connection', 'tracking', 'blocked', 'robots', 'deindexed', 'dead', 'not-indexed', 'sitemap', 'lastmod', 'submitted', 'vitals', 'broken-links', 'audit', 'publishing']
+	},
+	{
+		key: 'performance', name: 'Performance',
+		focus: 'what changed in clicks and why: drops and rises, Google updates, new and lost searches, AI-assistant visits. After a fall call get_drop_diagnosis first and respect its hold.',
+		reads: ['get_overview', 'get_action_queue', 'get_alerts', 'get_drop_diagnosis', 'get_trends', 'get_update_impact', 'get_google_updates', 'get_performance', 'get_top_pages', 'get_top_queries', 'get_bing_performance', 'get_ai_traffic', 'get_change_log'],
+		proposals: ['log_change', 'close_alert', 'mark_action'],
+		triggers: ['sitewide', 'anomaly', 'update', 'test']
+	},
+	{
+		key: 'keyword', name: 'Keyword',
+		focus: 'which searches to win next: striking distance, CTR gaps, rising and question searches. For the best two, call create_content_brief and say whether to create a page or improve one.',
+		reads: ['get_action_queue', 'get_opportunities', 'get_quick_wins', 'get_keyword_buckets', 'get_rank_tracking', 'get_top_queries', 'get_niche_fit', 'get_research_findings', 'create_content_brief', 'get_openseo_project'],
+		proposals: ['track_queries', 'mark_action', 'start_seo_test'],
+		triggers: ['striking', 'ctr-gap', 'rising', 'questions', 'page-edge', 'gem', 'lost-query', 'device', 'bing']
+	},
+	{
+		key: 'content', name: 'Content',
+		focus: 'pages to rework: decaying pages, cannibalized searches, on-page gaps and missing internal links. For the most valuable page, call create_content_brief with its page and top search.',
+		reads: ['get_action_queue', 'get_opportunities', 'get_internal_link_suggestions', 'get_onpage_check', 'get_page_insights', 'create_content_brief', 'get_top_pages'],
+		proposals: ['run_onpage_check', 'mark_action', 'log_change', 'start_seo_test'],
+		triggers: ['decay', 'cannibalization', 'onpage', 'internal-link', 'engagement', 'friction', 'reclaim']
+	},
+	{
+		key: 'geo', name: 'AI visibility',
+		focus: 'how AI assistants mention, cite and send visits to the site, and pages they invent (not-found pages with AI visits).',
+		reads: ['get_ai_visibility', 'get_ai_traffic', 'get_not_found_pages', 'get_action_queue', 'get_top_pages'],
+		proposals: ['mark_action'],
+		triggers: []
+	}
+];
+export const specialistOf = (k: unknown) => SPECIALISTS.find((x) => x.key === k) ?? null;
+export const specialistsPerSite = () => {
+	const n = Number(env('AGENT_SPECIALISTS_PER_SITE', '2'));
+	return Number.isFinite(n) ? Math.min(SPECIALISTS.length, Math.max(1, Math.floor(n))) : 2;
+};
+
+/** Which specialists a site needs today, from its open findings and alerts; never empty (Performance takes a quiet day). */
+export function pickSpecialists(items: Pick<ActionItem, 'type' | 'blocking'>[], o: { openAlerts?: number; aiTracked?: boolean; max?: number } = {}): SpecialistKey[] {
+	const score = new Map<SpecialistKey, number>();
+	for (const sp of SPECIALISTS) score.set(sp.key, items.filter((a) => sp.triggers.includes(a.type)).reduce((n, a) => n + (a.blocking ? 5 : 1), 0));
+	if (o.openAlerts) score.set('performance', (score.get('performance') ?? 0) + 3 * o.openAlerts);
+	if (o.aiTracked) score.set('geo', (score.get('geo') ?? 0) + 1);
+	const picked = [...score].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1] || SPECIALISTS.findIndex((x) => x.key === a[0]) - SPECIALISTS.findIndex((x) => x.key === b[0])).map(([k]) => k);
+	return (picked.length ? picked : ['performance' as SpecialistKey]).slice(0, o.max ?? specialistsPerSite());
+}
+
 const SYSTEM = `You are SEOConsole's site steward: once a day you look after one website's search performance and write a short brief for its owner.
 
 How to work:
@@ -56,10 +120,11 @@ How to work:
 Write the brief in Markdown, under 250 words: a one-line headline; "What changed" (2-4 bullets with numbers); "Do first" (up to 3 items, each with its evidence and expected effect, from get_action_queue); "Proposals" (what you queued, or "none"); "Watching" (what you will check tomorrow).`;
 
 /** The tools offered to the agent: every read except the live-quota ones, plus the proposable changes, marked as proposals. */
-export function agentTools(): Anthropic.Beta.BetaTool[] {
+export function agentTools(spec: Specialist | null = null): Anthropic.Beta.BetaTool[] {
 	const tools: Anthropic.Beta.BetaTool[] = [];
 	for (const t of toolCatalog()) {
 		if (NO_LIVE_READS.has(t.name)) continue;
+		if (spec && !spec.reads.includes(t.name) && !spec.proposals.includes(t.name)) continue;
 		if (t.needs === 'read') tools.push({ name: t.name, description: t.description, input_schema: { type: 'object', properties: t.schema as Record<string, unknown> } });
 		else if (PROPOSABLE.has(t.name))
 			tools.push({ name: t.name, description: `(proposal: queued for a person to approve, does not run now) ${t.description}`, input_schema: { type: 'object', properties: { ...(t.schema as Record<string, unknown>), reason: { type: 'string', description: 'One sentence: why, with the evidence' } } } });
@@ -68,12 +133,19 @@ export function agentTools(): Anthropic.Beta.BetaTool[] {
 	return tools;
 }
 
-function params(messages: Msg[], model: string): BetaMessageStreamParams {
+function systemFor(spec: Specialist | null): string {
+	if (!spec) return SYSTEM;
+	return `${SYSTEM}
+
+Today you are the ${spec.name} specialist. Focus only on ${spec.focus} Other specialists cover the rest, so leave other kinds of problem out of the brief. Start the headline with "${spec.name}:".`;
+}
+
+function params(messages: Msg[], model: string, spec: Specialist | null = null): BetaMessageStreamParams {
 	return {
 		model,
 		max_tokens: 16_000,
-		system: SYSTEM,
-		tools: agentTools(),
+		system: systemFor(spec),
+		tools: agentTools(spec),
 		messages,
 		cache_control: { type: 'ephemeral' },
 		output_config: { effort: chatEffort() },
@@ -88,8 +160,8 @@ const cap = (data: unknown) => {
 };
 
 /** What the agent sees of yesterday: its last brief, and its recent proposals with what people did with them. */
-function memory(siteId: number): string {
-	const last = db().prepare("SELECT brief, started_at FROM agent_runs WHERE site_id = ? AND status = 'done' AND brief IS NOT NULL ORDER BY started_at DESC LIMIT 1").get(siteId) as { brief: string; started_at: number } | undefined;
+function memory(siteId: number, spec: Specialist | null = null): string {
+	const last = db().prepare("SELECT brief, started_at FROM agent_runs WHERE site_id = ? AND status = 'done' AND brief IS NOT NULL AND COALESCE(specialist, '') = ? ORDER BY started_at DESC LIMIT 1").get(siteId, spec?.key ?? '') as { brief: string; started_at: number } | undefined;
 	const props = db().prepare('SELECT tool, reason, status, created_at FROM agent_proposals WHERE site_id = ? ORDER BY created_at DESC LIMIT 15').all(siteId) as { tool: string; reason: string; status: string; created_at: number }[];
 	const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 	return [
@@ -103,8 +175,9 @@ export interface RunResult { runId: number | null; status: 'done' | 'error' | 's
 /**
  * One run for one site. `call` is swappable for tests. Never throws: a failure is stored on the run.
  */
-export async function runAgent(siteId: number, o: { trigger?: 'schedule' | 'manual'; call?: ModelCall; now?: number } = {}): Promise<RunResult> {
+export async function runAgent(siteId: number, o: { trigger?: 'schedule' | 'manual'; call?: ModelCall; now?: number; specialist?: SpecialistKey | null } = {}): Promise<RunResult> {
 	const now = o.now ?? Date.now();
+	const spec = o.specialist ? specialistOf(o.specialist) : null;
 	const site = allSites().find((s) => s.id === siteId);
 	if (!site) return { runId: null, status: 'skipped', message: 'Unknown or hidden site.', proposals: 0 };
 	const setup = chatSetupProblem();
@@ -115,19 +188,19 @@ export async function runAgent(siteId: number, o: { trigger?: 'schedule' | 'manu
 	const model = 'error' in choice ? 'test' : choice.model;
 	const call = o.call ?? callFor((choice as { provider: Parameters<typeof callFor>[0] }).provider);
 	const d = db();
-	const runId = Number(d.prepare("INSERT INTO agent_runs (site_id, trigger, started_at, status, model) VALUES (?, ?, ?, 'running', ?)").run(siteId, o.trigger ?? 'schedule', now, model).lastInsertRowid);
+	const runId = Number(d.prepare("INSERT INTO agent_runs (site_id, trigger, started_at, status, model, specialist) VALUES (?, ?, ?, 'running', ?, ?)").run(siteId, o.trigger ?? 'schedule', now, model, spec?.key ?? null).lastInsertRowid);
 	const auth = agentAuth(siteId);
 	const sites = [site];
 	const name = displayName(site.site_url);
 	const today = new Date(now).toISOString().slice(0, 10);
-	const messages: Msg[] = [{ role: 'user', content: `<context>Today is ${today}. The site is ${name} (site id ${site.id}). Pass site "${site.id}" to tools.\n\n${memory(siteId)}</context>\n\nWrite today's brief for ${name}.` }];
+	const messages: Msg[] = [{ role: 'user', content: `<context>Today is ${today}. The site is ${name} (site id ${site.id}). Pass site "${site.id}" to tools.\n\n${memory(siteId, spec)}</context>\n\nWrite today's ${spec ? `${spec.name} ` : ''}brief for ${name}.` }];
 	let rounds = 0, toolCalls = 0, inTok = 0, outTok = 0, proposals = 0;
 	const finish = (status: 'done' | 'error' | 'stopped', brief: string | null, error: string | null) =>
 		d.prepare('UPDATE agent_runs SET finished_at = ?, status = ?, rounds = ?, tool_calls = ?, input_tokens = ?, output_tokens = ?, brief = ?, error = ? WHERE id = ?').run(Date.now(), status, rounds, toolCalls, inTok, outTok, brief, error, runId);
 	try {
 		for (; rounds < agentMaxRounds(); ) {
 			rounds++;
-			const res = await call(params(messages, model), { signal: AbortSignal.timeout(180_000), onText: () => {}, onBlock: () => {} });
+			const res = await call(params(messages, model, spec), { signal: AbortSignal.timeout(180_000), onText: () => {}, onBlock: () => {} });
 			inTok += (res.usage?.input_tokens ?? 0) + (res.usage?.cache_read_input_tokens ?? 0) + (res.usage?.cache_creation_input_tokens ?? 0);
 			outTok += res.usage?.output_tokens ?? 0;
 			messages.push({ role: 'assistant', content: res.content } as Msg);
@@ -137,7 +210,7 @@ export async function runAgent(siteId: number, o: { trigger?: 'schedule' | 'manu
 				const brief = res.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('\n\n').trim();
 				if (!brief) return (finish('error', null, res.stop_reason === 'refusal' ? 'The model declined.' : 'The model wrote no brief.'), { runId, status: 'error', message: 'No brief.', proposals });
 				finish('done', brief.slice(0, 20_000), null);
-				audit('agent.run', { siteId, detail: `${rounds} model calls, ${toolCalls} tool calls, ${proposals} proposal(s)` });
+				audit('agent.run', { siteId, detail: `${spec ? spec.name + ': ' : ''}${rounds} model calls, ${toolCalls} tool calls, ${proposals} proposal(s)` });
 				if (proposals && webhook().url) await postWebhook(`SEOConsole agent: ${proposals} change(s) proposed for ${name}, waiting for approval on the Agent page.`, { agent: { site: name, runId, proposals } }).catch(() => {});
 				return { runId, status: 'done', message: 'Brief written.', proposals };
 			}
@@ -145,6 +218,10 @@ export async function runAgent(siteId: number, o: { trigger?: 'schedule' | 'manu
 			for (const b of uses) {
 				toolCalls++;
 				const input = { ...((b.input ?? {}) as Record<string, unknown>) };
+				if (spec && !spec.reads.includes(b.name) && !spec.proposals.includes(b.name)) {
+					results.push({ type: 'tool_result', tool_use_id: b.id, is_error: true, content: `${b.name} belongs to another specialist.` });
+					continue;
+				}
 				if (PROPOSABLE.has(b.name)) {
 					if (proposals >= MAX_PROPOSALS_PER_RUN) {
 						results.push({ type: 'tool_result', tool_use_id: b.id, is_error: true, content: `At most ${MAX_PROPOSALS_PER_RUN} proposals a day. Not queued.` });
@@ -177,8 +254,8 @@ export function dueSites(now = Date.now()): number[] {
 	if (!agentEnabled() || new Date(now).getUTCHours() < agentHourUtc()) return [];
 	const left = agentRunsPerDay() - runsToday(now);
 	if (left <= 0) return [];
-	const start = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
-	const ran = new Set((db().prepare('SELECT DISTINCT site_id FROM agent_runs WHERE started_at >= ?').all(start) as { site_id: number }[]).map((r) => r.site_id));
+	const start = dayStart(now);
+	const ran = new Set((db().prepare('SELECT DISTINCT site_id FROM agent_runs WHERE started_at >= ? AND started_at < ?').all(start, start + 86_400_000) as { site_id: number }[]).map((r) => r.site_id));
 	return allSites()
 		.filter((s) => s.synced_through && !['siteUnverifiedUser', 'none'].includes(s.permission) && !ran.has(s.id))
 		.map((s) => s.id)
@@ -188,8 +265,17 @@ export function dueSites(now = Date.now()): number[] {
 /** The scheduled runs, one site after another. */
 export async function runDueAgents(o: { call?: ModelCall; now?: number } = {}): Promise<RunResult[]> {
 	const out: RunResult[] = [];
-	for (const id of dueSites(o.now)) out.push(await runAgent(id, { trigger: 'schedule', ...o }));
+	for (const id of dueSites(o.now)) for (const k of specialistsFor(id)) out.push(await runAgent(id, { trigger: 'schedule', specialist: k, ...o }));
 	return out;
+}
+
+/** Today's specialists for a site, from its open queue, open alerts and whether it tracks AI answers. */
+export function specialistsFor(siteId: number): SpecialistKey[] {
+	const site = allSites().find((s) => s.id === siteId);
+	if (!site) return [];
+	const openAlerts = (db().prepare("SELECT COUNT(*) n FROM alert_events WHERE site_id = ? AND status = 'open' AND positive = 0").get(siteId) as { n: number }).n;
+	const aiTracked = !!db().prepare('SELECT 1 FROM ai_prompts WHERE site_id = ? LIMIT 1').get(siteId);
+	return pickSpecialists(queueFor(getSite(siteId)!).open, { openAlerts, aiTracked });
 }
 
 // ── the Agent page ───────────────────────────────────────────────────────────
@@ -208,7 +294,7 @@ export function listRuns(siteIds: number[] | null, limit = 30) {
 	return (db().prepare('SELECT * FROM agent_runs ORDER BY started_at DESC LIMIT ?').all(limit * 3) as Record<string, unknown>[])
 		.filter((r) => !siteIds || siteIds.includes(r.site_id as number))
 		.slice(0, limit)
-		.map((r) => ({ id: r.id as number, siteId: r.site_id as number, site: names.get(r.site_id as number) ?? String(r.site_id), trigger: r.trigger as string, startedAt: r.started_at as number, finishedAt: (r.finished_at as number | null) ?? null, status: r.status as string, model: (r.model as string | null) ?? null, rounds: r.rounds as number, toolCalls: r.tool_calls as number, inputTokens: r.input_tokens as number, outputTokens: r.output_tokens as number, brief: (r.brief as string | null) ?? null, error: (r.error as string | null) ?? null }));
+		.map((r) => ({ id: r.id as number, siteId: r.site_id as number, site: names.get(r.site_id as number) ?? String(r.site_id), trigger: r.trigger as string, startedAt: r.started_at as number, finishedAt: (r.finished_at as number | null) ?? null, status: r.status as string, specialist: specialistOf(r.specialist)?.name ?? null, model: (r.model as string | null) ?? null, rounds: r.rounds as number, toolCalls: r.tool_calls as number, inputTokens: r.input_tokens as number, outputTokens: r.output_tokens as number, brief: (r.brief as string | null) ?? null, error: (r.error as string | null) ?? null }));
 }
 
 /**

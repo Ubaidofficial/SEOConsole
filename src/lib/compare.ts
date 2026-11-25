@@ -57,7 +57,7 @@ export const COMPETITORS: Competitor[] = [
 			'A daily robots.txt watch that tests the pages earning clicks against the rules Googlebot obeys, not only whether the file changed.'
 		],
 		theyWin: [
-			'Its monthly report can be emailed; SEOConsole sends reports and alerts to Slack, Discord or a webhook only.',
+			'Its monthly report is a formatted document; SEOConsole sends plain-text reports and alerts to Slack, Discord, a webhook or email (through your own mail server).',
 			'It is hosted, supported and established: nothing to run, and it names customers on its site.'
 		],
 		rows: [
@@ -74,7 +74,7 @@ export const COMPETITORS: Competitor[] = [
 			{ group: 'Reports', feature: 'Quick wins (low-hanging fruit)', ours: y('A Quick wins tab: titles to rewrite, searches one push from page 1, question queries you already rank for, sitemap gaps.'), theirs: u() },
 			{ group: 'Reports', feature: 'AI-assistant traffic by page', ours: y('From Google Analytics referrers; an assistant that sends no referrer is missed.'), theirs: y('From Google Analytics data.') },
 			{ group: 'Reports', feature: 'Question-shaped queries', ours: y(), theirs: y() },
-			{ group: 'Reports', feature: 'Monthly plain-English report', ours: y('The last calendar month in sentences, per day against the month before and the same month last year, made on the 4th; to Slack, Discord or a webhook (no email).'), theirs: y('A forwardable monthly summary.') },
+			{ group: 'Reports', feature: 'Monthly plain-English report', ours: y('The last calendar month in sentences, per day against the month before and the same month last year, made on the 4th; to Slack, Discord, a webhook or email through your own mail server.'), theirs: y('A forwardable monthly summary.') },
 			{ group: 'Reports', feature: 'Daily watch for changes', ours: y('Traffic-drop detection, indexing-change events, daily sitemap reads and a daily robots.txt watch (changes kept, and pages with clicks tested against the rules Googlebot obeys).'), theirs: y('Pages that gained or lost clicks, new queries, sitemap and robots.txt changes.') },
 			{ group: 'Reports', feature: 'Internal-linking tool', ours: y('Free, with no credits: crawls up to 60 of your pages weekly (more if you set it) and suggests which pages should link to the ones ranking 4 to 20, with the anchor text already on the page. HTML only: JavaScript is not run.'), theirs: y('A monthly credit allowance per plan.') },
 			{ group: 'Beyond testing', feature: 'Indexing toolkit (submit, request list, re-checks, monitor)', ours: y('IndexNow, Bing and (for job and livestream pages) Google’s Indexing API, plus a Request Indexing list and day 1/3/5 re-checks.'), theirs: u() },
@@ -202,7 +202,7 @@ export const COMPETITORS: Competitor[] = [
 			{ group: 'Analysis', feature: 'AI-assistant traffic by page', ours: y('From GA4 referrers.'), theirs: y('An AI / LLM traffic view from GA4.') },
 			{ group: 'Analysis', feature: 'Core Web Vitals', ours: y('Field data from the Chrome UX Report, stored daily.'), theirs: y('CrUX field data with trends and alerts.') },
 			{ group: 'Indexing', feature: 'Indexing toolkit (IndexNow, Bing, inspection, monitoring)', ours: y('IndexNow, Bing, a Request Indexing list and day 1/3/5 re-checks.'), theirs: y('URL Inspection in bulk, IndexNow and an Index Tracker for up to 1,800 URLs a day.') },
-			{ group: 'Reports', feature: 'Scheduled reports and alerts', ours: y('A weekly digest, a monthly report and urgent alerts to Slack, Discord or a webhook.'), theirs: y('Daily, weekly and monthly reports to Slack; alerts to Slack, Teams and webhooks.') },
+			{ group: 'Reports', feature: 'Scheduled reports and alerts', ours: y('A weekly digest, a monthly report and urgent alerts to Slack, Discord, a webhook or email (your own SMTP server).'), theirs: y('Daily, weekly and monthly reports to Slack; alerts to Slack, Teams and webhooks.') },
 			{ group: 'Access', feature: 'MCP server for AI agents', ours: y('Reads by default; acting needs a level you grant.'), theirs: y('A remote MCP server on every plan.') },
 			{ group: 'Access', feature: 'Your data stays on your own server', ours: y('When self-hosted.'), theirs: n('Hosted; a dedicated server is offered on custom plans only.') },
 			{ group: 'Access', feature: 'Nothing to install or run', ours: n('Self-host only, for now.'), theirs: y('Hosted.') },
@@ -254,7 +254,7 @@ export const COMPETITORS: Competitor[] = [
 			{ group: 'Analysis', feature: 'Decay, cannibalization, striking distance and CTR gaps', ours: y(), theirs: y() },
 			{ group: 'Analysis', feature: 'AI-assistant traffic by page', ours: y('From GA4 referrers.'), theirs: y('AI assistants as a GA4 channel.') },
 			{ group: 'Indexing', feature: 'Indexing toolkit (IndexNow, Bing, inspection, monitoring)', ours: y('IndexNow, Bing, a Request Indexing list and day 1/3/5 re-checks.'), theirs: p('Page indexing checks at scale; IndexNow is not stated.') },
-			{ group: 'Reports', feature: 'Scheduled reports and alerts', ours: y('A weekly digest, a monthly report and urgent alerts to Slack, Discord or a webhook (no email or PDF).'), theirs: p('Weekly or monthly PDF reports by email; Slack is listed as coming soon.') },
+			{ group: 'Reports', feature: 'Scheduled reports and alerts', ours: y('A weekly digest, a monthly report and urgent alerts to Slack, Discord, a webhook or email through your own mail server (no PDF).'), theirs: p('Weekly or monthly PDF reports by email; Slack is listed as coming soon.') },
 			{ group: 'Access', feature: 'MCP server for AI agents', ours: y('Reads by default; acting needs a level you grant.'), theirs: y('On all plans; a REST API is not out yet (its own words).') },
 			{ group: 'Access', feature: 'Your data stays on your own server', ours: y('When self-hosted.'), theirs: n('Hosted, with exports to Sheets, CSV and PDF.') },
 			{ group: 'Access', feature: 'Nothing to install or run', ours: n('Self-host only, for now.'), theirs: y('Hosted.') },
@@ -291,7 +291,7 @@ export const COMPETITORS: Competitor[] = [
 			'IndexNow, Bing and sitemap submission from the app, a REST API, and basic AI prompt tracking with citation detection.'
 		],
 		theyWin: [
-			'White-labeled live client portals and shareable links, and email notifications; SEOConsole sends to Slack, Discord or a webhook only and has no client portal.',
+			'White-labeled live client portals and shareable links; SEOConsole sends to Slack, Discord, a webhook or email (your own mail server) and has no client portal.',
 			'One-click topic clustering and content groups, a Chrome extension for annotations, and automatic content change tracking.',
 			'Hosted and established: nothing to run, human onboarding and support, and it says 4,000+ SEO professionals use it (its own claim).'
 		],
@@ -310,7 +310,7 @@ export const COMPETITORS: Competitor[] = [
 			{ group: 'Indexing', feature: 'Sitemap submission from the app', ours: y('List, submit, resubmit and remove, per site and in bulk.'), theirs: n('Its FAQ says you still rely on Search Console for sitemap submissions.') },
 			{ group: 'Indexing', feature: 'Submit URLs to IndexNow and Bing', ours: y(), theirs: u() },
 			{ group: 'Reports', feature: 'Scheduled summaries', ours: y('A weekly digest, a monthly report and urgent alerts to Slack, Discord or a webhook.'), theirs: y('Weekly summaries; a weekly indexing report for Super Sites.') },
-			{ group: 'Reports', feature: 'Email delivery', ours: n('Webhook only: Slack, Discord or generic JSON.'), theirs: y('Email notification preferences for the weekly indexing report (its changelog, May 15, 2026).') },
+			{ group: 'Reports', feature: 'Email delivery', ours: y('Webhook (Slack, Discord or generic JSON) and email, through your own SMTP server, for the weekly digest, monthly report and alerts.'), theirs: y('Email notification preferences for the weekly indexing report (its changelog, May 15, 2026).') },
 			{ group: 'Reports', feature: 'Client portal and shareable links', ours: n('Not built: no client or white-label reports.'), theirs: y('White-labeled live client portals and “magic links” for stakeholders.') },
 			{ group: 'Access', feature: 'MCP server for AI agents', ours: y('Reads by default; acting needs a level you grant.'), theirs: y('For core and Super Sites (not free sites): Search Console, GA4 and annotation data, with annotations read and written.') },
 			{ group: 'Access', feature: 'REST API', ours: y('Read-only by default, with the same API keys as the MCP server.'), theirs: u() },
@@ -347,7 +347,7 @@ export const COMPETITORS: Competitor[] = [
 		theyWin: [
 			'Hosted and free for unlimited websites: nothing to install or run.',
 			'A weekly technical SEO audit of every site with a health score and 26 checks, including AI crawler access in robots.txt; SEOConsole checks pages one at a time and has no health score.',
-			'A weekly email and alert emails; SEOConsole sends to Slack, Discord or a webhook only.'
+			'Hosted weekly and alert emails with nothing to set up; SEOConsole emails through your own SMTP server, or sends to Slack, Discord or a webhook.'
 		],
 		rows: [
 			{ group: 'Data', feature: 'Many sites in one place', ours: y('No limit.'), theirs: y('Unlimited websites on the free plan.') },

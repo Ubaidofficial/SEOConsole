@@ -39,7 +39,7 @@ describe('the comparison pages are fair', () => {
 		const mustBeNo: [RegExp, string][] = [
 
 			[/Check any URL, such as backlinks/, 'indexchex'], [/Get third-party or backlink URLs crawled/, 'indexchex'], [/Instant/i, 'indexchex'],
-			[/AI crawler logs/, 'promptwatch'], [/^AI content writing/, 'seo-stack'], [/Email delivery/, 'seo-gets'], [/Client portal/, 'seo-gets'], [/Custom email reports/, 'powersearchconsole'],
+			[/AI crawler logs/, 'promptwatch'], [/^AI content writing/, 'seo-stack'], [/Client portal/, 'seo-gets'], [/Custom email reports/, 'powersearchconsole'],
 			[/Removals, Manual actions/, 'google-search-console'], [/Yandex Webmaster and Google Merchant Center/, 'gsc-wizard']
 		];
 		for (const [re, slug] of mustBeNo) {
@@ -47,6 +47,11 @@ describe('the comparison pages are fair', () => {
 			expect(row, `${slug}: ${re}`).toBeDefined();
 			expect(row!.ours.v, `${slug}: ${row!.feature}`).toBe('no');
 		}
+		// Email delivery is built (digests, monthly report and alerts through the operator's own SMTP server; tests/outcomes.test.ts), and the claim says so
+		const email = bySlug('seo-gets')!.rows.find((r) => /Email delivery/.test(r.feature))!;
+		expect(email.ours.v).toBe('yes');
+		expect(email.ours.note).toMatch(/your own SMTP server/);
+		expect(readFileSync('src/lib/server/digest.ts', 'utf8')).toMatch(/export const digestEmailTo/);
 		// LLM tests are built (tests/llm-tests.test.ts), and the claim carries its limit
 		const llm = bySlug('seotesting')!.rows.find((r) => /LLM tests/.test(r.feature))!;
 		expect(llm.ours.v).toBe('yes');
@@ -69,7 +74,7 @@ describe('the comparison pages are fair', () => {
 		// built since: the monthly report and the robots.txt watch, each a yes that names its limit, backed by the code
 		const monthly = bySlug('seotesting')!.rows.find((r) => /Monthly plain-English report/.test(r.feature))!;
 		expect(monthly.ours.v).toBe('yes');
-		expect(monthly.ours.note).toMatch(/no email/);
+		expect(monthly.ours.note).toMatch(/email through your own mail server/);
 		expect(readFileSync('src/lib/server/digest.ts', 'utf8')).toMatch(/export async function runMonthlyReport/);
 		const watch = bySlug('seotesting')!.rows.find((r) => /Daily watch/.test(r.feature))!;
 		expect(watch.ours.v).toBe('yes');

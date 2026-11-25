@@ -15,7 +15,7 @@
 </script>
 
 <PageHeader page="/agent" title="Agent" lead="A daily brief for each site, written by a model from your own data. It proposes changes; you approve them.">
-	<p>Once a day per site the agent reads the to-do list, alerts, the drop diagnosis, Google updates and whether earlier fixes worked, then writes a short brief.</p>
+	<p>Once a day per site it picks the specialists the open findings call for (Technical, Performance, Keyword, Content, AI visibility) and each writes a short brief from your data.</p>
 	<p>It changes nothing itself. A change it wants waits below until someone approves it, and then runs as that person, audited like any other change.</p>
 	<p>It uses the Ask chat's provider, so runs are billed there: at most <code>AGENT_RUNS_PER_DAY</code> runs a day and <code>AGENT_MAX_ROUNDS</code> model calls per run.</p>
 	{#snippet meta()}<StatusPill tone={data.enabled ? 'good' : 'muted'}>{data.enabled ? 'on' : 'off'}</StatusPill>{/snippet}
@@ -28,10 +28,11 @@
 
 <section class="card mb-4 flex flex-wrap items-center gap-3 p-4 text-sm">
 	<span>Runs today: <b>{data.budget.usedToday}</b> of {data.budget.perDay}</span>
-	<span class="text-muted-foreground">Daily runs start at {String(data.budget.hourUtc).padStart(2, '0')}:00 UTC</span>
+	<span class="text-muted-foreground">Daily runs start at {String(data.budget.hourUtc).padStart(2, '0')}:00 UTC, up to {data.budget.perSite} specialists per site</span>
 	{#if data.sites.length}
 		<form method="POST" action="?/run" use:enhance={() => { busy = true; return async ({ update }) => { await update(); busy = false; }; }} class="ml-auto flex items-center gap-2">
-			<select class="input pii !h-8 !py-0 text-sm" name="siteId" aria-label="Site">{#each data.sites as s}<option value={s.id}>{s.name}</option>{/each}</select>
+			<select class="input pii !h-8 !py-0 text-sm" name="siteId" aria-label="Site">{#each data.sites as s}<option value={s.id}>{s.name} · today: {s.today.join(', ')}</option>{/each}</select>
+			<select class="input !h-8 !py-0 text-sm" name="specialist" aria-label="Specialist"><option value="auto">Picked from findings</option>{#each data.specialists as sp}<option value={sp.key}>{sp.name}</option>{/each}<option value="all">All-round</option></select>
 			<button class="btn btn-sm" disabled={busy || !!data.setupProblem}><Play class="size-3.5" />{busy ? 'Writing…' : 'Run now'}</button>
 		</form>
 	{/if}
@@ -61,7 +62,7 @@
 	<div class="space-y-3">
 		{#each data.runs as r (r.id)}
 			<details class="card p-4" open={r === data.runs[0]}>
-				<summary class="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm [&::-webkit-details-marker]:hidden"><span class="pii font-medium">{r.site}</span><span class="text-xs text-muted-foreground">{new Date(r.startedAt).toLocaleString()} · {r.trigger}</span>
+				<summary class="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm [&::-webkit-details-marker]:hidden"><span class="pii font-medium">{r.site}</span><span class="chip">{r.specialist ?? 'All-round'}</span><span class="text-xs text-muted-foreground">{new Date(r.startedAt).toLocaleString()} · {r.trigger}</span>
 					<StatusPill tone={r.status === 'done' ? 'good' : r.status === 'running' ? 'info' : 'bad'}>{r.status}</StatusPill>
 					<span class="ml-auto text-xs text-muted-foreground">{r.rounds} model calls · {r.toolCalls} tool calls · {(r.inputTokens + r.outputTokens).toLocaleString()} tokens</span></summary>
 				{#if r.html}<div class="md pii mt-3 text-sm">{@html r.html}</div>{:else if r.error}<p class="mt-2 text-sm text-bad">{r.error}</p>{/if}

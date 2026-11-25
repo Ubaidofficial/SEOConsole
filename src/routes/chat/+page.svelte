@@ -6,6 +6,7 @@
 	import ChatChart from '$lib/components/ChatChart.svelte';
 	import { renderMarkdown } from '$lib/markdown';
 	import type { ApprovalItem, ChatEvent, ChatItem, ToolActivity } from '$lib/chat';
+	import { splitFollowUps } from '$lib/chat';
 
 	let { data } = $props();
 
@@ -297,9 +298,15 @@
 					{#if item.kind === 'user'}
 						<li class="flex justify-end"><div class="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap text-primary-foreground">{item.text}</div></li>
 					{:else if item.kind === 'text'}
+						{@const parts = splitFollowUps(item.text)}
 						<li class="flex gap-3">
 							<div class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg border bg-card {items[i - 1]?.kind === 'user' ? '' : 'invisible'}"><img src="/brand/mark-glyph.svg" alt="" class="size-4" /></div>
-							<div class="md min-w-0 flex-1 text-[14px] leading-relaxed">{@html renderMarkdown(item.text)}</div>
+							<div class="min-w-0 flex-1">
+								<div class="md text-[14px] leading-relaxed">{@html renderMarkdown(parts.body)}</div>
+								{#if parts.followUps.length && !busy && !approvals.length && i === items.length - 1}
+									<div class="mt-3 flex flex-wrap gap-1.5" aria-label="Suggested follow-up questions">{#each parts.followUps as f}<button type="button" class="chip hover:bg-accent" onclick={() => ask(f)}>{f}</button>{/each}</div>
+								{/if}
+							</div>
 						</li>
 					{:else if item.kind === 'tool'}
 						{@const Icon = toolIcon[item.tool.status]}

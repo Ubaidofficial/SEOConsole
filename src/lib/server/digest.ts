@@ -12,6 +12,7 @@ import { queueFor } from './actions';
 import { recentEvents } from './indexmon';
 import { updatesBetween } from './gupdates';
 import { evaluateTestCached, listTests, mainResult } from './seotests';
+import { mailConfig, parseRecipients, sendMail } from './mail';
 
 const visibleSites = () => allSites().filter((s) => !['siteUnverifiedUser', 'none'].includes(s.permission));
 const keyed = (rows: { query?: string; page?: string; clicks: number; impressions: number; position: number }[]): Keyed[] => rows.map((r) => ({ key: (r.query ?? r.page)!, clicks: r.clicks, impressions: r.impressions, position: r.position }));
@@ -134,6 +135,18 @@ const digestDay = () => { const n = Number(env('DIGEST_DAY', '1')); return Numbe
  * Make this week's digest if it has not been made yet (a server that was off on Monday catches up as soon as it is on), store
  * it, and send it if a webhook is configured. `force` makes an extra one by hand.
  */
+/** Who gets the weekly digest and the monthly report by email: DIGEST_EMAIL_TO, else ALERT_EMAIL_TO; none when email is not set up. */
+export const digestEmailTo = (): string[] => (mailConfig() ? parseRecipients(env('DIGEST_EMAIL_TO') || env('ALERT_EMAIL_TO')).list : []);
+
+/** Email a newly made digest or report as plain text (alongside the webhook). A failure is recorded, never thrown. */
+async function emailDigest(subject: string, text: string): Promise<string | null> {
+	const to = digestEmailTo();
+	if (!to.length) return null;
+	const r = await sendMail(to, subject, text);
+	audit(r.ok ? 'digest.emailed' : 'digest.email_failed', { detail: r.message });
+	return r.message;
+}
+
 export async function runWeeklyDigest(o: { force?: boolean; fetchImpl?: typeof fetch; today?: string } = {}): Promise<{ id: number | null; created: boolean; delivery: string; message: string | null }> {
 	const weekKey = dueWeekKey(o.today ?? pacificToday(), digestDay());
 	const existing = o.force ? undefined : (db().prepare("SELECT id, payload, delivery FROM digests WHERE kind = 'weekly' AND week_key = ?").get(weekKey) as { id: number; payload: string; delivery: string } | undefined);
@@ -155,6 +168,8 @@ export async function runWeeklyDigest(o: { force?: boolean; fetchImpl?: typeof f
 		const r = await postWebhook(renderText(digest, config.origin), digest, o.fetchImpl);
 		d = { delivery: r.ok ? 'sent' : 'failed', at: r.ok ? Date.now() : null, message: r.message };
 	}
+	const emailed = await emailDigest(`SEOConsole weekly digest · week ending ${digest.weekEnd}`, renderText(digest, config.origin));
+	if (emailed) d.message = [d.message, emailed].filter(Boolean).join(' ');
 	const id = record('weekly', o.force ? null : weekKey, digest, d);
 	audit('digest.created', { detail: `${o.force ? 'manual' : weekKey} · ${d.delivery}` });
 	return { id, created: true, delivery: d.delivery, message: d.message };
@@ -323,6 +338,8 @@ export async function runMonthlyReport(o: { force?: boolean; fetchImpl?: typeof 
 		const r = await postWebhook(renderMonthly(report, config.origin), report, o.fetchImpl);
 		d = { delivery: r.ok ? 'sent' : 'failed', at: r.ok ? Date.now() : null, message: r.message };
 	}
+	const emailed = await emailDigest(`SEOConsole monthly report · ${monthLabel(ym)}`, renderMonthly(report, config.origin));
+	if (emailed) d.message = [d.message, emailed].filter(Boolean).join(' ');
 	const id = record('monthly', o.force ? null : ym, report, d);
 	audit('digest.monthly', { detail: `${o.force ? 'manual ' : ''}${ym} · ${d.delivery}` });
 	return { id, created: true, delivery: d.delivery, message: d.message };
