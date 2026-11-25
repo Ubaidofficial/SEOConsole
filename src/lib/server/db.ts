@@ -1140,6 +1140,9 @@ export function openDb(path: string): Database.Database {
 		}
 	}
 	const db = new Database(path);
+	// When another connection holds the write lock (a second container during a deploy, the backup, a CLI), wait up to 5 seconds
+	// for it instead of failing at once with "database is locked". Set first: switching to WAL takes a lock too.
+	db.pragma('busy_timeout = 5000');
 	db.pragma('journal_mode = WAL');
 	db.pragma('foreign_keys = ON');
 	db.pragma('synchronous = NORMAL');
