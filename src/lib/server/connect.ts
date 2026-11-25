@@ -250,8 +250,17 @@ export async function connectOpenSeo(baseUrl: string, apiKey: string) {
 	const id = saveIntegration('openseo', new URL(base).host, { apiKey: apiKey.trim() }, { baseUrl: base }, demo);
 	const { matched, linkedProjects } = matchOpenSeo(id, projects, false);
 	const unmatchedProjects = projects.filter((p) => !linkedProjects.has(p.id)).map((p) => `${p.name}${p.domain ? ` (${p.domain})` : ''}`);
+	// Links made by hand (a site whose domain differs from its project's) move to the new connection when the project still
+	// exists there; removing the old connection would otherwise delete them with it.
+	const ids = new Set(projects.map((p) => p.id));
+	const move = db().prepare("UPDATE site_links SET integration_id = ? WHERE kind = 'openseo' AND integration_id = ? AND external_id = ?");
+	for (const old of listIntegrations('openseo'))
+		if (old.id !== id)
+			for (const l of db().prepare("SELECT external_id FROM site_links WHERE kind = 'openseo' AND integration_id = ?").all(old.id) as { external_id: string }[])
+				if (ids.has(l.external_id)) move.run(id, old.id, l.external_id);
 	// Replace any older OpenSEO connection that no longer has links.
 	for (const old of listIntegrations('openseo')) if (old.id !== id) removeIntegration(old.id);
+	cacheOpenSeoProjects(projects);
 	audit('openseo.connected', { detail: base });
 	return { id, matched, projects: projects.length, unmatchedProjects };
 }
@@ -293,6 +302,7 @@ export async function autoLinkNewSites() {
 	if (o && pending('openseo')) {
 		try {
 			const projects = o.is_demo ? demoOpenSeoProjects() : await listOpenSeoProjects(integrationMeta(o).baseUrl, integrationSecret<{ apiKey: string }>(o).apiKey);
+			cacheOpenSeoProjects(projects);
 			out.openseo = matchOpenSeo(o.id, projects, true).matched;
 		} catch (e) {
 			note('OpenSEO', e);
@@ -301,6 +311,43 @@ export async function autoLinkNewSites() {
 	const total = out.ga4 + out.gtm + out.bing + out.openseo;
 	if (total) audit('links.auto', { detail: `linked automatically: GA4 ${out.ga4}, Tag Manager ${out.gtm}, Bing ${out.bing}, OpenSEO ${out.openseo}` });
 	return out;
+}
+
+// ── OpenSEO by hand ──────────────────────────────────────────────────────────
+type ProjectBrief = { id: string; name: string; domain: string | null };
+const PROJECTS_KEY = 'openseo_projects';
+
+function cacheOpenSeoProjects(projects: { id: string; name: string; domain?: string | null }[]) {
+	const brief: ProjectBrief[] = projects.map((p) => ({ id: p.id, name: p.name, domain: p.domain ?? null }));
+	db().prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run(PROJECTS_KEY, JSON.stringify(brief));
+}
+
+/** The OpenSEO projects as last read (on connecting, nightly, or when a site is linked by hand), for the Connect page's picker. */
+export function cachedOpenSeoProjects(): ProjectBrief[] {
+	const row = db().prepare('SELECT value FROM kv WHERE key = ?').get(PROJECTS_KEY) as { value: string } | undefined;
+	try {
+		const v = row ? (JSON.parse(row.value) as unknown) : [];
+		return Array.isArray(v) ? (v as ProjectBrief[]).filter((p) => p && typeof p.id === 'string' && typeof p.name === 'string') : [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Link a site to an OpenSEO project chosen by hand, for a site whose domain is not the project's (a renamed or redirected site,
+ * for example). The project list is read again from OpenSEO, so only a project that exists there can be linked.
+ */
+export async function linkOpenSeoManually(siteId: number, projectId: string, o: { list?: typeof listOpenSeoProjects } = {}) {
+	const integ = listIntegrations('openseo')[0];
+	if (!integ) throw new Error('Connect OpenSEO first.');
+	if (!allSites().some((s) => s.id === siteId)) throw new Error('Unknown site.');
+	const projects = integ.is_demo ? demoOpenSeoProjects() : await (o.list ?? listOpenSeoProjects)(integrationMeta(integ).baseUrl, integrationSecret<{ apiKey: string }>(integ).apiKey);
+	cacheOpenSeoProjects(projects);
+	const p = projects.find((x) => x.id === projectId);
+	if (!p) throw new Error('That OpenSEO project no longer exists. Reload the page and choose again.');
+	setLink(siteId, 'openseo', { integrationId: integ.id, externalId: p.id, label: p.name });
+	audit('openseo.linked', { siteId, detail: `${p.name}${p.domain ? ` (${p.domain})` : ''}, by hand` });
+	return p;
 }
 
 export const openSeoProjectUrl = (integrationId: number | null, projectId: string) => {

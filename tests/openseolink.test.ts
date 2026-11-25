@@ -4,7 +4,7 @@ import { ensureDemoAccounts } from '../src/lib/server/accounts';
 import { syncSite } from '../src/lib/server/sync';
 import { DemoClient } from '../src/lib/server/demo';
 import { getSite } from '../src/lib/server/clients';
-import { connectOpenSeo } from '../src/lib/server/connect';
+import { cachedOpenSeoProjects, connectOpenSeo, linkOpenSeoManually } from '../src/lib/server/connect';
 import { buildActions } from '../src/lib/server/actions';
 import { fetchVolumes, openSeoFor, storedAudit, syncAudit, trackCandidates, trackPreview, trackSend, volumeCandidates, volumesFor, type OseoApi } from '../src/lib/server/openseolink';
 
@@ -39,6 +39,17 @@ describe('linking', () => {
 	it('the demo site is linked to its OpenSEO project by domain', () => {
 		expect(openSeoFor(1)?.projectId).toBe('demo-proj-greenleaf');
 		expect(openSeoFor(2)).toBeNull(); // pixelforge has no OpenSEO project
+	});
+	it('a site whose domain is not its project\'s is linked by hand, and the link survives a reconnect', async () => {
+		expect(cachedOpenSeoProjects().map((p) => p.id)).toContain('demo-proj-greenleaf');
+		await expect(linkOpenSeoManually(2, 'no-such-project')).rejects.toThrow(/no longer exists/);
+		const p = await linkOpenSeoManually(2, 'demo-proj-greenleaf');
+		expect(p.id).toBe('demo-proj-greenleaf');
+		expect(openSeoFor(2)?.projectId).toBe('demo-proj-greenleaf');
+		await connectOpenSeo('https://openseo.example', 'demo');
+		expect(openSeoFor(2)?.projectId).toBe('demo-proj-greenleaf');
+		db().prepare("DELETE FROM site_links WHERE site_id = 2 AND kind = 'openseo'").run();
+		expect(openSeoFor(2)).toBeNull();
 	});
 });
 

@@ -6,7 +6,7 @@ import { allSites } from '$lib/server/queries';
 import { displayName } from '$lib/server/clients';
 import { listAccounts } from '$lib/server/accounts';
 import { allCandidates, allLinks, integrationMeta, linksFor, listIntegrations, removeIntegration, removeLink, setLink, skipAutoLink, type LinkKind } from '$lib/server/links';
-import { autoMatchGa4, autoMatchGtm, connectBingKey, connectClarity, connectCrux, connectOpenSeo, hasGa4Scope, hasGtmScope, linkGtmManually } from '$lib/server/connect';
+import { autoMatchGa4, autoMatchGtm, cachedOpenSeoProjects, connectBingKey, connectClarity, connectCrux, connectOpenSeo, hasGa4Scope, hasGtmScope, linkGtmManually, linkOpenSeoManually } from '$lib/server/connect';
 import { callsLeft } from '$lib/server/clarity';
 import { enqueueDaAll, enqueueDrAll, enqueueLinkSync } from '$lib/server/jobs';
 import { gtmSnapshot } from '$lib/server/tracking';
@@ -17,6 +17,7 @@ import { intParam } from '$lib/server/params';
 import { env } from '$lib/server/config';
 import { MozError, connectMoz, disconnectMoz, mozIntegration, mozStatus } from '$lib/server/moz';
 import { AhrefsError, ahrefsIntegration, ahrefsStatus, connectAhrefs, disconnectAhrefs } from '$lib/server/ahrefs';
+import { contractEvents, contractStatus, runContractChecks } from '$lib/server/contracts';
 import { SWITCHES, applyToAll, available, counts, getDefaults, isSwitchKey, setDefault } from '$lib/server/automation';
 
 const KINDS: LinkKind[] = ['bing', 'ga4', 'gtm', 'clarity', 'openseo'];
@@ -57,6 +58,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			const defaults = getDefaults();
 			return { total: c.total, switches: SWITCHES.map((w) => ({ key: w.key, label: w.label, what: w.what, cost: w.cost, available: available(w.key), on: c.on[w.key], newSites: defaults[w.key] })) };
 		})(),
+		apiChecks: { rows: contractStatus(), events: contractEvents(15) },
 		crux: crux ? { demo: !!crux.is_demo, sites: (db().prepare('SELECT COUNT(DISTINCT site_id) n FROM crux_daily').get() as { n: number }).n } : null,
 		demo: config.demo,
 		bingOAuth: !!env('BING_CLIENT_ID') && !!env('BING_CLIENT_SECRET'),
@@ -64,7 +66,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		flash: url.searchParams.get('flash'),
 		accounts: accounts.map((a) => ({ id: a.id, email: a.label ?? a.email, status: a.status, ga4: hasGa4Scope(a), gtm: hasGtmScope(a), demo: !!a.is_demo })),
 		bing,
-		openseo: openseo ? { baseUrl: integrationMeta(openseo).baseUrl, demo: !!openseo.is_demo, linked: links.filter((l) => l.kind === 'openseo').length } : null,
+		openseo: openseo ? { baseUrl: integrationMeta(openseo).baseUrl, demo: !!openseo.is_demo, linked: links.filter((l) => l.kind === 'openseo').length, projects: cachedOpenSeoProjects() } : null,
 		progress: Object.fromEntries(KINDS.map((k) => [k, links.filter((l) => l.kind === k).length])) as Record<LinkKind, number>,
 		total: sites.length,
 		rows: sites.map((s) => {
@@ -212,6 +214,14 @@ export const actions: Actions = {
 				return fail(400, { error: msg(e), section: 'gtm' });
 			}
 		}
+		if (kind === 'openseo') {
+			try {
+				const p = await linkOpenSeoManually(siteId, ext);
+				return { ok: `Linked to the OpenSEO project ${p.name}.`, section: 'openseo' };
+			} catch (e) {
+				return fail(400, { error: msg(e), section: 'openseo' });
+			}
+		}
 		if (kind === 'ga4') {
 			if (!/^properties\/\d+$/.test(ext)) return fail(400, { error: 'GA4 property must look like properties/123456789.', section: 'ga4' });
 			const site = allSites().find((s) => s.id === siteId);
@@ -295,6 +305,13 @@ export const actions: Actions = {
 		const siteId = intParam((await request.formData()).get('siteId'));
 		await checkClarityNow(siteId).catch(() => {});
 		return { section: 'setup', checked: true };
+	},
+	/** Run the live API checks now (normally once a day). */
+	apiCheck: async () => {
+		if (config.demo) return fail(400, { error: 'Demo mode has no live APIs to check.', section: 'apicheck' });
+		const r = await runContractChecks({ notify: false });
+		const bad = r.filter((x) => x.status === 'drift' || x.status === 'error').length;
+		return { ok: `Checked ${r.filter((x) => x.status !== 'skipped').length} API(s)${bad ? `; ${bad} need a look` : ', all as expected'}.`, section: 'apicheck' };
 	},
 	openseoRemove: async () => {
 		for (const i of listIntegrations('openseo')) removeIntegration(i.id);

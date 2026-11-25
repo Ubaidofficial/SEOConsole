@@ -928,6 +928,82 @@ CREATE TABLE IF NOT EXISTS alert_events (            -- one alert: opened when a
 );
 CREATE INDEX IF NOT EXISTS alert_events_site ON alert_events(site_id, active, status);
 CREATE INDEX IF NOT EXISTS alert_events_status ON alert_events(status, opened_at);
+
+CREATE TABLE IF NOT EXISTS action_outcomes (          -- a finding marked done, measured again 28 days later (src/lib/server/outcomes.ts)
+	id INTEGER PRIMARY KEY,
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	key TEXT NOT NULL,
+	type TEXT NOT NULL,
+	title TEXT NOT NULL,
+	impact REAL,                        -- the queue's estimate when it was marked done
+	confidence TEXT,
+	scope_kind TEXT NOT NULL,           -- page | query | site
+	scope_value TEXT,
+	done_at INTEGER NOT NULL,
+	day0 TEXT NOT NULL,                 -- the newest data day when it was marked done
+	before_clicks INTEGER NOT NULL,     -- the scope's clicks over the 28 days up to day0
+	site_before INTEGER NOT NULL,
+	after_clicks INTEGER,               -- the 28 days after day0, once they are in the data
+	site_after INTEGER,
+	expected REAL,                      -- what the scope would have had moving like the rest of the site
+	lift REAL,
+	verdict TEXT,                       -- improved | worse | no-clear-change | too-little-data; NULL while pending
+	still_detected INTEGER,
+	evaluated_at INTEGER,
+	UNIQUE (site_id, key, day0)
+);
+CREATE INDEX IF NOT EXISTS action_outcomes_pending ON action_outcomes(site_id, verdict);
+
+CREATE TABLE IF NOT EXISTS api_contracts (            -- the shape of each live API answer the app relies on (src/lib/server/contracts.ts)
+	probe TEXT PRIMARY KEY,             -- e.g. gsc.sites, ga4.runReport
+	source TEXT NOT NULL,
+	shape TEXT,                         -- JSON list of key paths seen in the answer
+	checked_at INTEGER NOT NULL,
+	ok_at INTEGER,
+	status TEXT NOT NULL,               -- ok | drift | error | skipped
+	message TEXT
+);
+CREATE TABLE IF NOT EXISTS api_contract_events (
+	id INTEGER PRIMARY KEY,
+	at INTEGER NOT NULL,
+	probe TEXT NOT NULL,
+	kind TEXT NOT NULL,                 -- baseline | drift | error | recovered
+	added TEXT,                         -- JSON lists of key paths
+	removed TEXT,
+	message TEXT
+);
+CREATE INDEX IF NOT EXISTS api_contract_events_at ON api_contract_events(at);
+
+CREATE TABLE IF NOT EXISTS agent_runs (               -- the in-app agent's daily look at a site (src/lib/server/agent.ts)
+	id INTEGER PRIMARY KEY,
+	site_id INTEGER REFERENCES sites(id) ON DELETE CASCADE,
+	trigger TEXT NOT NULL,              -- schedule | manual
+	started_at INTEGER NOT NULL,
+	finished_at INTEGER,
+	status TEXT NOT NULL,               -- running | done | error | stopped
+	model TEXT,
+	rounds INTEGER NOT NULL DEFAULT 0,
+	tool_calls INTEGER NOT NULL DEFAULT 0,
+	input_tokens INTEGER NOT NULL DEFAULT 0,
+	output_tokens INTEGER NOT NULL DEFAULT 0,
+	brief TEXT,                         -- the agent's written brief (markdown)
+	error TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_runs_site ON agent_runs(site_id, started_at);
+CREATE TABLE IF NOT EXISTS agent_proposals (          -- a change the agent wants made; nothing runs until a person approves it
+	id INTEGER PRIMARY KEY,
+	run_id INTEGER REFERENCES agent_runs(id) ON DELETE CASCADE,
+	site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+	tool TEXT NOT NULL,
+	args TEXT NOT NULL,                 -- JSON
+	reason TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'pending', -- pending | done | failed | declined
+	result TEXT,
+	created_at INTEGER NOT NULL,
+	decided_at INTEGER,
+	decided_by TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_proposals_status ON agent_proposals(status, site_id);
 `;
 
 declare global {

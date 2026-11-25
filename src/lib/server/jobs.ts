@@ -16,7 +16,8 @@ import { ensureGa4TestData } from './ga4tests';
 import { runMonthlyReport, runUrgentAlerts, runWeeklyDigest } from './digest';
 import { runAlertRules } from './alerts';
 import { deleteExpiredSites } from './duplicates';
-import { actionsFor } from './actions';
+import { actionsFor, evaluateAllOutcomes } from './actions';
+import { runContractChecks } from './contracts';
 import { getSite } from './clients';
 import { importGoogleUpdates, lastUpdatesCheck } from './gupdates';
 import { syncSitemapUrls } from './sitemapcov';
@@ -194,6 +195,15 @@ const REFRESH_MS: Record<string, number> = { bing: 12 * 3600_000, ga4: SIX_HOURS
 /** Whether the indexing monitor should run for a site now: switched on, not yet done today, and not in a back-off after a failure. */
 export const monitorDue = (row: { m: number; c: string | null; n: number | null }, today: string, now = Date.now()) => !!row.m && row.c !== today && (!row.n || row.n <= now);
 
+/** True (and the time noted) when `key` was last noted more than `ms` ago or never: a once-in-a-while gate kept in the kv table. */
+export function kvOlderThan(key: string, ms: number, now = Date.now()): boolean {
+	const d = db();
+	const last = Number((d.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined)?.value ?? 0);
+	if (now - last <= ms) return false;
+	d.prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run(key, String(now));
+	return true;
+}
+
 export function schedulerTick() {
 	const d = db();
 	// The weekly digest (made once per week, catching up if the server was off on the day) and urgent alerts (every few hours).
@@ -222,6 +232,13 @@ export function schedulerTick() {
 	if (!process.env.VITEST && backupDue()) enqueue('backup', async () => void (await runBackup()));
 	// AI visibility: prompts due for another answer, one at a time, within the daily cap (they cost money on the owner's API accounts).
 	if (!process.env.VITEST && aiVisDue()) enqueue('aivis', () => runAiVis());
+	// Findings marked done are measured again once 28 more days of data are in (src/lib/server/outcomes.ts): cheap, stored data only.
+	if (!process.env.VITEST && kvOlderThan('outcomes_checked', SIX_HOURS)) enqueue('outcomes', async () => void evaluateAllOutcomes());
+	// The in-app agent (src/lib/server/agent.ts): off until switched on; each site once a day from AGENT_HOUR_UTC, within the daily budget.
+	// Imported when needed: it pulls in the chat and the tool layer, which import this module.
+	if (!process.env.VITEST) enqueue('agent', async () => { const a = await import('./agent'); if (a.dueSites().length) await a.runDueAgents(); });
+	// Live API checks (src/lib/server/contracts.ts): one small read per API a day, to notice a renamed or missing field early.
+	if (!process.env.VITEST && !config.demo && kvOlderThan('contracts_checked', 20 * 3600_000)) enqueue('contracts', async () => void (await runContractChecks()));
 	// Google's list of ranking updates changes a few times a year: a daily look is plenty, and a failure just waits for tomorrow.
 	if (!process.env.VITEST && Date.now() - (lastUpdatesCheck() ?? 0) > 20 * 3600_000) void importGoogleUpdates();
 	const sites = d
@@ -308,7 +325,8 @@ export function startScheduler() {
 	setTimeout(schedulerTick, 3000);
 	globalThis.__openSiteConsoleScheduler = setInterval(() => {
 		schedulerTick();
-		if (new Date().getUTCHours() === 3) void refreshAllAccountSites();
+		// Once a night: the tick runs four times in hour 3, so the day it last ran is remembered.
+		if (new Date().getUTCHours() === 3 && kvOlderThan('properties_refreshed', 20 * 3600_000)) void refreshAllAccountSites();
 	}, 15 * 60_000);
 	globalThis.__openSiteConsoleScheduler.unref?.();
 }

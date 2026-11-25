@@ -4,6 +4,8 @@
 #   - the branch lives in this repository (never a fork) and starts with claude/
 #   - the pull request was opened by the repository owner, is not a draft, and has no "hold" label
 #   - CI passed on the exact commit that is merged (the merge is refused if the branch moved since)
+#   - it was not proposed by an unattended agent: a branch starting with claude/agent- or the "agent-proposed" label waits for
+#     a person, so a scheduled session's change is never merged and deployed without someone reading it
 # Add the "hold" label, or mark the pull request as a draft, to keep one open.
 #
 # A merge made with the workflow's own token does not start other workflows on main (a GitHub rule), so this workflow starts
@@ -52,8 +54,10 @@ jobs:
           head=$(jq -r .head.sha <<<"$pr")
           base=$(jq -r .base.ref <<<"$pr")
           hold=$(jq -r '[.labels[].name] | index("hold") != null' <<<"$pr")
+          agent=$(jq -r '[.labels[].name] | index("agent-proposed") != null' <<<"$pr")
           if [ "${author,,}" != "${OWNER,,}" ]; then echo "#$num was opened by $author, not the owner: left for a person."; exit 0; fi
           if [ "$draft" = "true" ] || [ "$hold" = "true" ]; then echo "#$num is a draft or labelled hold: left open."; exit 0; fi
+          if [ "$agent" = "true" ] || [[ "$BRANCH" == claude/agent-* ]]; then echo "#$num was proposed by an unattended agent: left for a person to review and merge."; exit 0; fi
           if [ "$head" != "$SHA" ]; then echo "#$num has moved on since CI passed ($SHA → $head): waiting for CI on the new commit."; exit 0; fi
           if [ "$base" != "main" ]; then echo "#$num targets $base, not main: left open."; exit 0; fi
           gh api -X PUT "repos/$REPO/pulls/$num/merge" -f merge_method=merge -f sha="$SHA" -f commit_title="Merge pull request #$num (auto-merged after CI passed)"

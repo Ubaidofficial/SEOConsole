@@ -207,6 +207,10 @@ export class RealBingClient implements BingClient, BingLinksClient, BingCrawlCli
 		}
 	}
 
+	/** The answer exactly as Bing sends it (the `d` field), for the live API checks (src/lib/server/contracts.ts). Reads only. */
+	async raw(method: 'GetUserSites' | 'GetRankAndTrafficStats' | 'GetUrlSubmissionQuota', params: Record<string, string> = {}): Promise<unknown> {
+		return this.call<unknown>(method, params);
+	}
 	async listSites() {
 		const r = await this.call<{ Url: string; IsVerified: boolean }[]>('GetUserSites');
 		return r.map((s) => ({ url: s.Url, isVerified: !!s.IsVerified }));
