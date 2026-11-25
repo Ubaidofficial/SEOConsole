@@ -116,7 +116,9 @@ export const ENDPOINTS: Record<string, Role> = {
 	'GET /auth/connect': A,
 	'GET /auth/callback': A,
 	'GET /auth/bing/connect': A,
-	'GET /auth/bing/callback': A
+	'GET /auth/bing/callback': A,
+	'GET /auth/openseo/connect': A,
+	'GET /auth/openseo/callback': A
 };
 
 const READS = new Set(['GET', 'HEAD', 'OPTIONS']);

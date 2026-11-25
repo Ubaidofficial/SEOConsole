@@ -4,6 +4,8 @@
  * The tool `list_projects` output shape was confirmed against the live instance; the wire
  * handshake follows the MCP spec but has only been tested against a local mock server.
  */
+import type { OseoAuth } from './openseoauth';
+
 export class OpenSeoError extends Error {
 	constructor(message: string, readonly status = 0) {
 		super(message);
@@ -31,18 +33,19 @@ async function readRpc(res: Response, id: number): Promise<{ result?: unknown; e
 	return JSON.parse(text || '{}');
 }
 
-export async function mcpSession(baseUrl: string, apiKey: string, fetchImpl: typeof fetch = fetch) {
+/** `auth`: an `oseo_` API key, or a signed-in credential (OpenSEO behind Cloudflare Access; src/lib/server/openseoauth.ts). */
+export async function mcpSession(baseUrl: string, auth: string | OseoAuth, fetchImpl: typeof fetch = fetch) {
 	const url = baseUrl.replace(/\/$/, '') + '/mcp';
 	let sessionId: string | null = null;
-	const post = async (body: object, expectReply: boolean, id?: number) => {
-		let res: Response;
+	const send = async (body: object) => {
+		const cred = typeof auth === 'string' ? { 'x-api-key': auth } : await auth.headers();
 		try {
-			res = await fetchImpl(url, {
+			return await fetchImpl(url, {
 				method: 'POST',
 				headers: {
 					'content-type': 'application/json',
 					accept: 'application/json, text/event-stream',
-					'x-api-key': apiKey,
+					...cred,
 					...(sessionId ? { 'mcp-session-id': sessionId } : {})
 				},
 				body: JSON.stringify(body)
@@ -50,7 +53,12 @@ export async function mcpSession(baseUrl: string, apiKey: string, fetchImpl: typ
 		} catch {
 			throw new OpenSeoError('Could not reach OpenSEO');
 		}
-		if (res.status === 401 || res.status === 403) throw new OpenSeoError('OpenSEO rejected the API key', res.status);
+	};
+	const post = async (body: object, expectReply: boolean, id?: number) => {
+		let res = await send(body);
+		// A signed-in credential gets one fresh token after a refusal (it may have been revoked or expired early).
+		if ((res.status === 401 || res.status === 403) && typeof auth !== 'string' && (await auth.refresh())) res = await send(body);
+		if (res.status === 401 || res.status === 403) throw new OpenSeoError(typeof auth === 'string' ? 'OpenSEO rejected the API key' : 'OpenSEO refused the sign-in. Sign in again on the Connect page.', res.status);
 		if (!res.ok) throw new OpenSeoError(`OpenSEO returned ${res.status}`, res.status);
 		sessionId = res.headers.get('mcp-session-id') ?? sessionId;
 		return expectReply ? readRpc(res, id!) : (await res.text(), null);
@@ -77,8 +85,8 @@ export async function mcpSession(baseUrl: string, apiKey: string, fetchImpl: typ
 	};
 }
 
-export async function listOpenSeoProjects(baseUrl: string, apiKey: string, fetchImpl: typeof fetch = fetch): Promise<OpenSeoProject[]> {
-	const s = await mcpSession(baseUrl, apiKey, fetchImpl);
+export async function listOpenSeoProjects(baseUrl: string, auth: string | OseoAuth, fetchImpl: typeof fetch = fetch): Promise<OpenSeoProject[]> {
+	const s = await mcpSession(baseUrl, auth, fetchImpl);
 	const out = (await s.callTool('list_projects')) as { projects?: { id: string; name: string; domain: string | null; url?: string }[] } | null;
 	return (out?.projects ?? []).map((p) => ({ id: p.id, name: p.name, domain: p.domain, url: p.url }));
 }

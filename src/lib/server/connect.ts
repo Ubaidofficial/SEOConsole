@@ -8,6 +8,7 @@ import { containerHosts, isWebContainer, type GtmContainer } from './gtm';
 import { fetchInsights, ClarityApiError, utcDay } from './clarity';
 import { demoClarityFetch, demoOpenSeoProjects } from './demo-channels';
 import { listOpenSeoProjects } from './openseo';
+import { openSeoCredential, type OseoAuth, type OseoOAuth } from './openseoauth';
 import { autoLinkable, getIntegration, integrationMeta, integrationSecret, linksFor, listIntegrations, removeIntegration, saveCandidates, saveIntegration, setLink } from './links';
 import { enqueueCruxSync, enqueueLinkSync } from './jobs';
 import { CruxError, queryOrigin } from './crux';
@@ -247,7 +248,24 @@ export async function connectOpenSeo(baseUrl: string, apiKey: string) {
 	if (bad) throw new Error(bad);
 	const demo = config.demo && apiKey.trim() === 'demo';
 	const projects = demo ? demoOpenSeoProjects() : await listOpenSeoProjects(base, apiKey.trim());
-	const id = saveIntegration('openseo', new URL(base).host, { apiKey: apiKey.trim() }, { baseUrl: base }, demo);
+	return saveOpenSeo(base, { apiKey: apiKey.trim() }, projects, demo, 'api key');
+}
+
+/**
+ * Connect through a Cloudflare Access sign-in (src/lib/server/openseoauth.ts): the callback has the tokens; the project list is read
+ * with them before anything is saved, so a sign-in that cannot reach OpenSEO changes nothing.
+ */
+export async function connectOpenSeoSignedIn(baseUrl: string, oauth: OseoOAuth, fetchImpl: typeof fetch = fetch) {
+	const base = baseUrl.trim().replace(/\/+$/, '');
+	const bad = integrationUrlProblem(base);
+	if (bad) throw new Error(bad);
+	const once: OseoAuth = { headers: async () => ({ authorization: `Bearer ${oauth.accessToken}` }), refresh: async () => false };
+	const projects = await listOpenSeoProjects(base, once, fetchImpl);
+	return saveOpenSeo(base, { oauth }, projects, false, 'sign-in');
+}
+
+function saveOpenSeo(base: string, secret: object, projects: { id: string; name: string; domain?: string | null }[], demo: boolean, how: string) {
+	const id = saveIntegration('openseo', new URL(base).host, secret, { baseUrl: base, auth: how === 'sign-in' ? 'oauth' : 'apikey' }, demo);
 	const { matched, linkedProjects } = matchOpenSeo(id, projects, false);
 	const unmatchedProjects = projects.filter((p) => !linkedProjects.has(p.id)).map((p) => `${p.name}${p.domain ? ` (${p.domain})` : ''}`);
 	// Links made by hand (a site whose domain differs from its project's) move to the new connection when the project still
@@ -261,7 +279,7 @@ export async function connectOpenSeo(baseUrl: string, apiKey: string) {
 	// Replace any older OpenSEO connection that no longer has links.
 	for (const old of listIntegrations('openseo')) if (old.id !== id) removeIntegration(old.id);
 	cacheOpenSeoProjects(projects);
-	audit('openseo.connected', { detail: base });
+	audit('openseo.connected', { detail: `${base} (${how})` });
 	return { id, matched, projects: projects.length, unmatchedProjects };
 }
 
@@ -301,7 +319,7 @@ export async function autoLinkNewSites() {
 	const o = listIntegrations('openseo')[0];
 	if (o && pending('openseo')) {
 		try {
-			const projects = o.is_demo ? demoOpenSeoProjects() : await listOpenSeoProjects(integrationMeta(o).baseUrl, integrationSecret<{ apiKey: string }>(o).apiKey);
+			const projects = o.is_demo ? demoOpenSeoProjects() : await listOpenSeoProjects(integrationMeta(o).baseUrl, openSeoCredential(o));
 			cacheOpenSeoProjects(projects);
 			out.openseo = matchOpenSeo(o.id, projects, true).matched;
 		} catch (e) {
@@ -341,7 +359,7 @@ export async function linkOpenSeoManually(siteId: number, projectId: string, o: 
 	const integ = listIntegrations('openseo')[0];
 	if (!integ) throw new Error('Connect OpenSEO first.');
 	if (!allSites().some((s) => s.id === siteId)) throw new Error('Unknown site.');
-	const projects = integ.is_demo ? demoOpenSeoProjects() : await (o.list ?? listOpenSeoProjects)(integrationMeta(integ).baseUrl, integrationSecret<{ apiKey: string }>(integ).apiKey);
+	const projects = integ.is_demo ? demoOpenSeoProjects() : await (o.list ?? listOpenSeoProjects)(integrationMeta(integ).baseUrl, openSeoCredential(integ));
 	cacheOpenSeoProjects(projects);
 	const p = projects.find((x) => x.id === projectId);
 	if (!p) throw new Error('That OpenSEO project no longer exists. Reload the page and choose again.');

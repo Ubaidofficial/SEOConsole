@@ -4,6 +4,7 @@ import { addDays, pacificToday } from './dates';
 import { integrationMeta, integrationSecret, listIntegrations } from './links';
 import { RealBingClient } from './bing';
 import { mcpSession } from './openseo';
+import { openSeoCredential } from './openseoauth';
 import { GOOGLE_UPDATES_URL } from './gupdates';
 import { postWebhook, webhook } from './digest';
 
@@ -192,7 +193,7 @@ export function probes(o: { fetchImpl?: typeof fetch } = {}): Probe[] {
 			run: async () => {
 				const i = listIntegrations('openseo').find((x) => !x.is_demo);
 				if (!i) return skip('OpenSEO is not connected.');
-				return (await mcpSession(integrationMeta(i).baseUrl, integrationSecret<{ apiKey: string }>(i).apiKey, f)).callTool('list_projects');
+				return (await mcpSession(integrationMeta(i).baseUrl, openSeoCredential(i, f), f)).callTool('list_projects');
 			}
 		}
 	];
