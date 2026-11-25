@@ -21,6 +21,17 @@ import { brandTerms } from './queries';
 const STOP = new Set('a an and are as at be best by can do does for from free get has have how i in is it its me my near no not of on online or our so than that the this to top vs was what when where which who why will with you your'.split(' '));
 export const mainWords = (q: string) => [...new Set(q.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w)).map((w) => w.replace(/s$/, '')))];
 
+/**
+ * The target's distinctive words: not a year, and not in more than 5% of the site's searches (when there are 40 or more), so a
+ * word that describes the whole site ("book", "job") or a date does not make two searches about the same thing.
+ */
+export function topicWords(words: string[], queries: string[]): string[] {
+	const counts = new Map<string, number>();
+	for (const q of queries) for (const w of new Set(mainWords(q))) counts.set(w, (counts.get(w) ?? 0) + 1);
+	const common = (w: string) => queries.length >= 40 && (counts.get(w) ?? 0) / queries.length > 0.05;
+	return words.filter((w) => !/^\d{4}$/.test(w) && !common(w));
+}
+
 export interface BriefQuery { query: string; clicks: number; impressions: number; position: number; question: boolean }
 export interface ContentBrief {
 	query: string;
@@ -79,8 +90,12 @@ export function contentBrief(site: Pick<SiteRow, 'id' | 'synced_through' | 'site
 
 	// What to cover: the site's searches that share the target's main words.
 	const words = mainWords(query);
-	const need = Math.min(2, words.length);
 	const rows = d.prepare(`SELECT query, SUM(clicks) clicks, SUM(impressions) impressions, ${W} position FROM sa_rows WHERE site_id = ? AND date BETWEEN ? AND ? GROUP BY query HAVING SUM(impressions) >= 3 ORDER BY impressions DESC LIMIT 20000`).all(site.id, start, end) as { query: string; clicks: number; impressions: number; position: number }[];
+	// Words that say what the site is (on a book site "book" is in most searches) or when (years) are not the topic: a search
+	// shares the topic only through its distinctive words ("sailing" in "sailing books 2024").
+	const topic = topicWords(words, rows.map((r) => r.query));
+	const need = topic.length ? Math.min(2, topic.length) : Math.min(2, words.length);
+	const matchWords = topic.length ? topic : words;
 	const target = targetPage ? normalizeUrl(targetPage) : null;
 	const onPage = target
 		? new Set((d.prepare('SELECT query, page FROM sa_rows WHERE site_id = ? AND date BETWEEN ? AND ? GROUP BY query, page').all(site.id, start, end) as { query: string; page: string }[]).filter((r) => normalizeUrl(r.page) === target).map((r) => r.query))
@@ -89,7 +104,7 @@ export function contentBrief(site: Pick<SiteRow, 'id' | 'synced_through' | 'site
 	for (const r of rows) {
 		if (r.query === query || /\b(site|inurl|intitle|after|before):/.test(r.query)) continue;
 		const w = mainWords(r.query);
-		const shared = words.filter((x) => w.includes(x)).length;
+		const shared = matchWords.filter((x) => w.includes(x)).length;
 		if ((need && shared >= need) || r.query.includes(query) || onPage.has(r.query)) related.push({ query: r.query, clicks: r.clicks, impressions: r.impressions, position: r1(r.position), question: isQuestionQuery(r.query) });
 		if (related.length >= 60) break;
 	}
