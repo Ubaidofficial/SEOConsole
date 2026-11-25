@@ -70,7 +70,7 @@ export const FORM_ACTIONS: Record<string, Record<string, Role>> = {
 	'/accounts': { refresh: E, verifyToken: A, verifyNow: A, relabel: A, remove: A, addSite: A },
 	'/agents': { create: A, permission: A, changes: A, remove: A },
 	'/agent': { toggle: A, run: A, approve: E, decline: E },
-	'/connect': { ahrefsKey: A, ahrefsRemove: A, ahrefsRefresh: A, mozKeys: A, mozRemove: A, mozRefresh: A, automationDefault: A, automationApply: A, resync: E, bingKey: A, bingRemove: A, ga4Auto: A, gtmAuto: A, clarity: A, manual: A, pick: A, unlink: A, openseo: A, crux: A, cruxRemove: A, openseoRemove: A, setupRun: A, setupTos: A, setupCheck: A, apiCheck: A },
+	'/connect': { ahrefsKey: A, ahrefsRemove: A, ahrefsRefresh: A, mozKeys: A, mozRemove: A, mozRefresh: A, automationDefault: A, automationApply: A, resync: E, bingKey: A, bingRemove: A, ga4Auto: A, gtmAuto: A, clarity: A, manual: A, pick: A, unlink: A, openseo: A, crux: A, cruxRemove: A, openseoRemove: A, setupRun: A, setupTos: A, setupCheck: A, apiCheck: A, openseoCreate: A },
 	'/chat': { delete: 'viewer' },
 	'/alerts': { resolve: E, dismiss: E, reopen: E, check: E },
 	'/digest': { generate: E, send: E, monthly: E, sendMonthly: E, check: E },

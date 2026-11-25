@@ -27,18 +27,9 @@ import type { CurrentUser } from './roles';
 type Msg = Anthropic.Beta.BetaMessageParam;
 type ToolResult = Anthropic.Beta.BetaToolResultBlockParam;
 
-const KV_ON = 'agent_enabled';
-export const agentEnabled = () => (db().prepare('SELECT value FROM kv WHERE key = ?').get(KV_ON) as { value: string } | undefined)?.value === '1';
-export const setAgentEnabled = (on: boolean) => void db().prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run(KV_ON, on ? '1' : '0');
+import { agentEnabled, agentHourUtc, agentMaxRounds, agentRunsPerDay, runsToday } from './agentstatus';
+export { agentEnabled, agentHourUtc, agentMaxRounds, agentRunsPerDay, runsToday, setAgentEnabled } from './agentstatus';
 
-const intEnv = (name: string, def: number, min: number, max: number) => {
-	const n = Number(env(name, String(def)));
-	return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.floor(n))) : def;
-};
-export const agentRunsPerDay = () => intEnv('AGENT_RUNS_PER_DAY', 10, 0, 200);
-export const agentMaxRounds = () => intEnv('AGENT_MAX_ROUNDS', 14, 2, 40);
-/** The UTC hour from which the daily runs start (default 5: after the night's syncs, early morning in Europe). */
-export const agentHourUtc = () => intEnv('AGENT_HOUR_UTC', 5, 0, 23);
 export const MAX_PROPOSALS_PER_RUN = 5;
 const MAX_RESULT_CHARS = 30_000;
 
@@ -95,12 +86,6 @@ const cap = (data: unknown) => {
 	const t = JSON.stringify(data);
 	return t.length <= MAX_RESULT_CHARS ? t : `${t.slice(0, MAX_RESULT_CHARS)}\n[cut at ${MAX_RESULT_CHARS} characters; ask with a smaller limit]`;
 };
-
-/** Runs started today (UTC day), across all sites: the daily budget. */
-export function runsToday(now = Date.now()): number {
-	const start = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
-	return (db().prepare('SELECT COUNT(*) n FROM agent_runs WHERE started_at >= ?').get(start) as { n: number }).n;
-}
 
 /** What the agent sees of yesterday: its last brief, and its recent proposals with what people did with them. */
 function memory(siteId: number): string {

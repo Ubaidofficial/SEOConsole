@@ -39,6 +39,7 @@ import { sitemapCoverage } from './sitemapcov';
 import { portfolioQueue, queueFor } from './actions';
 import { learnedWeights, listOutcomes, outcomeStats } from './outcomes';
 import { contractStatus } from './contracts';
+import { agentStatus } from './agentstatus';
 
 const OUTCOME_NOTE = 'Measured 28 days after the item was marked done, on its page or search against the rest of the site (site-wide items have no control). improved/worse = beyond noise; observational, not proof the fix caused it. learnedWeights reorder the queue only for types with 8+ measured outcomes.';
 import { hiddenReport } from './hidden';
@@ -542,7 +543,7 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_connections',
-		description: 'Which tools are connected for the sites this key can see: how many sites have GA4, Tag Manager, Bing, Clarity and OpenSEO linked, whether Core Web Vitals is on, what to do to connect the rest, and the daily live API checks. Use it to learn which other tools to call.',
+		description: 'Which tools are connected for the sites this key can see: how many sites have GA4, Tag Manager, Bing, Clarity and OpenSEO linked, whether Core Web Vitals is on, what to do to connect the rest, the in-app agent status and the daily live API checks. Use it to learn which other tools to call.',
 		schema: {},
 		run: (_a, sites) => {
 			const ids = new Set(sites.map((s) => s.id));
@@ -559,6 +560,8 @@ const TOOLS: Tool[] = [
 				openseo: { linkedSites: n('openseo'), tools: ['get_openseo_project'] },
 				coreWebVitals: { connected: cruxIntegration() != null, tools: ['get_web_vitals'] },
 				// The daily live API checks: whether each API still answers with the fields the app reads (src/lib/server/contracts.ts).
+				// The in-app agent (Agent page): on or off, why it cannot run, budget, recent runs and proposals waiting for a person.
+				agent: agentStatus(sites.map((s) => s.id)),
 				liveApiChecks: contractStatus().map((c) => ({ check: c.probe, source: c.source, status: c.status, note: c.message, checkedAt: new Date(c.checkedAt).toISOString() })),
 				hint: 'A source with linkedSites below `sites` can be completed on the Connect page. The tools listed here only read. A few other tools change things, and they only work if the owner allowed changes for this connection on the MCP page.'
 			};
