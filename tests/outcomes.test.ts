@@ -148,3 +148,22 @@ describe('content brief', () => {
 		expect(mainWords('the best running shoes for women')).toEqual(['running', 'shoe', 'women']);
 	});
 });
+
+describe('stale "blocked" evidence', () => {
+	it('an old noindex check no longer raises the blocking alarm, and is queued for a re-check; a fresh one still does', async () => {
+		const { buildActions, BLOCK_EVIDENCE_MAX_AGE_MS } = await import('../src/lib/server/actions');
+		const { staleNoindexPages } = await import('../src/lib/server/onpage');
+		const site = getSite(1)!;
+		const page = (db().prepare('SELECT page FROM sa_rows WHERE site_id = 1 GROUP BY page ORDER BY SUM(clicks) DESC LIMIT 1').get() as { page: string }).page;
+		const payload = JSON.stringify({ status: 200, finalUrl: page, score: 60, issues: [{ id: 'noindex', severity: 'bad', message: 'Meta robots says "noindex"' }] });
+		const put = (at: number) => db().prepare('INSERT OR REPLACE INTO onpage_checks (site_id, url, checked_at, payload) VALUES (1, ?, ?, ?)').run(page, at, payload);
+		const isBlocked = () => buildActions(site).some((a) => a.type === 'blocked' && a.evidence.some((e) => e.includes(new URL(page).pathname)));
+		put(Date.now() - 3600_000);
+		expect(isBlocked()).toBe(true);
+		expect(staleNoindexPages(1)).not.toContain(page); // checked an hour ago: not due again yet
+		put(Date.now() - BLOCK_EVIDENCE_MAX_AGE_MS - 86_400_000);
+		expect(isBlocked()).toBe(false);
+		expect(staleNoindexPages(1)).toContain(page);
+		db().prepare('DELETE FROM onpage_checks WHERE site_id = 1 AND url = ?').run(page);
+	});
+});
