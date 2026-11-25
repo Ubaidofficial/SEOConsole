@@ -66,7 +66,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		flash: url.searchParams.get('flash'),
 		accounts: accounts.map((a) => ({ id: a.id, email: a.label ?? a.email, status: a.status, ga4: hasGa4Scope(a), gtm: hasGtmScope(a), demo: !!a.is_demo })),
 		bing,
-		openseo: openseo ? { baseUrl: integrationMeta(openseo).baseUrl, demo: !!openseo.is_demo, linked: links.filter((l) => l.kind === 'openseo').length, projects: cachedOpenSeoProjects() } : null,
+		openseo: openseo ? { baseUrl: integrationMeta(openseo).baseUrl, auth: integrationMeta(openseo).auth ?? 'apikey', status: openseo.status, demo: !!openseo.is_demo, linked: links.filter((l) => l.kind === 'openseo').length, projects: cachedOpenSeoProjects() } : null,
 		progress: Object.fromEntries(KINDS.map((k) => [k, links.filter((l) => l.kind === k).length])) as Record<LinkKind, number>,
 		total: sites.length,
 		rows: sites.map((s) => {

@@ -46,7 +46,7 @@
 		ga4: sites(done.ga4),
 		gtm: sites(done.gtm),
 		clarity: sites(done.clarity),
-		openseo: data.openseo ? { tone: 'good', word: 'Connected', detail: `${data.openseo.linked} site(s)` } : off,
+		openseo: data.openseo ? (data.openseo.status === 'error' ? { tone: 'bad', word: 'Sign in again', detail: 'the sign-in expired' } : { tone: 'good', word: 'Connected', detail: `${data.openseo.linked} site(s)` }) : off,
 		crux: data.crux ? { tone: 'good', word: 'Connected', detail: '' } : off,
 		ahrefs: data.ahrefs ? (data.ahrefs.rejected ? { tone: 'bad', word: 'Key rejected', detail: 'replace it' } : { tone: 'good', word: 'Connected', detail: `${data.ahrefs.withDr}/${data.ahrefs.total} sites` }) : off,
 		moz: data.moz ? (data.moz.rejected ? { tone: 'bad', word: 'Credentials rejected', detail: 'replace them' } : { tone: 'good', word: 'Connected', detail: `${data.moz.withDa}/${data.moz.total} sites` }) : off
@@ -282,6 +282,14 @@
 		<input class="input w-56" name="apiKey" type="password" autocomplete="off" aria-label="OpenSEO API key" placeholder="oseo_… API key" required />
 		<button class="btn btn-primary" disabled={busy === 'openseo'}>{busy === 'openseo' ? 'Checking…' : data.openseo ? 'Reconnect' : 'Connect'}</button>
 	</form>
+	<!-- An OpenSEO behind Cloudflare Access (its self-hosted default) takes no API key: sign in through Access once instead. -->
+	{#if !data.readOnly}
+		<form method="GET" action="/auth/openseo/connect" class="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+			<span class="w-full text-xs text-muted-foreground">Behind Cloudflare Access? OpenSEO ignores API keys there. Sign in once instead.</span>
+			<input class="input min-w-0 flex-1" name="base" aria-label="OpenSEO address for sign-in" placeholder="https://your-openseo.example.com" value={data.openseo?.baseUrl ?? ''} required />
+			<button class="btn">{data.openseo?.auth === 'oauth' ? 'Sign in again' : 'Sign in to OpenSEO'}</button>
+		</form>
+	{/if}
 	{#if msgFor('openseo')?.ok}<p class="mt-2 text-sm text-good">{msgFor('openseo')?.ok}</p>{/if}
 	{#if msgFor('openseo')?.error}<p class="mt-2 text-sm text-bad">{msgFor('openseo')?.error}</p>{/if}
 </details>

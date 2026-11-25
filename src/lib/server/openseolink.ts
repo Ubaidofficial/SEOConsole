@@ -13,6 +13,7 @@ import { db, audit } from './db';
 import { getSite, type SiteRow } from './clients';
 import { getIntegration, integrationMeta, integrationSecret, linksFor } from './links';
 import { mcpSession, OpenSeoError } from './openseo';
+import { openSeoCredential } from './openseoauth';
 import { hostKey } from './hosts';
 import { brandTerms, fittedCurve, periodFor, queryPageRows, topQueries } from './queries';
 import { computeStriking, isBranded, normalizeUrl } from '../analytics';
@@ -32,7 +33,7 @@ export function openSeoFor(siteId: number, o: { api?: OseoApi } = {}): OseoLink 
 	const api = async (): Promise<OseoApi> => {
 		if (o.api) return o.api;
 		if (demo) return demoOpenSeoApi(siteId);
-		return mcpSession(baseUrl, integrationSecret<{ apiKey: string }>(i).apiKey);
+		return mcpSession(baseUrl, openSeoCredential(i));
 	};
 	return { projectId: link.external_id, projectName: link.label, baseUrl, demo, api };
 }
