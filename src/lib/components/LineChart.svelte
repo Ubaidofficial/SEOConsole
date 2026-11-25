@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ChartTip from './ChartTip.svelte';
 	/**
 	 * Lines on ONE shared y-scale (unlike Chart, which scales each series to its own range). Use it when series are
 	 * compared with each other: test vs control, history vs projection. `null` leaves a gap.
@@ -96,10 +97,7 @@
 			{/if}
 		</svg>
 		{#if hover !== null}
-			<div class="pointer-events-none absolute top-8 rounded-md border bg-card px-2 py-1 text-xs shadow-sm" style="left:{Math.min(Math.max(x(hover) - 70, 4), width - 170)}px">
-				<div class="font-medium">{fmtDay(xs[hover])}</div>
-				{#each series as s}{#if s.values[hover] != null}<div><span style="color:{s.color}">●</span> {s.label}: {format(s.values[hover]!)}</div>{/if}{/each}
-			</div>
+			<ChartTip x={x(hover)} {width} top={32} title={fmtDay(xs[hover])} rows={series.filter((s) => s.values[hover!] != null).map((s) => ({ label: s.label, value: format(s.values[hover!]!), color: s.color, dashed: s.dashed }))} />
 		{/if}
 	{/if}
 </div>

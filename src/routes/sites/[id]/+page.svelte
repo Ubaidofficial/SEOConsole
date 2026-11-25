@@ -119,8 +119,8 @@
 	...(data.hourly ? [{ id: 'hourly', label: 'Last 24 hours' }] : [])
 ]} />
 {#if chartView === 'all' && hasAll && data.allTraffic}
-<Panel class="mb-5" title="All traffic" icon={Blocks} tone="violet" meta="One scale · {data.allTraffic.chart.dates[0]} → {data.allTraffic.chart.dates.at(-1)}" info="Google clicks, GA4 sessions and Bing clicks on one scale. Each source keeps its own newest days, so a line can stop a day early. GA4 sessions already include most Google clicks: the lines overlap, they do not add up. Dashed = days still being revised.">
-	<SourceSpark series={allSeries} height={150} />
+<Panel class="mb-5" title="All traffic" icon={Blocks} tone="violet" meta="{data.allTraffic.chart.dates[0]} → {data.allTraffic.chart.dates.at(-1)}" info="Google clicks, GA4 sessions and Bing clicks. When one source is much bigger, each gets its own row and scale (its peak is printed on the row), so a small one is not flattened. Hover for every source on a day. Each source keeps its own newest days, so a line can stop a day early. GA4 sessions already include most Google clicks: the lines overlap, they do not add up. Dashed = days still being revised.">
+	<SourceSpark series={allSeries} dates={data.allTraffic.chart.dates} height={150} />
 	<div class="tnum mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
 		{#each allSeries as s}<span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-3 rounded-full" style="background:{s.color}" aria-hidden="true"></span>{s.label}</span>{/each}
 	</div>
