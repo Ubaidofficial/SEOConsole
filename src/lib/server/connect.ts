@@ -7,7 +7,7 @@ import { bingClientFor, ga4SourceFor, gtmSourceFor, type Ga4Source } from './cha
 import { containerHosts, isWebContainer, type GtmContainer } from './gtm';
 import { fetchInsights, ClarityApiError, utcDay } from './clarity';
 import { demoClarityFetch, demoOpenSeoProjects } from './demo-channels';
-import { listOpenSeoProjects } from './openseo';
+import { listOpenSeoProjects, mcpSession } from './openseo';
 import { openSeoCredential, type OseoAuth, type OseoOAuth } from './openseoauth';
 import { autoLinkable, getIntegration, integrationMeta, integrationSecret, linksFor, listIntegrations, removeIntegration, saveCandidates, saveIntegration, setLink } from './links';
 import { enqueueCruxSync, enqueueLinkSync } from './jobs';
@@ -293,7 +293,14 @@ function matchOpenSeo(integrationId: number, projects: { id: string; name: strin
 	const withDomain = projects.filter((p) => p.domain);
 	for (const site of visibleSites()) {
 		if (onlyNew ? !autoLinkable(site.id, 'openseo') : db().prepare("SELECT 1 FROM link_skips WHERE site_id = ? AND kind = 'openseo'").get(site.id)) continue;
-		const m = bestMatch(site.site_url, withDomain, (p) => p.domain!);
+		let m: { id: string; name: string } | null = bestMatch(site.site_url, withDomain, (p) => p.domain!);
+		// No project on the site's domain: link one only on strong evidence, its domain being a host another of the site's sources
+		// uses (a moved or renamed site's Tag Manager container) and its name or domain naming the site. Weaker guesses wait for a click.
+		if (!m) {
+			const taken = new Set(db().prepare("SELECT external_id FROM site_links WHERE kind = 'openseo' AND site_id != ?").all(site.id).map((r) => (r as { external_id: string }).external_id));
+			const best = rankOpenSeoProjects(site.site_url, linkedHosts(site.id), projects.map((p) => ({ id: p.id, name: p.name, domain: p.domain ?? null })), new Set([...taken, ...linkedProjects]))[0];
+			if (best?.suggested && best.score >= AUTO_LINK_SCORE) m = best;
+		}
 		if (!m) continue;
 		setLink(site.id, 'openseo', { integrationId, externalId: m.id, label: m.name });
 		linkedProjects.add(m.id);
@@ -366,6 +373,67 @@ export async function linkOpenSeoManually(siteId: number, projectId: string, o: 
 	setLink(siteId, 'openseo', { integrationId: integ.id, externalId: p.id, label: p.name });
 	audit('openseo.linked', { siteId, detail: `${p.name}${p.domain ? ` (${p.domain})` : ''}, by hand` });
 	return p;
+}
+
+/**
+ * The order to offer OpenSEO projects in for a site that matched none by domain, best guess first and marked `suggested` when it
+ * clearly beats the rest. Signals: the project's domain is a host one of the site's other sources uses (a Tag Manager container's
+ * domain, the Bing site), the project's name is the site's name ("Six Figure Jobs" for sixfigurejobs.net), or the domains' first
+ * labels agree. Projects another site already uses go last. A guess is only preselected; linking stays a click.
+ */
+/** A project linked without a click needs another source's host on its domain (80) plus its name or domain naming the site (50+). */
+export const AUTO_LINK_SCORE = 120;
+
+export function rankOpenSeoProjects(siteUrl: string, otherHosts: string[], projects: { id: string; name: string; domain: string | null }[], taken: Set<string>) {
+	const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+	const label = (h: string) => norm(hostKey(h).split('.')[0] ?? '');
+	const site = label(siteUrl);
+	const hosts = otherHosts.map((h) => hostKey(h)).filter(Boolean);
+	const scored = projects.map((p) => {
+		let score = 0;
+		if (p.domain && hostsMatch(p.domain, siteUrl)) score += 100;
+		if (p.domain && hosts.some((h) => hostsMatch(h, p.domain!))) score += 80;
+		const name = norm(p.name);
+		if (site && name === site) score += 60;
+		else if (site.length >= 5 && name.length >= 5 && (name.includes(site) || site.includes(name))) score += 40;
+		if (p.domain && site && label(p.domain) === site) score += 50;
+		if (taken.has(p.id)) score -= 200;
+		return { ...p, score };
+	});
+	scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+	const clear = scored.length > 0 && scored[0].score >= 40 && (scored.length === 1 || scored[0].score > scored[1].score);
+	return scored.map((p, i) => ({ id: p.id, name: p.name, domain: p.domain, suggested: clear && i === 0, score: p.score }));
+}
+
+/** Hosts a site's other linked sources point at: the Tag Manager container's domains (from its label) and the Bing site address. */
+export function linkedHosts(siteId: number): string[] {
+	const l = linksFor(siteId);
+	const out: string[] = [];
+	const gtmDomains = l.gtm?.label?.split(' · ')[1];
+	if (gtmDomains) out.push(...gtmDomains.split(/[,\s]+/).filter(Boolean));
+	if (l.bing?.external_id) out.push(l.bing.external_id);
+	return out;
+}
+
+/**
+ * Create an OpenSEO project for a site that has none (OpenSEO's create_project spends no credits) and link the site to it.
+ * Named after the site's host, with the host as its domain, so automatic matching would find it too.
+ */
+export async function createOpenSeoProjectFor(siteId: number, o: { api?: { callTool(name: string, args?: Record<string, unknown>): Promise<unknown> } } = {}) {
+	const integ = listIntegrations('openseo')[0];
+	if (!integ) throw new Error('Connect OpenSEO first.');
+	const site = allSites().find((s) => s.id === siteId);
+	if (!site) throw new Error('Unknown site.');
+	const domain = hostKey(site.site_url);
+	const api = o.api ?? (integ.is_demo ? null : await mcpSession(integrationMeta(integ).baseUrl, openSeoCredential(integ)));
+	if (!api) throw new Error('Demo mode cannot create OpenSEO projects.');
+	const r = (await api.callTool('create_project', { name: domain.slice(0, 120), domain })) as { project?: { id?: string; name?: string } } | null;
+	const p = r?.project;
+	if (!p?.id) throw new Error('OpenSEO did not return the new project.');
+	setLink(siteId, 'openseo', { integrationId: integ.id, externalId: p.id, label: p.name ?? domain });
+	cacheOpenSeoProjects([...cachedOpenSeoProjects(), { id: p.id, name: p.name ?? domain, domain }]);
+	audit('openseo.project_created', { siteId, detail: domain });
+	return { id: p.id, name: p.name ?? domain };
 }
 
 export const openSeoProjectUrl = (integrationId: number | null, projectId: string) => {

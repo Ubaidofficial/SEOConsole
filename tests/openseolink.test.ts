@@ -4,7 +4,7 @@ import { ensureDemoAccounts } from '../src/lib/server/accounts';
 import { syncSite } from '../src/lib/server/sync';
 import { DemoClient } from '../src/lib/server/demo';
 import { getSite } from '../src/lib/server/clients';
-import { cachedOpenSeoProjects, connectOpenSeo, linkOpenSeoManually } from '../src/lib/server/connect';
+import { cachedOpenSeoProjects, connectOpenSeo, createOpenSeoProjectFor, linkOpenSeoManually } from '../src/lib/server/connect';
 import { buildActions } from '../src/lib/server/actions';
 import { fetchVolumes, openSeoFor, storedAudit, syncAudit, trackCandidates, trackPreview, trackSend, volumeCandidates, volumesFor, type OseoApi } from '../src/lib/server/openseolink';
 
@@ -50,6 +50,16 @@ describe('linking', () => {
 		expect(openSeoFor(2)?.projectId).toBe('demo-proj-greenleaf');
 		db().prepare("DELETE FROM site_links WHERE site_id = 2 AND kind = 'openseo'").run();
 		expect(openSeoFor(2)).toBeNull();
+	});
+	it('a site with no project gets one created (named after its host) and linked', async () => {
+		const { api, calls } = recorder({ create_project: (a) => ({ project: { id: 'new-1', name: a.name, domain: a.domain } }) });
+		const p = await createOpenSeoProjectFor(2, { api });
+		expect(calls[0].name).toBe('create_project');
+		expect(calls[0].args.domain).toBe(calls[0].args.name);
+		expect(String(calls[0].args.domain)).not.toMatch(/^https?:|^sc-domain:|^www\./);
+		expect(openSeoFor(2)?.projectId).toBe('new-1');
+		expect(p.id).toBe('new-1');
+		db().prepare("DELETE FROM site_links WHERE site_id = 2 AND kind = 'openseo'").run();
 	});
 });
 

@@ -6,7 +6,7 @@ import { allSites } from '$lib/server/queries';
 import { displayName } from '$lib/server/clients';
 import { listAccounts } from '$lib/server/accounts';
 import { allCandidates, allLinks, integrationMeta, linksFor, listIntegrations, removeIntegration, removeLink, setLink, skipAutoLink, type LinkKind } from '$lib/server/links';
-import { autoMatchGa4, autoMatchGtm, cachedOpenSeoProjects, connectBingKey, connectClarity, connectCrux, connectOpenSeo, hasGa4Scope, hasGtmScope, linkGtmManually, linkOpenSeoManually } from '$lib/server/connect';
+import { autoMatchGa4, autoMatchGtm, cachedOpenSeoProjects, connectBingKey, createOpenSeoProjectFor, linkedHosts, rankOpenSeoProjects, connectClarity, connectCrux, connectOpenSeo, hasGa4Scope, hasGtmScope, linkGtmManually, linkOpenSeoManually } from '$lib/server/connect';
 import { callsLeft } from '$lib/server/clarity';
 import { enqueueDaAll, enqueueDrAll, enqueueLinkSync } from '$lib/server/jobs';
 import { gtmSnapshot } from '$lib/server/tracking';
@@ -45,6 +45,9 @@ export const load: PageServerLoad = async ({ url }) => {
 		? await planSetup(setupSite.id, choices).catch((e) => ({ ok: false as const, error: msg(e), blockers: [] as string[], ready: false }))
 		: null;
 	const setupContainer = setup && 'gtm' in setup && setup.gtm && (setup.gtm.state === 'linked' || setup.gtm.state === 'match') ? setup.gtm.publicId : (setupSite ? linksFor(setupSite.id).gtm?.label?.split(' · ')[0] ?? null : null);
+	// OpenSEO projects for the "Link project" picker, best guess first per site; projects other sites use go last.
+	const oseoProjects = openseo ? cachedOpenSeoProjects() : [];
+	const oseoTaken = new Set(links.filter((l) => l.kind === 'openseo').map((l) => l.external_id));
 	return {
 		setupSite: setupSite ? { id: setupSite.id, name: displayName(setupSite.site_url) } : null,
 		setup,
@@ -79,6 +82,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				google: s.synced_through ? 'synced' : s.sync_status,
 				links: Object.fromEntries(KINDS.map((k) => [k, l[k] ? { id: l[k]!.external_id, label: l[k]!.label, status: l[k]!.sync_status, message: l[k]!.sync_message, lastSync: l[k]!.last_sync_at } : null])) as Record<LinkKind, { id: string; label: string | null; status: string; message: string | null; lastSync: number | null } | null>,
 				clarityCallsLeft: clarityInteg ? callsLeft(clarityInteg) : null,
+				openseoChoices: !l.openseo && oseoProjects.length ? rankOpenSeoProjects(s.site_url, linkedHosts(s.id), oseoProjects, oseoTaken) : [],
 				// several properties or containers matched equally well: offered as a choice instead of a text box
 				candidates: {
 					ga4: candidates.filter((c) => c.site_id === s.id && c.kind === 'ga4').map((c) => ({ id: c.external_id, label: c.label ?? c.external_id })),
@@ -305,6 +309,15 @@ export const actions: Actions = {
 		const siteId = intParam((await request.formData()).get('siteId'));
 		await checkClarityNow(siteId).catch(() => {});
 		return { section: 'setup', checked: true };
+	},
+	/** Create an OpenSEO project for a site that has none (no credits) and link it. */
+	openseoCreate: async ({ request }) => {
+		try {
+			const p = await createOpenSeoProjectFor(intParam((await request.formData()).get('siteId')));
+			return { ok: `Created the OpenSEO project ${p.name} and linked it.`, section: 'openseo' };
+		} catch (e) {
+			return fail(400, { error: msg(e), section: 'openseo' });
+		}
 	},
 	/** Run the live API checks now (normally once a day). */
 	apiCheck: async () => {

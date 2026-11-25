@@ -8,6 +8,7 @@ import { actionsFor, actionStates } from '../src/lib/server/actions';
 import { agentTools, decideProposal, dueSites, listProposals, listRuns, MAX_PROPOSALS_PER_RUN, PROPOSABLE, runAgent, setAgentEnabled } from '../src/lib/server/agent';
 import type { ModelCall } from '../src/lib/server/chat';
 import type { CurrentUser } from '../src/lib/server/roles';
+import { agentStatus } from '../src/lib/server/agentstatus';
 
 const owner: CurrentUser = { id: null, email: null, name: 'Owner', role: 'owner', siteIds: null };
 const viewer: CurrentUser = { id: 7, email: 'v@example.com', name: 'Viewer', role: 'viewer', siteIds: null };
@@ -101,6 +102,21 @@ describe('approving', () => {
 		const other = listProposals(null)[0];
 		expect((await decideProposal(owner, other.id, false)).ok).toBe(true);
 		expect(listProposals(null, 'all').find((x) => x.id === other.id)!.status).toBe('declined');
+	});
+});
+
+describe('status for agents (get_connections)', () => {
+	it('says whether it is on, the budget, recent runs and proposals waiting, only for the given sites', () => {
+		setAgentEnabled(true);
+		const st = agentStatus([1]);
+		expect(st.on).toBe(true);
+		expect(st.lastRuns.length).toBeGreaterThan(0);
+		expect(st.lastRuns[0].site).toBeTruthy();
+		expect(st.nextScheduledStart).toMatch(/T\d\d:00:00/);
+		expect(agentStatus([999]).lastRuns).toEqual([]);
+		expect(agentStatus([999]).proposalsWaiting).toBe(0);
+		setAgentEnabled(false);
+		expect(agentStatus([1]).nextScheduledStart).toBeNull();
 	});
 });
 

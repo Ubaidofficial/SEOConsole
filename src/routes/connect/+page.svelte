@@ -146,14 +146,17 @@
 									</details>
 								{:else if k === 'openseo' && !data.openseo && !data.readOnly}
 									<a class="btn btn-xs" href="#openseo-source" onclick={() => { const d = document.getElementById('openseo-source'); if (d instanceof HTMLDetailsElement) d.open = true; }}><Plus class="size-3.5" />Connect OpenSEO</a>
-								{:else if k === 'openseo' && data.openseo && !data.readOnly && data.openseo.projects.length}
+								{:else if k === 'openseo' && data.openseo && !data.readOnly && r.openseoChoices.length}
 									<!-- Matching is by domain; a site whose domain differs from its project's (renamed, redirected) is linked by hand. -->
 									<details>
-										<summary class="btn btn-xs inline-flex cursor-pointer list-none gap-1 [&::-webkit-details-marker]:hidden" title="No OpenSEO project has this domain. Choose one by hand, or create a project for this domain in OpenSEO and it links on its own."><Plus class="size-3.5" />Link project</summary>
+										<summary class="btn btn-xs inline-flex cursor-pointer list-none gap-1 [&::-webkit-details-marker]:hidden" title="No OpenSEO project has this domain. Choose one by hand, or create a project for this domain in OpenSEO and it links on its own."><Plus class="size-3.5" />Link project{#if r.openseoChoices[0]?.suggested}: <span class="pii">{r.openseoChoices[0].name}</span>?{/if}</summary>
 										<form method="POST" action="?/manual" use:enhance class="mt-1.5 flex gap-1"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value="openseo" />
-											<select class="input pii w-44 !py-0.5 text-xs" name="externalId" aria-label="OpenSEO project for {r.name}">{#each data.openseo.projects as p}<option value={p.id}>{p.name}{p.domain ? ` (${p.domain})` : ''}</option>{/each}</select><button class="btn btn-xs btn-primary">Link</button></form>
+											<select class="input pii w-44 !py-0.5 text-xs" name="externalId" aria-label="OpenSEO project for {r.name}">{#each r.openseoChoices as p}<option value={p.id} selected={p.suggested}>{p.name}{p.domain ? ` (${p.domain})` : ''}{p.suggested ? ' · suggested' : ''}</option>{/each}</select><button class="btn btn-xs btn-primary">Link</button></form>
 									</details>
+									{#if !r.openseoChoices[0]?.suggested}<form method="POST" action="?/openseoCreate" use:enhance class="mt-1"><input type="hidden" name="siteId" value={r.id} /><button class="btn btn-ghost btn-xs" title="Creates a project named after this site, with its domain, in OpenSEO (no credits) and links it"><Plus class="size-3.5" />Create project</button></form>{/if}
 									{#if r.skipped.includes(k)}<div class="mt-1 text-[11px] text-muted-foreground">unlinked on purpose</div>{/if}
+								{:else if k === 'openseo' && data.openseo && !data.readOnly}
+									<form method="POST" action="?/openseoCreate" use:enhance><input type="hidden" name="siteId" value={r.id} /><button class="btn btn-xs" title="Creates a project named after this site, with its domain, in OpenSEO (no credits) and links it"><Plus class="size-3.5" />Create project</button></form>
 								{:else if k === 'openseo' && data.openseo}<span class="text-[11px] text-muted-foreground" title="OpenSEO links a site to the project on its domain, automatically (also nightly). Create a project for this domain in OpenSEO and it links on its own.">no project for this domain</span>
 								{:else if r.skipped.includes(k)}<span class="text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone.">– unlinked</span>
 								{:else}<span class="text-muted-foreground">–</span>{/if}
