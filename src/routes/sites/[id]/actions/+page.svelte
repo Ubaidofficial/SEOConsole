@@ -55,6 +55,21 @@
 	{#if rows.length > 10}<button class="btn btn-sm mt-3" onclick={() => (showAll = !showAll)}>{#if showAll}<ChevronUp class="size-3.5" />Show fewer{:else}<ChevronDown class="size-3.5" />Show all {rows.length}{/if}</button>{/if}
 {/if}
 
+{#if data.outcomes.length}
+	<details class="mt-6">
+		<summary class="cursor-pointer text-sm font-medium">Did it work? ({data.outcomes.filter((o) => o.verdict !== 'pending').length} measured, {data.outcomes.filter((o) => o.verdict === 'pending').length} waiting)</summary>
+		<p class="mt-2 text-xs text-muted-foreground">Each item marked done is measured on its page or search over the 28 days after, against the rest of the site over the same days. Items about the whole site have no control.</p>
+		<div class="mt-2 overflow-x-auto"><table class="w-full text-sm">
+			<thead><tr><th class="th">Finding</th><th class="th">Done</th><th class="th text-right">Clicks before</th><th class="th text-right">After</th><th class="th text-right" title="What it would have had moving like the rest of the site">Expected</th><th class="th">Verdict</th></tr></thead>
+			<tbody>{#each data.outcomes as o (o.key + o.doneOn)}
+				<tr><td class="td"><span class={o.scope === 'site' ? '' : 'pii'}>{o.title}</span>{#if o.stillDetected}<div class="text-[11px] text-warn">still detected</div>{/if}</td><td class="td whitespace-nowrap text-xs">{o.doneOn}</td>
+					<td class="td text-right tabular-nums">{o.clicksBefore}</td><td class="td text-right tabular-nums">{o.clicksAfter ?? '–'}</td><td class="td text-right tabular-nums">{o.expectedAfter ?? '–'}</td>
+					<td class="td whitespace-nowrap text-xs">{#if o.verdict === 'pending'}<span class="text-muted-foreground">waiting until {o.measuredThrough}</span>{:else if o.verdict === 'improved'}<span class="text-good">▲ improved</span>{:else if o.verdict === 'worse'}<span class="text-bad">▼ worse</span>{:else if o.verdict === 'too-little-data'}<span class="text-muted-foreground">too few clicks to tell</span>{:else}no clear change{/if}</td></tr>
+			{/each}</tbody>
+		</table></div>
+	</details>
+{/if}
+
 {#if data.hidden.length}
 	<details class="mt-6">
 		<summary class="cursor-pointer text-sm font-medium">Done or snoozed ({data.hidden.length})</summary>

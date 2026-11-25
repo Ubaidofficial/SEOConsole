@@ -37,6 +37,10 @@ import { storedChecks } from './onpage';
 import { linkReport } from './internallinks';
 import { sitemapCoverage } from './sitemapcov';
 import { portfolioQueue, queueFor } from './actions';
+import { learnedWeights, listOutcomes, outcomeStats } from './outcomes';
+import { contractStatus } from './contracts';
+
+const OUTCOME_NOTE = 'Measured 28 days after the item was marked done, on its page or search against the rest of the site (site-wide items have no control). improved/worse = beyond noise; observational, not proof the fix caused it. learnedWeights reorder the queue only for types with 8+ measured outcomes.';
 import { hiddenReport } from './hidden';
 import { EXTRA_READ_TOOLS, WRITE_TOOLS } from './mcp-extra';
 import { MORE_READ_TOOLS, MORE_WRITE_TOOLS } from './mcp-more';
@@ -538,7 +542,7 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_connections',
-		description: 'Which tools are connected for the sites this key can see: how many sites have GA4, Tag Manager, Bing, Clarity and OpenSEO linked, whether Core Web Vitals is on, and what to do to connect the rest. Use it to learn which other tools to call.',
+		description: 'Which tools are connected for the sites this key can see: how many sites have GA4, Tag Manager, Bing, Clarity and OpenSEO linked, whether Core Web Vitals is on, what to do to connect the rest, and the daily live API checks. Use it to learn which other tools to call.',
 		schema: {},
 		run: (_a, sites) => {
 			const ids = new Set(sites.map((s) => s.id));
@@ -554,6 +558,8 @@ const TOOLS: Tool[] = [
 				clarity: { linkedSites: n('clarity'), tools: ['get_clarity_snapshot'] },
 				openseo: { linkedSites: n('openseo'), tools: ['get_openseo_project'] },
 				coreWebVitals: { connected: cruxIntegration() != null, tools: ['get_web_vitals'] },
+				// The daily live API checks: whether each API still answers with the fields the app reads (src/lib/server/contracts.ts).
+				liveApiChecks: contractStatus().map((c) => ({ check: c.probe, source: c.source, status: c.status, note: c.message, checkedAt: new Date(c.checkedAt).toISOString() })),
 				hint: 'A source with linkedSites below `sites` can be completed on the Connect page. The tools listed here only read. A few other tools change things, and they only work if the owner allowed changes for this connection on the MCP page.'
 			};
 		}
@@ -679,10 +685,15 @@ const TOOLS: Tool[] = [
 	},
 	{
 		name: 'get_action_queue',
-		description: 'THE prioritised to-do list: every finding (measurement, blocked or de-indexed pages, robots.txt, traffic drops, dead pages, cannibalization, CTR gaps, decay, striking distance, on-page, sitemap, finished tests) in order. Blocking first, then estimated clicks per 28 days x confidence (model figures from the site\'s CTR curve, not promises, not additive). Omit `site` for all sites. Done and snoozed items are left out; each has a `key` for mark_action.',
-		schema: { site: { type: 'string', description: 'Optional: site id, domain or property URL. Omit for all visible sites.' }, limit: { type: 'integer' } },
+		description: 'THE prioritised to-do list: every finding (measurement, blocked or de-indexed pages, robots.txt, traffic drops, dead pages, cannibalization, CTR gaps, decay, striking distance, on-page, sitemap, finished tests) in order. Blocking first, then estimated clicks per 28 days x confidence (model figures from the site\'s CTR curve, not promises, not additive). Omit `site` for all sites. Done and snoozed items are left out; each has a `key` for mark_action. view outcomes: did done items work (28 days after vs rest of site).',
+		schema: { site: { type: 'string', description: 'Optional: site id, domain or property URL. Omit for all visible sites.' }, limit: { type: 'integer' }, view: { type: 'string', enum: ['queue', 'outcomes'] } },
 		run: (a, sites) => {
 			const lim = limit(a, 15);
+			if (a.view === 'outcomes') {
+				const ids = a.site ? [resolveSite(sites, a.site).id] : (sites as { id: number }[]).map((s) => s.id);
+				const names = new Map((sites as { id: number; site_url: string }[]).map((s) => [s.id, displayName(s.site_url)]));
+				return { note: OUTCOME_NOTE, byType: outcomeStats(ids), learnedWeights: learnedWeights(), items: listOutcomes(ids, lim).map((o) => ({ site: names.get(o.siteId), ...o })) };
+			}
 			const shape = (i: { key: string; type: string; title: string; why: string; how: string; impact: number | null; confidence: string; effort: string; blocking: boolean; href: string; evidence: string[]; siteId: number }, site?: string) => ({ ...(site ? { site, siteId: i.siteId } : {}), key: i.key, type: i.type, blocking: i.blocking, title: i.title, why: i.why, whatToDo: i.how, estimatedClicksPer28Days: i.impact == null ? null : Math.round(i.impact), confidence: i.confidence, effort: i.effort, evidence: i.evidence, openInApp: i.href });
 			if (a.site) {
 				const site = resolveSite(sites, a.site);

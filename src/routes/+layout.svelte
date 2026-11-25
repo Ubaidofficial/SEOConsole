@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { Toaster, toast } from 'svelte-sonner';
-	import { Bell, Bot, ChartLine, ChevronDown, LayoutDashboard, LayoutGrid, Sparkles, Layers, ListChecks, Map as MapIcon, Plug, RefreshCw, UserCog, Users } from '@lucide/svelte';
+	import { Bell, Bot, ChartLine, Compass, ChevronDown, LayoutDashboard, LayoutGrid, Sparkles, Layers, ListChecks, Map as MapIcon, Plug, RefreshCw, UserCog, Users } from '@lucide/svelte';
 	import PrivacyToggle from '$lib/components/privacy-toggle.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import { pageTitle } from '$lib/titles';
@@ -43,6 +43,7 @@
 		['/sitemaps', 'Sitemaps', MapIcon, 'All sitemaps across your sites, with their health'],
 		['/updates', 'Google updates', ChartLine, 'Ranking updates, marked on every chart'],
 		['/connect', 'Connect', Plug, 'Link GA4, Bing, Tag Manager, Clarity and more'],
+		['/agent', 'Agent', Compass, 'A daily brief per site, and changes it proposes for you to approve'],
 		['/agents', 'MCP', Bot, 'Let Claude, ChatGPT or Cursor read your data'],
 		['/accounts', 'Accounts', Users, 'The Google accounts that sync your sites'],
 		['/team', 'Team', UserCog, 'Who can see and change what']

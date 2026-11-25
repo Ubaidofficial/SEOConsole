@@ -3,13 +3,15 @@ import type { Actions, PageServerLoad } from './$types';
 import { getSite } from '$lib/server/clients';
 import { queueFor, setActionState } from '$lib/server/actions';
 import { scoreOf } from '$lib/actions';
+import { listOutcomes } from '$lib/server/outcomes';
 
 export const load: PageServerLoad = ({ params }) => {
 	const site = getSite(Number(params.id))!;
 	const q = queueFor(site);
 	return {
 		open: q.open.map((a) => ({ ...a, score: Math.round(scoreOf(a)) })),
-		hidden: q.hidden
+		hidden: q.hidden,
+		outcomes: listOutcomes([site.id], 30)
 	};
 };
 

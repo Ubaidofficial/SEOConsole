@@ -27,6 +27,7 @@ import { auditFindings, storedAudit } from './openseolink';
 import { linkHealthFor } from './linkhealth';
 import { bingLinksFor } from './binglinks';
 import { publishingFor } from './publishing';
+import { evaluateOutcomes, forgetPending, learnedWeights, recordDone } from './outcomes';
 
 type Site = SiteRow;
 const r0 = (n: number) => Math.round(n);
@@ -518,9 +519,32 @@ export interface StoredState { state: string; until: number }
 export const actionStates = (siteId: number) => new Map((db().prepare('SELECT key, state, until FROM action_state WHERE site_id = ?').all(siteId) as { key: string; state: string; until: number }[]).map((r) => [r.key, { state: r.state, until: r.until }]));
 
 export function setActionState(siteId: number, key: string, state: 'done' | 'snoozed' | 'open') {
+	if (state !== 'done') forgetPending(siteId, key);
 	if (state === 'open') return void db().prepare('DELETE FROM action_state WHERE site_id = ? AND key = ?').run(siteId, key);
 	const until = Date.now() + (state === 'done' ? DONE_DAYS : SNOOZE_DAYS) * 86_400_000;
 	db().prepare('INSERT OR REPLACE INTO action_state (site_id, key, state, until, updated_at) VALUES (?,?,?,?,?)').run(siteId, key, state, until, Date.now());
+	// Done: keep the baseline, so the outcome can be measured 28 days on (src/lib/server/outcomes.ts). A failure must not stop the mark.
+	if (state === 'done') {
+		try {
+			const site = allSites({ includeHidden: true }).find((s) => s.id === siteId);
+			if (site) recordDone(site, key, actionsFor(site).find((a) => a.key === key));
+		} catch {
+			/* the outcome is a bonus; the mark itself has been saved */
+		}
+	}
+}
+
+/** Measure the done findings whose 28 days after are now in the data, for every site (the scheduler, a few times a day). */
+export function evaluateAllOutcomes(): number {
+	let n = 0;
+	for (const s of allSites()) {
+		try {
+			n += evaluateOutcomes(s, new Set(actionsFor(s).map((a) => a.key)));
+		} catch {
+			/* one site's failure must not stop the others */
+		}
+	}
+	return n;
 }
 
 export interface QueueView { open: ActionItem[]; hidden: (ActionItem & { status: ActionStatus; until: number })[] }
@@ -528,6 +552,7 @@ export interface QueueView { open: ActionItem[]; hidden: (ActionItem & { status:
 /** The queue as a person sees it: open items in rank order, and separately what is done or snoozed (restorable). */
 export function queueFor(site: Site, days = 28): QueueView {
 	const states = actionStates(site.id);
+	const weights = learnedWeights();
 	const open: ActionItem[] = [];
 	const hidden: QueueView['hidden'] = [];
 	for (const a of actionsFor(site, days)) {
@@ -536,7 +561,7 @@ export function queueFor(site: Site, days = 28): QueueView {
 		if (status === 'open') open.push(a);
 		else hidden.push({ ...a, status, until: st!.until });
 	}
-	return { open, hidden };
+	return { open: Object.keys(weights).length ? rankActions(open, weights) : open, hidden };
 }
 
 /** Across every visible site: blocking first, then by score; each item carries its site's name. */
@@ -550,5 +575,5 @@ export function portfolioQueue(limit = 40, days = 28, sites: Site[] = allSites()
 			/* one broken site must not hide the others */
 		}
 	}
-	return rankActions(items).slice(0, limit);
+	return rankActions(items, learnedWeights()).slice(0, limit);
 }

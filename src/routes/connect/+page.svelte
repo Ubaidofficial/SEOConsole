@@ -3,7 +3,7 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import SiteAvatar from '$lib/components/SiteAvatar.svelte';
-	import { Check, Gauge, Link, Pencil, Plug, Plus, Table, Telescope, Users, Zap } from '@lucide/svelte';
+	import { Activity, Check, Gauge, Link, Pencil, Plug, Plus, Table, Telescope, Users, Zap } from '@lucide/svelte';
 	import SiteSetup from '$lib/components/SiteSetup.svelte';
 	import { privacy } from '$lib/privacy.svelte';
 	import { enhance } from '$app/forms';
@@ -120,7 +120,7 @@
 										<span class="pii max-w-[11rem] truncate" title={privacy.on ? undefined : (l.label ?? l.id)}>{l.label ?? l.id}</span>
 										{#if editing}<form method="POST" action="?/unlink" use:enhance><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} /><button class="text-muted-foreground hover:text-[color:var(--bad)]" title="Unlink" aria-label="Unlink {k}">✕</button></form>{/if}
 									</div>
-									<div class="text-[11px] text-muted-foreground">{k === 'openseo' ? 'linked by domain' : l.status === 'running' || l.status === 'queued' ? '⟳ ' + l.status : l.status === 'error' ? l.message : 'synced ' + ago(l.lastSync)}
+									<div class="text-[11px] text-muted-foreground">{k === 'openseo' ? 'linked to its project' : l.status === 'running' || l.status === 'queued' ? '⟳ ' + l.status : l.status === 'error' ? l.message : 'synced ' + ago(l.lastSync)}
 										{#if editing && k !== 'openseo'}<form method="POST" action="?/resync" use:enhance class="inline"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value={k} /> <button class="btn btn-ghost btn-xs !h-6 align-middle">refresh</button></form>{/if}</div>
 								{:else if (k === 'ga4' || k === 'gtm') && r.candidates[k].length && !data.readOnly}
 									<!-- Several matched equally well: a choice, shown without "Edit links" because it is waiting on a decision. -->
@@ -146,6 +146,14 @@
 									</details>
 								{:else if k === 'openseo' && !data.openseo && !data.readOnly}
 									<a class="btn btn-xs" href="#openseo-source" onclick={() => { const d = document.getElementById('openseo-source'); if (d instanceof HTMLDetailsElement) d.open = true; }}><Plus class="size-3.5" />Connect OpenSEO</a>
+								{:else if k === 'openseo' && data.openseo && !data.readOnly && data.openseo.projects.length}
+									<!-- Matching is by domain; a site whose domain differs from its project's (renamed, redirected) is linked by hand. -->
+									<details>
+										<summary class="btn btn-xs inline-flex cursor-pointer list-none gap-1 [&::-webkit-details-marker]:hidden" title="No OpenSEO project has this domain. Choose one by hand, or create a project for this domain in OpenSEO and it links on its own."><Plus class="size-3.5" />Link project</summary>
+										<form method="POST" action="?/manual" use:enhance class="mt-1.5 flex gap-1"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value="openseo" />
+											<select class="input pii w-44 !py-0.5 text-xs" name="externalId" aria-label="OpenSEO project for {r.name}">{#each data.openseo.projects as p}<option value={p.id}>{p.name}{p.domain ? ` (${p.domain})` : ''}</option>{/each}</select><button class="btn btn-xs btn-primary">Link</button></form>
+									</details>
+									{#if r.skipped.includes(k)}<div class="mt-1 text-[11px] text-muted-foreground">unlinked on purpose</div>{/if}
 								{:else if k === 'openseo' && data.openseo}<span class="text-[11px] text-muted-foreground" title="OpenSEO links a site to the project on its domain, automatically (also nightly). Create a project for this domain in OpenSEO and it links on its own.">no project for this domain</span>
 								{:else if r.skipped.includes(k)}<span class="text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone.">– unlinked</span>
 								{:else}<span class="text-muted-foreground">–</span>{/if}
@@ -336,5 +344,31 @@
 	</form>
 	{#if msgFor('moz')?.ok}<p class="mt-2 text-sm text-good">{msgFor('moz')?.ok}</p>{/if}
 	{#if msgFor('moz')?.error}<p class="mt-2 text-sm text-bad">{msgFor('moz')?.error}</p>{/if}
+</details>
+
+<!-- Live API checks: does each API still send the fields the app reads? (src/lib/server/contracts.ts) -->
+<details class="card mt-4 p-4 [&[open]>summary]:mb-2" open={data.apiChecks.rows.some((r) => r.status === 'drift' || r.status === 'error')}>
+	<summary class="flex cursor-pointer list-none flex-wrap items-center gap-2 select-none [&::-webkit-details-marker]:hidden"><span class="ibadge tone-green" aria-hidden="true"><Activity class="size-4" /></span><h2 class="font-medium">Live API checks</h2><span class="ml-auto flex items-center gap-2 text-xs text-muted-foreground">{#if !data.apiChecks.rows.length}not run yet{:else}{@const bad = data.apiChecks.rows.filter((r) => r.status === 'drift' || r.status === 'error').length}<StatusPill tone={bad ? 'bad' : 'good'}>{bad ? `${bad} need a look` : 'As expected'}</StatusPill>{/if}</span></summary>
+	<Explainer lead="Once a day, one small read per API checks that the fields this app reads are still in the answer.">
+		<p>Much of this app was written from each API's documentation. When Google, Bing or OpenSEO renames or drops a field, reports built on it go quietly empty, so each answer is checked here. Drift is sent to the digest webhook once. It costs one URL Inspection a day.</p>
+	</Explainer>
+	{#if data.apiChecks.rows.length}
+		<div class="overflow-x-auto"><table class="w-full text-sm">
+			<thead><tr><th class="th">API</th><th class="th">Check</th><th class="th">Status</th><th class="th">Note</th><th class="th">Checked</th></tr></thead>
+			<tbody>{#each data.apiChecks.rows as r (r.probe)}
+				<tr><td class="td whitespace-nowrap">{r.source}</td><td class="td text-xs"><code>{r.probe}</code></td>
+					<td class="td"><StatusPill tone={r.status === 'ok' ? 'good' : r.status === 'skipped' ? 'muted' : 'bad'}>{r.status === 'ok' ? 'ok' : r.status === 'drift' ? 'changed' : r.status === 'error' ? 'error' : 'not connected'}</StatusPill></td>
+					<td class="td max-w-[28rem] text-xs text-muted-foreground">{r.message ?? ''}</td><td class="td whitespace-nowrap text-xs">{ago(r.checkedAt)}</td></tr>
+			{/each}</tbody>
+		</table></div>
+	{/if}
+	{#if data.apiChecks.events.length}
+		<details class="mt-2"><summary class="cursor-pointer text-xs text-muted-foreground">Changes seen ({data.apiChecks.events.length})</summary>
+			<ul class="mt-1 space-y-1 text-xs">{#each data.apiChecks.events as e (e.at + e.probe + e.kind)}<li><span class="text-muted-foreground">{new Date(e.at).toLocaleDateString()}</span> <code>{e.probe}</code> {e.kind === 'new-fields' ? `new fields: ${e.added.join(', ')}` : e.kind === 'drift' ? `missing: ${e.removed.join(', ')}` : e.kind === 'recovered' ? 'back to normal' : e.message ?? e.kind}</li>{/each}</ul>
+		</details>
+	{/if}
+	{#if !data.readOnly && !data.demo}<form method="POST" action="?/apiCheck" use:enhance={submit('apicheck')} class="mt-3"><button class="btn" disabled={busy === 'apicheck'}>{busy === 'apicheck' ? 'Checking…' : 'Check now'}</button></form>{/if}
+	{#if msgFor('apicheck')?.ok}<p class="mt-2 text-sm text-good">{msgFor('apicheck')?.ok}</p>{/if}
+	{#if msgFor('apicheck')?.error}<p class="mt-2 text-sm text-bad">{msgFor('apicheck')?.error}</p>{/if}
 </details>
 

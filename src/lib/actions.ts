@@ -50,11 +50,16 @@ const TYPE_ORDER: ActionType[] = ['connection', 'tracking', 'blocked', 'robots',
 
 export const scoreOf = (a: Pick<ActionItem, 'impact' | 'confidence'>) => (a.impact == null ? 0 : a.impact * CONFIDENCE_WEIGHT[a.confidence]);
 
-export function rankActions<T extends ActionItem>(items: T[]): T[] {
+/**
+ * `weights` (optional): a learned factor per finding type from measured outcomes (src/lib/server/outcomes.ts), multiplied into
+ * the score; types without one count as 1. Blocking items still come first.
+ */
+export function rankActions<T extends ActionItem>(items: T[], weights: Partial<Record<string, number>> = {}): T[] {
 	const t = (a: T) => TYPE_ORDER.indexOf(a.type);
+	const w = (a: T) => weights[a.type] ?? 1;
 	return [...items].sort((a, b) => {
 		if (a.blocking !== b.blocking) return a.blocking ? -1 : 1;
-		const sa = scoreOf(a), sb = scoreOf(b);
+		const sa = scoreOf(a) * w(a), sb = scoreOf(b) * w(b);
 		if (sa !== sb) return sb - sa;
 		// no estimate vs an estimate of zero-ish: quantified items still come first
 		if ((a.impact == null) !== (b.impact == null)) return a.impact == null ? 1 : -1;
