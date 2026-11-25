@@ -251,6 +251,17 @@ export const pagesToCheck = (siteId: number, n = 15) => {
 	return topPages(siteId, p.start, p.end, {}, n).map((r) => r.page);
 };
 
+/**
+ * Pages whose last on-page check said noindex and is more than `olderThanMs` old: the scheduler checks them again, so a block
+ * lifted on the site clears from the to-do list without anyone pressing Check (most recent clicks first, at most `limit`).
+ */
+export function staleNoindexPages(siteId: number, olderThanMs = 3 * 86_400_000, limit = 10, now = Date.now()): string[] {
+	return storedChecks(siteId)
+		.filter((c) => c.checkedAt < now - olderThanMs && (c.issues ?? []).some((i) => i.id === 'noindex'))
+		.map((c) => c.url)
+		.slice(0, limit);
+}
+
 export function storedChecks(siteId: number) {
 	return (db().prepare('SELECT url, checked_at, payload FROM onpage_checks WHERE site_id = ? ORDER BY checked_at DESC').all(siteId) as { url: string; checked_at: number; payload: string }[]).map((r) => ({ url: r.url, checkedAt: r.checked_at, ...(JSON.parse(r.payload) as StoredCheck) }));
 }

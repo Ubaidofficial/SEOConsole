@@ -18,6 +18,7 @@ import { runAlertRules } from './alerts';
 import { deleteExpiredSites } from './duplicates';
 import { actionsFor, evaluateAllOutcomes } from './actions';
 import { runContractChecks } from './contracts';
+import { checkUrls, staleNoindexPages } from './onpage';
 import { getSite } from './clients';
 import { importGoogleUpdates, lastUpdatesCheck } from './gupdates';
 import { syncSitemapUrls } from './sitemapcov';
@@ -273,6 +274,9 @@ export function schedulerTick() {
 			if (!cs || Date.now() - cs.checked_at > 24 * 3600_000) enqueueClarityScan(s.id);
 			// OpenSEO's latest site audit, read once a day for a linked site (free: it reads OpenSEO's stored results, it runs no audit).
 			if (siteLinks(s.id).openseo && auditDue(s.id)) enqueue(`oseo-audit:${s.id}`, () => syncAudit(s.id));
+			// Pages whose last on-page check said noindex, checked again once a day after three days: a lifted block clears by itself.
+			const stale = staleNoindexPages(s.id);
+			if (stale.length && kvOlderThan(`noindex_recheck:${s.id}`, 20 * 3600_000)) enqueue(`noindex-recheck:${s.id}`, () => checkUrls(s.id, stale));
 			// robots.txt once a day per host: a rule that blocks pages with clicks is then caught the next day.
 			if (robotsCheckDue(s.id)) enqueue(`robots:${s.id}`, () => runRobotsCheck(s.id));
 			// The internal-link crawl fetches up to LINK_CRAWL_PAGES of the site's pages: once a week (a site with no data yet is retried).

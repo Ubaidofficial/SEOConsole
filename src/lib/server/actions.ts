@@ -44,6 +44,9 @@ const pathOf = (u: string) => {
 const pct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(0)}%`;
 const VERSION = 'b1';
 
+/** A URL Inspection or on-page check older than this no longer raises a "blocked" alarm on its own. */
+export const BLOCK_EVIDENCE_MAX_AGE_MS = 14 * 86_400_000;
+
 /** No successful Search Console download for this long means something is failing: the app tries every 6 hours. */
 export const STALE_AFTER_MS = 48 * 3600_000;
 
@@ -118,12 +121,15 @@ export function buildActions(site: Site, days = 28): ActionItem[] {
 	}
 
 	// ── 2. pages blocked from indexing ────────────────────────────────────────
+	// Only recent evidence raises a blocking alarm: a page fixed since its last check must not stay "blocked" for ever (a check from
+	// a maintenance window, or from before a noindex was lifted). Older blocks are re-checked by the scheduler (staleNoindexPages).
 	const blocked = new Set<string>();
-	for (const r of db().prepare('SELECT url, result FROM url_inspections WHERE site_id = ?').all(id) as { url: string; result: string }[]) {
+	const freshSince = Date.now() - BLOCK_EVIDENCE_MAX_AGE_MS;
+	for (const r of db().prepare('SELECT url, result FROM url_inspections WHERE site_id = ? AND fetched_at >= ?').all(id, freshSince) as { url: string; result: string }[]) {
 		const s = (JSON.parse(r.result) as { indexStatusResult?: { robotsTxtState?: string; indexingState?: string } }).indexStatusResult;
 		if (s?.robotsTxtState === 'DISALLOWED' || /^BLOCKED/.test(s?.indexingState ?? '')) blocked.add(r.url);
 	}
-	for (const c of storedChecks(id)) if ((c.issues ?? []).some((i) => i.id === 'noindex')) blocked.add(c.url);
+	for (const c of storedChecks(id)) if (c.checkedAt >= freshSince && (c.issues ?? []).some((i) => i.id === 'noindex')) blocked.add(c.url);
 
 	// ── 2b. robots.txt, read daily: today's rules, not the last inspection ───
 	// Pages the live file blocks get their own item (it names the rule), and are left out of the item above so nothing counts twice.
