@@ -82,7 +82,15 @@
 			<h2 id="plan-h" class="text-lg font-semibold tracking-tight"><span class="ibadge ibadge-sm tone-blue mr-1.5 align-[-6px]" aria-hidden="true"><CalendarCheck class="size-3.5" /></span>Your next two weeks</h2>
 			<p class="text-sm text-muted-foreground">The most valuable things to do on this site now, picked from {data.plan.total} open findings. Tick one off when it is done.</p>
 		</div>
-		<div class="ml-auto flex gap-2 text-sm">
+		<div class="ml-auto flex items-center gap-2 text-sm">
+			<details class="relative">
+				<summary class="btn btn-sm cursor-pointer list-none [&::-webkit-details-marker]:hidden" title="Technical health: 100 minus 20 for each blocking technical finding and about 4 for each other one. This app's rule of thumb, not Google's.">Technical health <b class="ml-1 tabular-nums {data.health.grade === 'good' ? 'text-good' : data.health.grade === 'fair' ? 'text-warn' : 'text-bad'}">{data.health.score}</b><span class="text-muted-foreground">/100</span></summary>
+				<div class="card absolute right-0 z-20 mt-1 w-80 p-3 text-xs shadow-lg">
+					{#if data.health.findings.length}
+						<ul class="space-y-1">{#each data.health.findings.slice(0, 8) as f}<li class="flex gap-2"><span class="tabular-nums {f.blocking ? 'text-bad' : 'text-muted-foreground'}">−{f.penalty}</span><a class="pii hover:underline" href={f.href}>{f.title}</a></li>{/each}</ul>
+					{:else}<p>No open technical findings.</p>{/if}
+				</div>
+			</details>
 			<a class="btn btn-sm" href="/sites/{page.params.id}/quickwins">All quick wins</a>
 			<a class="btn btn-sm" href="/sites/{page.params.id}/actions">All {data.plan.total} findings →</a>
 		</div>

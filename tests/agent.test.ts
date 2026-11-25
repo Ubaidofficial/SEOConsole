@@ -5,7 +5,8 @@ import { syncSite } from '../src/lib/server/sync';
 import { DemoClient } from '../src/lib/server/demo';
 import { getSite } from '../src/lib/server/clients';
 import { actionsFor, actionStates } from '../src/lib/server/actions';
-import { agentTools, decideProposal, dueSites, listProposals, listRuns, MAX_PROPOSALS_PER_RUN, PROPOSABLE, runAgent, setAgentEnabled } from '../src/lib/server/agent';
+import { agentTools, decideProposal, dueSites, listProposals, listRuns, MAX_PROPOSALS_PER_RUN, pickSpecialists, PROPOSABLE, runAgent, runDueAgents, setAgentEnabled, SPECIALISTS, specialistOf } from '../src/lib/server/agent';
+import { toolCatalog } from '../src/lib/server/mcp';
 import type { ModelCall } from '../src/lib/server/chat';
 import type { CurrentUser } from '../src/lib/server/roles';
 import { agentStatus } from '../src/lib/server/agentstatus';
@@ -102,6 +103,53 @@ describe('approving', () => {
 		const other = listProposals(null)[0];
 		expect((await decideProposal(owner, other.id, false)).ok).toBe(true);
 		expect(listProposals(null, 'all').find((x) => x.id === other.id)!.status).toBe('declined');
+	});
+});
+
+describe('specialists', () => {
+	it('every tool a specialist names exists, and its proposals are proposable', () => {
+		const names = new Set(toolCatalog().map((t) => t.name));
+		for (const sp of SPECIALISTS) {
+			for (const t of sp.reads) expect(names.has(t), `${sp.key} reads ${t}`).toBe(true);
+			for (const t of sp.proposals) expect(PROPOSABLE.has(t), `${sp.key} proposes ${t}`).toBe(true);
+		}
+	});
+	it('a specialist is offered only its own tools', () => {
+		const tech = agentTools(specialistOf('technical'));
+		const names = tech.map((t) => t.name);
+		expect(names).toContain('get_indexing_status');
+		expect(names).toContain('submit_sitemap');
+		expect(names).not.toContain('create_content_brief');
+		expect(names).not.toContain('get_drop_diagnosis');
+		expect(agentTools(specialistOf('keyword')).map((t) => t.name)).toContain('create_content_brief');
+	});
+	it('picks by open findings (blocking weigh more), alerts and AI tracking; Performance on a quiet day', () => {
+		expect(pickSpecialists([], { max: 2 })).toEqual(['performance']);
+		expect(pickSpecialists([{ type: 'striking', blocking: false }, { type: 'striking', blocking: false }, { type: 'robots', blocking: true }], { max: 2 })).toEqual(['technical', 'keyword']);
+		expect(pickSpecialists([{ type: 'decay', blocking: false }], { openAlerts: 1, max: 1 })).toEqual(['performance']);
+		expect(pickSpecialists([], { aiTracked: true, max: 3 })).toEqual(['geo']);
+	});
+	it('a specialist run stays in its lane and remembers its own previous brief', async () => {
+		const { call, seen } = scripted([
+			() => ({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'x1', name: 'get_drop_diagnosis', input: { site: '1' } }] }),
+			() => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Technical: all clear.' }] })
+		]);
+		const r = await runAgent(1, { call, specialist: 'technical' });
+		expect(r.status).toBe('done');
+		expect(JSON.stringify(seen[1].messages)).toContain('belongs to another specialist');
+		expect(String((seen[0] as unknown as { messages: unknown[] }).messages[0] && JSON.stringify(seen[0].messages))).not.toContain('Technical: all clear');
+		expect(listRuns(null)[0].specialist).toBe('Technical');
+		const again = scripted([() => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Technical: day two.' }] })]);
+		await runAgent(1, { call: again.call, specialist: 'technical' });
+		expect(JSON.stringify(again.seen[0].messages)).toContain('Technical: all clear.');
+	});
+	it('the daily run gives each due site its picked specialists', async () => {
+		setAgentEnabled(true);
+		const { call } = scripted([() => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }] })]);
+		const out = await runDueAgents({ call, now: Date.UTC(2031, 0, 3, 9, 0) });
+		setAgentEnabled(false);
+		expect(out.length).toBeGreaterThan(0);
+		expect(out.every((r) => r.status === 'done' || r.status === 'skipped')).toBe(true);
 	});
 });
 

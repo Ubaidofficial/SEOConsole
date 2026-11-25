@@ -56,6 +56,7 @@ export const TAB_ICON: Record<string, Icon> = {
 	'/dashboard': Blocks,
 	'/insights': LayoutGrid,
 	'/quickwins': Zap,
+	'/brief': FileText,
 	'/actions': ListChecks,
 	'/queries': Search,
 	'/rank': Target,

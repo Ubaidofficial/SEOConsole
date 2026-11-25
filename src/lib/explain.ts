@@ -90,6 +90,7 @@ export const SITE_TABS = [
 	['/dashboard', 'All sources', 'Search Console, GA4, Bing and Clarity on one screen: traffic by channel, top sources, countries, devices, top pages and queries, and how visitors behave.'],
 	['/insights', 'Insights', 'Every report for this site on one page, each with its headline number: findings, traffic breakdowns, indexing tools and tests.'],
 	['/quickwins', 'Quick wins', 'The easiest improvements first: titles to rewrite, searches one push from page 1, questions you already rank for, and quick fixes.'],
+	['/brief', 'Content brief', 'What to write or rewrite for one search: create, optimise or consolidate, the searches to cover, an outline and pages to link from. No credits.'],
 	['/actions', 'Actions', 'This site\'s to-do list, in the order to do it.'],
 	['/queries', 'Queries', 'Search queries, with quick filters, keyword buckets and saved views.'],
 	['/rank', 'Rank tracking', 'The daily Google position of the searches you choose, from Search Console data: no credits, every country and device.'],
@@ -143,7 +144,7 @@ export const SOURCE_LINK: Record<string, 'ga4' | 'bing' | 'gtm' | 'clarity' | 'a
 /** How the site tabs are grouped under More: a caption and the tab paths under it. Every tab appears in exactly one group (a test checks it). */
 export const SITE_TAB_GROUPS = [
 	['Traffic', ['', '/queries', '/pages', '/rank', '/trends', '/groups', '/segments', '/types']],
-	['Findings', ['/quickwins', '/actions', '/alerts', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/vitals', '/tests', '/insights']],
+	['Findings', ['/quickwins', '/actions', '/alerts', '/opportunities', '/cannibalization', '/decay', '/diagnose', '/health', '/research', '/onpage', '/links', '/brief', '/vitals', '/tests', '/insights']],
 	['Indexing', ['/submit', '/request', '/indexing', '/indexnow', '/sitemaps', '/inspect']],
 	['Sources', ['/dashboard', '/analytics', '/bing', '/tags', '/clarity', '/ai']],
 	['Site', ['/settings']]

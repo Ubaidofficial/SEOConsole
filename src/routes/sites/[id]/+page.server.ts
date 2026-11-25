@@ -1,3 +1,4 @@
+import { healthScore } from '$lib/health';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getSite } from '$lib/server/clients';
@@ -73,6 +74,7 @@ export const load: PageServerLoad = async ({ params, parent, url }) => {
 		hourly: hourlyReport(site.id),
 		changelogAuto: !!site.changelog_auto,
 		plan: planFrom(queueFor(site, days)),
+		health: healthScore(queueFor(site).open),
 		brand: brandSplit(site, period),
 		// where the site's searches rank now, and in the period before (only when that period is really stored)
 		positions: {

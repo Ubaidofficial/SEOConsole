@@ -82,3 +82,18 @@ export const STARTERS: { title: string; prompt: string }[] = [
 	{ title: 'Rewrite weak titles', prompt: 'Find pages with a low CTR for their position and suggest better title tags, using the queries they rank for.' },
 	{ title: 'AI assistants', prompt: 'How much traffic do AI assistants send me, and what do they say about my brand?' }
 ];
+
+/**
+ * Suggested next questions. The model ends an answer with one line `Follow-ups: first | second | third`; the page shows them as
+ * chips under the newest answer and leaves the line out of the text. At most three, each up to 120 characters. Pure.
+ */
+export function splitFollowUps(text: string): { body: string; followUps: string[] } {
+	const m = /(?:^|\n)[ \t]*\**Follow-ups?\**:[ \t]*(.+?)[ \t]*$/i.exec(text.trimEnd());
+	if (!m) return { body: text, followUps: [] };
+	const followUps = m[1]
+		.split('|')
+		.map((x) => x.replace(/^[\s*"'“”-]+|[\s*"'“”]+$/g, '').trim())
+		.filter((x) => x.length > 2 && x.length <= 120)
+		.slice(0, 3);
+	return { body: text.trimEnd().slice(0, m.index).trimEnd(), followUps };
+}

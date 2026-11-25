@@ -1014,6 +1014,7 @@ declare global {
 /** Additive column migrations for databases created by an earlier version. */
 function migrate(db: Database.Database) {
 	const cols = (t: string) => (db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
+	if (!cols('agent_runs').includes('specialist')) db.exec('ALTER TABLE agent_runs ADD COLUMN specialist TEXT');
 	if (!cols('accounts').includes('scopes')) db.exec("ALTER TABLE accounts ADD COLUMN scopes TEXT NOT NULL DEFAULT ''");
 	if (!cols('sites').includes('types_synced_at')) db.exec('ALTER TABLE sites ADD COLUMN types_synced_at INTEGER');
 	if (!cols('sites').includes('appearance_pulled_on')) db.exec('ALTER TABLE sites ADD COLUMN appearance_pulled_on TEXT');
