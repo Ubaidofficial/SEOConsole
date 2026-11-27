@@ -74,10 +74,24 @@ describe('site: self-contained and safe under a strict policy', () => {
 		expect(conf).toMatch(/frame-ancestors 'none'/);
 	});
 	it('the stylesheet and script are linked with ?v= the hash of the file, so a changed file is never served from an old cache', () => {
-		for (const f of ['styles.css', 'main.js']) {
+		for (const f of ['styles.css', 'main.js', 'analytics.js']) {
 			const v = createHash('sha256').update(readFileSync(`site/assets/${f}`)).digest('hex').slice(0, 10);
 			expect(html, `${f}: update ?v= to ${v}`).toContain(`/assets/${f}?v=${v}"`);
 		}
+	});
+	it('Google Tag Manager is the only outside script: loaded by analytics.js from the gtm-id meta tag, skipped while that is empty or not a GTM ID, and allowed by the policy for Google\'s hosts only', () => {
+		const a = readFileSync('site/assets/analytics.js', 'utf8');
+		expect(html).toMatch(/<meta name="gtm-id" content="(GTM-[A-Z0-9]{4,12})?">/);
+		expect(a).toContain("document.querySelector('meta[name=\"gtm-id\"]')");
+		expect(a).toMatch(/\/\^GTM-\[A-Z0-9\]\{4,12\}\$\/\.test\(id\)\) return;/);
+		expect(a).toContain('navigator.globalPrivacyControl === true) return;');
+		expect([...a.matchAll(/https:\/\/[a-z0-9.-]+/g)].map((m) => m[0])).toEqual(['https://www.googletagmanager.com']);
+		expect(a).not.toMatch(/\bfetch\(|XMLHttpRequest|sendBeacon|WebSocket|import\(|eval\(/);
+		const conf = readFileSync('site/security-headers.conf', 'utf8');
+		const csp = /Content-Security-Policy "([^"]+)"/.exec(conf)?.[1] ?? '';
+		const hosts = [...csp.matchAll(/https:\/\/[^\s;]+/g)].map((m) => m[0]);
+		for (const h of hosts) expect(['https://*.googletagmanager.com', 'https://*.google-analytics.com', 'https://*.analytics.google.com'], h).toContain(h);
+		expect(csp).toMatch(/script-src 'self' https:\/\/\*\.googletagmanager\.com;/);
 	});
 	it('the nginx config includes the headers in every location (nginx drops inherited headers otherwise) and the Dockerfile ships every file the page needs', () => {
 		const nginx = readFileSync('site/nginx.conf', 'utf8');

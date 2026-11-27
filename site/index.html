@@ -7,6 +7,8 @@
 <meta name="description" content="Find hidden SEO opportunities in Search Console, Bing, GA4 and Clarity, see what to fix first, and manage all your websites in one free, open-source dashboard.">
 <meta name="theme-color" content="#fafaf9">
 <meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…). Empty means no analytics load; see site/README.md. -->
+<meta name="gtm-id" content="">
 <link rel="canonical" href="https://seoconsole.app/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SEOConsole">
@@ -30,6 +32,7 @@
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/styles.css?v=6b2e13aded">
 <script src="/assets/boot.js"></script>
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"SEOConsole","applicationCategory":"BusinessApplication","operatingSystem":"Linux, macOS, Docker","description":"Open-source SEO dashboard that finds hidden SEO opportunities across Google Search Console, GA4, Bing and Clarity, and manages all your websites in one place. Includes an MCP server for AI agents that reads by default.","license":"https://www.gnu.org/licenses/agpl-3.0.html","url":"https://seoconsole.app/","codeRepository":"https://github.com/Ubaidofficial/OpenSiteConsole","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Every Search Console property from every Google account in one dashboard","A ranked list of what to fix first","Alerts with your own thresholds, to Slack, Discord or email per site","Free rank tracking from Search Console data","Keyword buckets and page groups","Bing, GA4, Tag Manager and Clarity beside Search Console","SEO and LLM tests with a control group","Google update impact per site","AI-invented 404 pages caught from GA4","MCP server and REST API for AI agents","Comparison with the same weekdays last year","Clicks by country on a world map, and AI-assistant visits from GA4","AI-suggested keyword buckets, page groups and brand terms"]}
 </script>
@@ -55,7 +58,7 @@
     </nav>
     <div class="bar-cta">
       <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
-      <a class="btn small primary" href="#self-host">Try the demo</a>
+      <a class="btn small primary" href="#self-host">Run the demo</a>
     </div>
   </div>
 </header>
@@ -73,7 +76,7 @@
       </h1>
     <p class="lead rv">Find hidden SEO opportunities across all your websites in one dashboard. Stop opening five: SEOConsole reads Search Console, Bing, GA4, Tag Manager and Clarity for every Google account, keeps checking them by itself, and tells you exactly what to fix first.</p>
       <div class="cta rv">
-        <a class="btn primary" href="#self-host">Try it on demo data<span class="arr" aria-hidden="true">→</span></a>
+        <a class="btn primary" href="#self-host">Run it on demo data<span class="arr" aria-hidden="true">→</span></a>
         <a class="btn ghost" href="#wins">See what it finds</a>
       </div>
       <ul class="proof rv" aria-label="The short version">
@@ -917,7 +920,7 @@ cp .env.example .env &amp;&amp; echo DEMO_MODE=1 &gt;&gt; .env &amp;&amp; pnpm s
     <h2 id="h-faq" class="h-lg rv">Common questions.</h2>
     <div class="qa rv">
       <details><summary>Is it really free?</summary><p>Yes. It is open source under the AGPL-3.0 licence and free to self-host, with every feature included. A hosted plan at $9 a month is planned but not open yet.</p></details>
-      <details><summary>What can an AI agent do with it?</summary><p>Read first. The MCP server has 54 tools that read your stored search data, and 26 that can change things: mark a finding done, close an alert, track a search's position, switch automations on or off, log a change, start a test, refresh data, run page checks, send URLs to Bing through IndexNow or Bing's own submission API, submit a sitemap, ask for indexing checks, set brand terms, watch URLs, add the GA4 Google tag to Tag Manager, send an event your site already pushes to GA4 as a key event, pause a duplicate Google tag. Those 26 refuse unless you gave that connection the submit level, which is off by default. A separate delete level, also off by default, adds only two things: removing a sitemap from Search Console and discarding queued submissions, each after a second, confirming call. Nothing can delete your search data, connect accounts, or touch keys and passwords, and every change is written to an audit log. Live URL inspections are rate-limited and have a daily budget per key. The same tools are also a plain REST API, with the same keys and permissions.</p></details>
+      <details><summary>What can an AI agent do with it?</summary><p>Read first. The MCP server has 55 tools that read your stored search data, and 26 that can change things: mark a finding done, close an alert, track a search's position, switch automations on or off, log a change, start a test, refresh data, run page checks, send URLs to Bing through IndexNow or Bing's own submission API, submit a sitemap, ask for indexing checks, set brand terms, watch URLs, add the GA4 Google tag to Tag Manager, send an event your site already pushes to GA4 as a key event, pause a duplicate Google tag. Those 26 refuse unless you gave that connection the submit level, which is off by default. A separate delete level, also off by default, adds only two things: removing a sitemap from Search Console and discarding queued submissions, each after a second, confirming call. Nothing can delete your search data, connect accounts, or touch keys and passwords, and every change is written to an audit log. Live URL inspections are rate-limited and have a daily budget per key. The same tools are also a plain REST API, with the same keys and permissions.</p></details>
       <details><summary>Can the agent change my sites on its own?</summary><p>No, not unless you allow it. The Ask chat in your dashboard waits for your OK on every change it proposes. An AI agent connected over MCP can read first; a key needs the submit level before it can send URLs or sitemaps, and deleting is a separate level. Automations such as the indexing monitor or resubmitting sitemaps start switched off, and you turn them on one site at a time or for every site from the Connect page, or ask a connected agent you have allowed to make changes.</p></details>
       <details><summary>Does it alert me when a site drops?</summary><p>Yes. Every site gets ten alert rules from the start (clicks, impressions, position or click rate falling, searches leaving the top 10, pages leaving Google’s index, and good news such as new top-3 searches), with thresholds you can change. Add up to 20 of your own for one folder, keyword bucket or search pattern. They are checked every hour and each alert is sent once, to that site’s own Slack or Discord channel, your default webhook, or by email through your own mail server.</p></details>
       <details><summary>Can it track my rankings?</summary><p>Yes, for free. The Rank tracking tab follows the daily Google position of up to 500 searches per site, taken from your own Search Console data across every country and device, so it costs no credits. A day without an impression shows no position rather than a guess. For a single location or device as a results page shows it, connect OpenSEO’s rank tracker.</p></details>
@@ -943,7 +946,7 @@ cp .env.example .env &amp;&amp; echo DEMO_MODE=1 &gt;&gt; .env &amp;&amp; pnpm s
   <div class="wrap">
     <h2 id="h-final" class="h-xl rv">Start with the demo. Connect Google when you’re ready.</h2>
     <div class="cta rv">
-      <a class="btn primary" href="#self-host">Try it on demo data<span class="arr" aria-hidden="true">→</span></a>
+      <a class="btn primary" href="#self-host">Run it on demo data<span class="arr" aria-hidden="true">→</span></a>
       <a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Star on GitHub<span class="arr" aria-hidden="true">↗</span></a>
     </div>
   </div>
