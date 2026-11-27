@@ -1,6 +1,6 @@
 # seoconsole.app: the marketing site
 
-A one-page static site (HTML, CSS and a little JavaScript, no framework, no build step, no third-party requests). The screenshots are the real app running on its built-in demo data.
+A one-page static site (HTML, CSS and a little JavaScript, no framework, no build step). The only third-party request is Google Tag Manager, and only once a container ID is set (see *Analytics* below). The screenshots are the real app running on its built-in demo data.
 
 ## Preview
 
@@ -29,7 +29,19 @@ docker run --rm -p 8080:8080 seoconsole-site
 
 - `assets/main.js` drives everything that moves: the dashboard screenshot tilts flat as you scroll (a `--p` value from 0 to 1), sections fade in, charts draw and numbers count up, the six-step story is a short list to click through on wide screens (it moves on by itself every 7 seconds while on screen, pauses while the pointer is over it, stops for good once you pick a step, and never moves for visitors who ask for less motion; on phones each step shows its own screenshot), and the agent terminal types itself once. It also runs the few controls: the toolkit's four tabs (Analyse, Fix and index, AI search, Report and connect; arrow keys move between them), the comparison's *Show all 20 rows* (the ten rows that decide most choices show first), and the menu, which marks the section on screen. Without JavaScript every toolkit group is shown under its own heading and the whole table is open. Motion is switched off for visitors who ask their system for reduced motion, and the page is complete with JavaScript off.
 - The agent conversation uses real output from the app's MCP tools on the demo data (`get_action_queue`, `get_opportunities`). The assistant's wording is an example, and the page says so.
-- Nothing is loaded from another site: the font is self-hosted and there are no analytics, so the strict policy in `security-headers.conf` (default-src 'self') holds.
+- Nothing else is loaded from another site: the font is self-hosted, so the strict policy in `security-headers.conf` (default-src 'self') holds, apart from the Google hosts that Tag Manager and GA4 need.
+
+## Analytics
+
+Google Tag Manager, with the GA4 Google tag inside the container, is loaded by `assets/analytics.js` (an external file, because the policy blocks inline scripts). It reads the container ID from `<meta name="gtm-id" content="">` in `index.html`:
+
+- While that is empty, or not a `GTM-…` ID, nothing is loaded and the page makes no third-party request.
+- Visitors whose browser sends Global Privacy Control are not tracked.
+- `security-headers.conf` allows only `*.googletagmanager.com` (scripts, images, connections), `*.google-analytics.com` (images, connections) and `*.analytics.google.com` (connections), as in Google's guide to Tag Manager with a Content Security Policy.
+- Tags that need inline code or `eval` (Custom HTML tags, custom JavaScript variables) and Tag Manager's preview mode are still blocked by the policy. Use Google's own tag types, or widen the policy on purpose.
+- There is no consent banner. If the site is aimed at visitors in the EU or UK, decide on consent (for example Consent Mode with a banner) before setting the ID.
+
+To turn it on: create the container and GA4 property (SEOConsole's `setup_google_tag` does both once the site is in Search Console), put the `GTM-…` ID in the meta tag, and redeploy. `index.html` is never cached, so the change is live on the next load.
 
 ## Caching
 
