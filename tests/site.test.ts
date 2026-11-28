@@ -342,3 +342,72 @@ describe('site: light mode only, and gentle on people who ask for less motion', 
 		expect(html).toMatch(/<details>/); // the FAQ opens without scripts
 	});
 });
+
+describe('site: article pages (one folder per page, e.g. site/search-console/…/index.html)', () => {
+	const docPages = walk('site')
+		.filter((f) => f.endsWith(`${join('', 'index.html')}`) && f !== join('site', 'index.html') && !f.startsWith(join('site', 'tools')))
+		.map((f) => ({ file: f, path: f.slice('site'.length).replace(/index\.html$/, '').split('\\').join('/'), src: readFileSync(f, 'utf8') }));
+	const sitemap = readFileSync('site/sitemap.xml', 'utf8');
+	const docker = readFileSync('site/Dockerfile', 'utf8');
+	const hash = (f: string) => createHash('sha256').update(readFileSync(`site/assets/${f}`)).digest('hex').slice(0, 10);
+	const homeGtm = /<meta name="gtm-id" content="([^"]*)">/.exec(html)?.[1];
+
+	it('there are article pages, and each is in the sitemap, shipped by the Dockerfile and has one canonical address (its own)', () => {
+		expect(docPages.length).toBeGreaterThanOrEqual(5);
+		for (const p of docPages) {
+			const url = `https://seoconsole.app${p.path}`;
+			expect(sitemap, p.path).toContain(`<loc>${url}</loc>`);
+			expect(docker, p.path).toContain(`COPY ${p.path.split('/')[1]} /usr/share/nginx/html/${p.path.split('/')[1]}`);
+			expect(p.src, p.path).toContain(`<link rel="canonical" href="${url}">`);
+			expect(p.src, p.path).toContain(`<meta property="og:url" content="${url}">`);
+		}
+		// every sitemap entry is a page that exists
+		for (const m of sitemap.matchAll(/<loc>https:\/\/seoconsole\.app(\/[^<]*)<\/loc>/g)) expect(existsSync(`site${m[1]}index.html`), m[1]).toBe(true);
+	});
+	it('titles and descriptions fit in a search result and are unique', () => {
+		const titles = new Set<string>(), descs = new Set<string>();
+		for (const p of docPages) {
+			const t = /<title>([^<]+)<\/title>/.exec(p.src)?.[1] ?? '', d = /<meta name="description" content="([^"]+)">/.exec(p.src)?.[1] ?? '';
+			expect(t.length, `${p.path} title: ${t}`).toBeGreaterThan(20);
+			expect(t.length, `${p.path} title: ${t}`).toBeLessThanOrEqual(60);
+			expect(d.length, `${p.path} description`).toBeGreaterThan(70);
+			expect(d.length, `${p.path} description`).toBeLessThanOrEqual(160);
+			expect(titles.has(t), t).toBe(false);
+			expect(descs.has(d), d).toBe(false);
+			titles.add(t);
+			descs.add(d);
+			expect((p.src.match(/<h1\b/g) ?? []).length, p.path).toBe(1);
+		}
+	});
+	it('same policy as the home page: no inline styles, handlers or scripts; current stylesheet hashes; the same Tag Manager container', () => {
+		for (const p of docPages) {
+			expect(p.src, p.path).not.toMatch(/\sstyle="|\son[a-z]+="|javascript:/i);
+			for (const m of p.src.matchAll(/<script\b([^>]*)>/g)) expect(m[1], `${p.path}: ${m[0]}`).toMatch(/\bsrc="\/assets\/|type="application\/ld\+json"/);
+			for (const f of ['styles.css', 'doc.css', 'analytics.js']) expect(p.src, `${p.path}: update ${f}?v= to ${hash(f)}`).toContain(`/assets/${f}?v=${hash(f)}"`);
+			expect(p.src, p.path).toContain(`<meta name="gtm-id" content="${homeGtm}">`);
+			if (homeGtm) expect(p.src, p.path).toContain(`ns.html?id=${homeGtm}"`);
+			for (const m of p.src.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) expect(() => JSON.parse(m[1]), p.path).not.toThrow();
+		}
+	});
+	it('every local link and file an article page uses exists, and in-page anchors point at real ids', () => {
+		for (const p of docPages) {
+			for (const m of p.src.matchAll(/\b(?:src|href)="(\/[^"#?]*)(?:[?#][^"]*)?"/g)) expect(existsSync('site' + m[1]), `${p.path} → ${m[1]}`).toBe(true);
+			const ids = new Set([...p.src.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
+			for (const m of p.src.matchAll(/href="#([^"]+)"/g)) expect(ids.has(m[1]), `${p.path} #${m[1]}`).toBe(true);
+			for (const m of p.src.matchAll(/<img\b[^>]*>/g)) expect(m[0], p.path).toMatch(/\balt="/);
+		}
+	});
+	it('the MCP page lists every MCP tool exactly once, with the real counts', () => {
+		const mcp = docPages.find((p) => p.path === '/google-search-console-mcp/');
+		expect(mcp).toBeTruthy();
+		const listed = [...mcp!.src.matchAll(/<ul class="tools">([\s\S]*?)<\/ul>/g)].flatMap((u) => [...u[1].matchAll(/<code>([a-z0-9_]+)<\/code>/g)].map((m) => m[1]));
+		expect([...listed].sort()).toEqual([...MCP_TOOL_NAMES].sort());
+		expect(mcp!.src).toContain(`<h3 class="kicker mono">Read (${MCP_READ_TOOL_NAMES.length})</h3>`);
+		expect(mcp!.src).toContain(`<h3 class="kicker mono">Act, with the submit level (${MCP_WRITE_TOOL_NAMES.length})</h3>`);
+		expect(mcp!.src).toContain(`All ${MCP_TOOL_NAMES.length} tools`);
+	});
+	it('the home page links to the article pages', () => {
+		expect(html).toContain('href="/google-search-console-mcp/"');
+		expect(html).toContain('href="/search-console/"');
+	});
+});

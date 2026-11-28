@@ -1004,3 +1004,4 @@ html:not(.js) .cmp-more { display: none; }
 /* small links and buttons get a finger-sized target */
 .foot nav a { display: inline-flex; align-items: center; min-height: 40px; }
 @media (max-width: 640px) { .copy { padding: 8px 12px; } }
+.fine a.more { text-decoration: underline; text-underline-offset: 2px; color: var(--fg); }

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discovered – Currently Not Indexed: Causes and Fixes</title>
+<meta name="description" content="Why Search Console says &quot;Discovered - currently not indexed&quot;, what usually causes it, and what actually helps Google crawl and index those pages.">
+<meta name="theme-color" content="#fafaf9">
+<meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…), the same as on the home page; see site/README.md. -->
+<meta name="gtm-id" content="GTM-PRNK336D">
+<link rel="canonical" href="https://seoconsole.app/search-console/discovered-currently-not-indexed/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SEOConsole">
+<meta property="og:title" content="Discovered – Currently Not Indexed: Causes and Fixes">
+<meta property="og:description" content="Why Search Console says &quot;Discovered - currently not indexed&quot;, what usually causes it, and what actually helps Google crawl and index those pages.">
+<meta property="og:url" content="https://seoconsole.app/search-console/discovered-currently-not-indexed/">
+<meta property="og:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="alternate icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
+<link rel="stylesheet" href="/assets/doc.css?v=a385b1e1ef">
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"Discovered – currently not indexed","item":"https://seoconsole.app/search-console/discovered-currently-not-indexed/"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TechArticle","headline":"Discovered – currently not indexed","description":"Why Search Console says \"Discovered - currently not indexed\", what usually causes it, and what actually helps Google crawl and index those pages.","url":"https://seoconsole.app/search-console/discovered-currently-not-indexed/","datePublished":"2026-11-28","dateModified":"2026-11-28","inLanguage":"en","publisher":{"@type":"Organization","name":"SEOConsole","url":"https://seoconsole.app/"}}
+</script>
+</head>
+<body class="doc-page">
+<!-- Google Tag Manager (noscript): same container as the gtm-id meta tag; the script part is site/assets/analytics.js -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden title="Google Tag Manager"></iframe></noscript>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar-in">
+    <a class="brand" href="/" aria-label="SEOConsole home"><img src="/assets/brand/mark-dark.svg" width="30" height="30" alt=""><span>SEOConsole</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/#compare">Compare</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="bar-cta">
+      <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
+      <a class="btn small primary" href="/#self-host">Run the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="doc">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">SEOConsole</a></li><li><a href="/search-console/">Search Console guides</a></li><li aria-current="page">Discovered – currently not indexed</li></ol></nav>
+<h1>Discovered – currently not indexed</h1>
+<p class="lede">Google knows the URL exists, from a link or your sitemap, but has not crawled it yet. Google's help says that it usually wanted to crawl, but rescheduled because crawling then was expected to overload the site. On new sites and on large sites with many low-value URLs, this list can stay long for a while.</p>
+<p class="meta">Updated 28 November 2026 · Search Console guide</p>
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol>
+<li><a href="#meaning">What the status means</a></li>
+<li><a href="#vs-crawled">Discovered vs crawled</a></li>
+<li><a href="#causes">Common causes</a></li>
+<li><a href="#fix">What helps</a></li>
+<li><a href="#avoid">What does not help</a></li>
+</ol></nav>
+
+<h2 id="meaning">What the status means</h2>
+<p>In <b>Indexing → Pages</b>, this reason means Google has found the URL but has not fetched it. In URL Inspection, such a page typically has no last crawl date. Nothing is wrong with the page itself yet: Google has not looked at it.</p>
+<p>New pages often sit here for a short time and then move on. It becomes worth acting on when important pages stay here for weeks, or the list keeps growing.</p>
+
+<h2 id="vs-crawled">Discovered vs crawled</h2>
+<div class="tl"><table>
+<thead><tr><th scope="col">Status</th><th scope="col">Has Google fetched the page?</th><th scope="col">Where to look</th></tr></thead>
+<tbody>
+<tr><th scope="row">Discovered – currently not indexed</th><td>No</td><td>Crawling: internal links, crawl demand, server speed</td></tr>
+<tr><th scope="row">Crawled – currently not indexed</th><td>Yes, and decided not to index it for now</td><td>The page: how useful and distinct it is</td></tr>
+</tbody></table></div>
+
+<h2 id="causes">Common causes</h2>
+<ul>
+<li><b>A new or small site</b> that Google does not crawl often yet.</li>
+<li><b>Too many URLs for the value they add</b>: filters, tags, internal search results or parameter combinations that multiply the number of pages Google could crawl.</li>
+<li><b>Few internal links:</b> the URL is only in the sitemap, or only reachable many clicks deep.</li>
+<li><b>Slow or failing responses:</b> Google crawls less when the server is slow or returns errors. Check <b>Settings → Crawl stats</b> in Search Console.</li>
+</ul>
+
+<h2 id="fix">What helps</h2>
+<ol>
+<li><b>Link to the page from pages Google already crawls</b>, such as the home page, a hub page or related articles, with descriptive anchor text.</li>
+<li><b>Keep the sitemap accurate</b>: only canonical, indexable URLs that return 200, with a <code>lastmod</code> that changes only when the page really changes.</li>
+<li><b>Reduce low-value URLs</b>: consolidate thin variants, stop linking to endless filter combinations, and keep internal search results out of the crawl.</li>
+<li><b>Make the server answer fast and reliably</b>, and fix spikes of 5xx errors in Crawl stats.</li>
+<li><b>Request indexing for the few pages that matter most</b> with URL Inspection. Search Console limits how many requests you can make, so save them for important URLs.</li>
+</ol>
+<div class="callout"><p>Google's Indexing API is documented for job-posting and livestream pages only, so it is not a shortcut for ordinary pages. For Bing and other engines that support it, <a href="https://www.indexnow.org/" rel="noopener">IndexNow</a> tells them about new URLs immediately; Google does not use IndexNow.</p></div>
+
+<h2 id="avoid">What does not help</h2>
+<ul>
+<li>Resubmitting the same sitemap again and again. Google reads it on its own schedule.</li>
+<li>Requesting indexing for hundreds of URLs one by one, or for pages with little of their own to offer.</li>
+<li>Blocking the URLs in robots.txt to "save crawl budget" when you actually want them indexed.</li>
+</ul>
+
+<p>SEOConsole helps here too: it lists sitemap URLs that never appeared in search, builds a short request list of the pages most worth requesting within the day's allowance, and re-checks each requested URL on day 1, 3 and 5.</p>
+<section class="cta" aria-labelledby="h-cta">
+<h2 id="h-cta">Catch this before it costs you traffic</h2>
+<p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
+<div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
+</section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li><li><a href="/search-console/alternate-page-with-proper-canonical-tag/">Alternate page with proper canonical tag</a><p>The page points to another URL as its canonical and Google agreed. Usually fine, unless the tag points somewhere it should not.</p></li></ul></section>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://support.google.com/webmasters/answer/7440203" rel="noopener">Page indexing report</a>, Search Console Help</li>
+<li><a href="https://support.google.com/webmasters/answer/9012289" rel="noopener">URL Inspection tool</a>, Search Console Help</li>
+<li><a href="https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls" rel="noopener">How to specify a canonical with rel="canonical" and other methods</a>, Google Search Central</li>
+</ul>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="/"><img src="/assets/brand/mark-dark.svg" width="26" height="26" alt=""><span>SEOConsole</span></a>
+    <nav aria-label="Footer">
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
+      <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
+      <a href="https://app.seoconsole.app/terms" rel="noopener">Terms of service</a>
+    </nav>
+    <p>© 2026 SEOConsole. Google Search Console, Bing, GA4, Tag Manager, Microsoft Clarity, IndexNow, Claude, Claude Code, ChatGPT, Cursor, Windsurf, Model Context Protocol and the other names here belong to their owners. SEOConsole is not affiliated with or endorsed by them.</p>
+  </div>
+</footer>
+</body>
+</html>

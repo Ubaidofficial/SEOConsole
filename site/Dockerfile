@@ -6,5 +6,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY security-headers.conf /etc/nginx/security-headers.conf
 COPY index.html robots.txt sitemap.xml favicon.svg favicon.ico favicon-32.png apple-touch-icon.png icon-192.png icon-512.png /usr/share/nginx/html/
 COPY assets /usr/share/nginx/html/assets
+# Article pages: one folder per page (served as /<folder>/ by nginx's index index.html). Add new page folders here.
+COPY google-search-console-mcp /usr/share/nginx/html/google-search-console-mcp
+COPY search-console /usr/share/nginx/html/search-console
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1

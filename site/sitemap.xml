@@ -2,6 +2,26 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://seoconsole.app/</loc>
-    <lastmod>2026-11-27</lastmod>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://seoconsole.app/google-search-console-mcp/</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://seoconsole.app/search-console/</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://seoconsole.app/search-console/duplicate-without-user-selected-canonical/</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://seoconsole.app/search-console/alternate-page-with-proper-canonical-tag/</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://seoconsole.app/search-console/discovered-currently-not-indexed/</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
 </urlset>
