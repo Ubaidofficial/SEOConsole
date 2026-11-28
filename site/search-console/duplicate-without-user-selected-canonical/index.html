@@ -26,7 +26,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
-<link rel="stylesheet" href="/assets/doc.css?v=a385b1e1ef">
+<link rel="stylesheet" href="/assets/doc.css?v=13e1a32e0b">
 <script src="/assets/analytics.js?v=0834119ae5" defer></script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"Duplicate without user-selected canonical","item":"https://seoconsole.app/search-console/duplicate-without-user-selected-canonical/"}]}
@@ -114,14 +114,14 @@
 </ul>
 
 <h2 id="after">After the fix</h2>
-<p>Google has to recrawl the pages before the report changes, which can take days or weeks; Google gives no fixed time. You can press <b>Validate fix</b> in the report to ask Google to check the listed URLs, then watch the count fall. Spot-check a few URLs with URL Inspection to confirm the Google-selected canonical is now the one you declared. Google still chooses the canonical from all its signals, so it can occasionally keep a different one.</p>
+<p>Google has to recrawl the pages before the report changes. Press <b>Validate fix</b> in the report to ask Google to check the listed URLs; Google's help says validation typically takes up to about two weeks, and sometimes much longer. Spot-check a few URLs with URL Inspection to confirm the Google-selected canonical is now the one you declared. Google still chooses the canonical from all its signals, so it can occasionally keep a different one.</p>
 
 <section class="cta" aria-labelledby="h-cta">
 <h2 id="h-cta">Catch this before it costs you traffic</h2>
 <p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
 <div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
 </section>
-<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/alternate-page-with-proper-canonical-tag/">Alternate page with proper canonical tag</a><p>The page points to another URL as its canonical and Google agreed. Usually fine, unless the tag points somewhere it should not.</p></li><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li></ul></section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/alternate-page-with-proper-canonical-tag/">Alternate page with proper canonical tag</a><p>The page points to another URL as its canonical and Google agreed. Usually fine, unless the tag points somewhere it should not.</p></li><li><a href="/search-console/page-with-redirect/">Page with redirect</a><p>The URL redirects somewhere else, so Google indexes the target, not this URL. A problem only when your own links and sitemap still use it.</p></li><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li><li><a href="/search-console/crawled-currently-not-indexed/">Crawled – currently not indexed</a><p>Google fetched the page and decided not to index it for now. Usually about how useful and distinct the page is.</p></li></ul></section>
 <h2 id="sources">Sources</h2>
 <ul>
 <li><a href="https://support.google.com/webmasters/answer/7440203" rel="noopener">Page indexing report</a>, Search Console Help</li>
@@ -136,6 +136,8 @@
     <nav aria-label="Footer">
       <a href="/google-search-console-mcp/">MCP server</a>
       <a href="/search-console/">Search Console guides</a>
+      <a href="/best-claude-plugins-for-seo/">Claude plugins for SEO</a>
+      <a href="/indexnow/">IndexNow</a>
       <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
       <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
       <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>

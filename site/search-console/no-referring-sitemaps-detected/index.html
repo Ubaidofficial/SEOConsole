@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>No Referring Sitemaps Detected: What It Means</title>
+<meta name="description" content="Why URL Inspection says &quot;No referring sitemaps detected&quot;, when it is just timing, and how to make sure your sitemap really lists the URL Google sees.">
+<meta name="theme-color" content="#fafaf9">
+<meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…), the same as on the home page; see site/README.md. -->
+<meta name="gtm-id" content="GTM-PRNK336D">
+<link rel="canonical" href="https://seoconsole.app/search-console/no-referring-sitemaps-detected/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SEOConsole">
+<meta property="og:title" content="No Referring Sitemaps Detected: What It Means">
+<meta property="og:description" content="Why URL Inspection says &quot;No referring sitemaps detected&quot;, when it is just timing, and how to make sure your sitemap really lists the URL Google sees.">
+<meta property="og:url" content="https://seoconsole.app/search-console/no-referring-sitemaps-detected/">
+<meta property="og:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="alternate icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
+<link rel="stylesheet" href="/assets/doc.css?v=13e1a32e0b">
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"No referring sitemaps detected","item":"https://seoconsole.app/search-console/no-referring-sitemaps-detected/"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TechArticle","headline":"No referring sitemaps detected","description":"Why URL Inspection says \"No referring sitemaps detected\", when it is just timing, and how to make sure your sitemap really lists the URL Google sees.","url":"https://seoconsole.app/search-console/no-referring-sitemaps-detected/","datePublished":"2026-11-28","dateModified":"2026-11-28","inLanguage":"en","publisher":{"@type":"Organization","name":"SEOConsole","url":"https://seoconsole.app/"}}
+</script>
+</head>
+<body class="doc-page">
+<!-- Google Tag Manager (noscript): same container as the gtm-id meta tag; the script part is site/assets/analytics.js -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden title="Google Tag Manager"></iframe></noscript>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar-in">
+    <a class="brand" href="/" aria-label="SEOConsole home"><img src="/assets/brand/mark-dark.svg" width="30" height="30" alt=""><span>SEOConsole</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/#compare">Compare</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="bar-cta">
+      <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
+      <a class="btn small primary" href="/#self-host">Run the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="doc">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">SEOConsole</a></li><li><a href="/search-console/">Search Console guides</a></li><li aria-current="page">No referring sitemaps detected</li></ol></nav>
+<h1>No referring sitemaps detected</h1>
+<p class="lede">URL Inspection did not find this URL in any sitemap that Google has processed for the property. On its own it is not an error: Google finds most pages through links as well. It is worth a look when the page is important and also not indexed.</p>
+<p class="meta">Updated 28 November 2026 · Search Console guide</p>
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol><li><a href="#meaning">What the message means</a></li><li><a href="#timing">When it is only timing</a></li><li><a href="#real">When it points to a real gap</a></li><li><a href="#fix">How to fix it</a></li></ol></nav>
+
+<h2 id="meaning">What the message means</h2>
+<p>In URL Inspection, under how Google discovered the page, the sitemaps section lists sitemaps that include the URL. "No referring sitemaps detected" means none was found for this exact URL. Pages can still be crawled and indexed without one.</p>
+
+<h2 id="timing">When it is only timing</h2>
+<ul>
+<li>The URL is new and Google has not processed the latest version of your sitemap yet.</li>
+<li>Google crawled the page before it processed the sitemap that lists it.</li>
+<li>The URL is unknown to Google so far, so there is nothing to show.</li>
+</ul>
+<p>Check the <b>Sitemaps report</b>: if the sitemap shows <b>Success</b> and a recent "last read" date, wait for the next crawl.</p>
+
+<h2 id="real">When it points to a real gap</h2>
+<ul>
+<li><b>The URL in the sitemap differs</b> from the one inspected: <code>http</code> vs <code>https</code>, <code>www.</code> vs bare domain, a trailing slash, or parameters.</li>
+<li><b>The page is missing</b> from the sitemap: a plugin excludes a post type, or a static sitemap was never updated.</li>
+<li><b>The sitemap is not in this property</b>: submitted under a different property, or never submitted and not listed in robots.txt.</li>
+<li><b>The sitemap has a problem</b>; see <a href="/search-console/sitemap-could-not-be-read/">Sitemap could not be read</a>.</li>
+</ul>
+
+<h2 id="fix">How to fix it</h2>
+<ol>
+<li>Make sure the sitemap lists the canonical URL exactly as Google should index it.</li>
+<li>Submit the sitemap in the property, and list it in robots.txt with a <code>Sitemap:</code> line.</li>
+<li>Keep <code>lastmod</code> accurate so Google can tell which pages changed.</li>
+</ol>
+
+<p>SEOConsole compares every sitemap URL with the pages Search Console has shown, and lists both sitemap URLs that never appeared in search and pages earning clicks that no sitemap lists.</p>
+<section class="cta" aria-labelledby="h-cta">
+<h2 id="h-cta">Catch this before it costs you traffic</h2>
+<p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
+<div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
+</section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li><li><a href="/search-console/crawled-currently-not-indexed/">Crawled – currently not indexed</a><p>Google fetched the page and decided not to index it for now. Usually about how useful and distinct the page is.</p></li><li><a href="/search-console/sitemap-could-not-be-read/">Sitemap could not be read</a><p>Search Console could not fetch or parse your sitemap. Check it loads for Googlebot, is valid XML and is not blocked.</p></li><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li></ul></section>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://support.google.com/webmasters/answer/9012289" rel="noopener">URL Inspection tool</a>, Search Console Help</li><li><a href="https://support.google.com/webmasters/answer/7451001" rel="noopener">Sitemaps report</a>, Search Console Help</li></ul>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="/"><img src="/assets/brand/mark-dark.svg" width="26" height="26" alt=""><span>SEOConsole</span></a>
+    <nav aria-label="Footer">
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/best-claude-plugins-for-seo/">Claude plugins for SEO</a>
+      <a href="/indexnow/">IndexNow</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
+      <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
+      <a href="https://app.seoconsole.app/terms" rel="noopener">Terms of service</a>
+    </nav>
+    <p>© 2026 SEOConsole. Google Search Console, Bing, GA4, Tag Manager, Microsoft Clarity, IndexNow, Claude, Claude Code, ChatGPT, Cursor, Windsurf, Model Context Protocol and the other names here belong to their owners. SEOConsole is not affiliated with or endorsed by them.</p>
+  </div>
+</footer>
+</body>
+</html>

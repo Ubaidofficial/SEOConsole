@@ -367,7 +367,9 @@ describe('site: article pages (one folder per page, e.g. site/search-console/…
 	it('titles and descriptions fit in a search result and are unique', () => {
 		const titles = new Set<string>(), descs = new Set<string>();
 		for (const p of docPages) {
-			const t = /<title>([^<]+)<\/title>/.exec(p.src)?.[1] ?? '', d = /<meta name="description" content="([^"]+)">/.exec(p.src)?.[1] ?? '';
+			// measured as people see them, with HTML entities decoded (&quot; is one character in a search result, not six)
+			const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+			const t = decode(/<title>([^<]+)<\/title>/.exec(p.src)?.[1] ?? ''), d = decode(/<meta name="description" content="([^"]+)">/.exec(p.src)?.[1] ?? '');
 			expect(t.length, `${p.path} title: ${t}`).toBeGreaterThan(20);
 			expect(t.length, `${p.path} title: ${t}`).toBeLessThanOrEqual(60);
 			expect(d.length, `${p.path} description`).toBeGreaterThan(70);
@@ -406,8 +408,15 @@ describe('site: article pages (one folder per page, e.g. site/search-console/…
 		expect(mcp!.src).toContain(`<h3 class="kicker mono">Act, with the submit level (${MCP_WRITE_TOOL_NAMES.length})</h3>`);
 		expect(mcp!.src).toContain(`All ${MCP_TOOL_NAMES.length} tools`);
 	});
+	it('the IndexNow key file sits at the root, contains only its own name, and is shipped by the Dockerfile', () => {
+		const keys = readdirSync('site').filter((f) => /^[a-f0-9]{8,128}\.txt$/.test(f));
+		expect(keys).toHaveLength(1);
+		expect(readFileSync(`site/${keys[0]}`, 'utf8')).toBe(keys[0].replace(/\.txt$/, ''));
+		expect(docker).toContain(`COPY ${keys[0]} /usr/share/nginx/html/`);
+	});
 	it('the home page links to the article pages', () => {
 		expect(html).toContain('href="/google-search-console-mcp/"');
 		expect(html).toContain('href="/search-console/"');
+		for (const p of docPages.filter((x) => x.path.split('/').length === 3)) expect(html, p.path).toContain(`href="${p.path}"`); // every top-level article folder is in the footer
 	});
 });

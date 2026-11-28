@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page With Redirect in Search Console: Is It a Problem?</title>
+<meta name="description" content="Why Search Console lists &quot;Page with redirect&quot;, when it is expected, and how to clean up the sitemaps and internal links that keep pointing at redirects.">
+<meta name="theme-color" content="#fafaf9">
+<meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…), the same as on the home page; see site/README.md. -->
+<meta name="gtm-id" content="GTM-PRNK336D">
+<link rel="canonical" href="https://seoconsole.app/search-console/page-with-redirect/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SEOConsole">
+<meta property="og:title" content="Page With Redirect in Search Console: Is It a Problem?">
+<meta property="og:description" content="Why Search Console lists &quot;Page with redirect&quot;, when it is expected, and how to clean up the sitemaps and internal links that keep pointing at redirects.">
+<meta property="og:url" content="https://seoconsole.app/search-console/page-with-redirect/">
+<meta property="og:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="alternate icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
+<link rel="stylesheet" href="/assets/doc.css?v=13e1a32e0b">
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"Page with redirect","item":"https://seoconsole.app/search-console/page-with-redirect/"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TechArticle","headline":"Page with redirect","description":"Why Search Console lists \"Page with redirect\", when it is expected, and how to clean up the sitemaps and internal links that keep pointing at redirects.","url":"https://seoconsole.app/search-console/page-with-redirect/","datePublished":"2026-11-28","dateModified":"2026-11-28","inLanguage":"en","publisher":{"@type":"Organization","name":"SEOConsole","url":"https://seoconsole.app/"}}
+</script>
+</head>
+<body class="doc-page">
+<!-- Google Tag Manager (noscript): same container as the gtm-id meta tag; the script part is site/assets/analytics.js -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden title="Google Tag Manager"></iframe></noscript>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar-in">
+    <a class="brand" href="/" aria-label="SEOConsole home"><img src="/assets/brand/mark-dark.svg" width="30" height="30" alt=""><span>SEOConsole</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/#compare">Compare</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="bar-cta">
+      <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
+      <a class="btn small primary" href="/#self-host">Run the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="doc">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">SEOConsole</a></li><li><a href="/search-console/">Search Console guides</a></li><li aria-current="page">Page with redirect</li></ol></nav>
+<h1>Page with redirect</h1>
+<p class="lede">The URL redirects to another page, so Google does not index it. Google's help describes it as a non-canonical URL that redirects; whether the target is indexed depends on what Google thinks of the target. Most of the time this entry is expected.</p>
+<p class="meta">Updated 28 November 2026 · Search Console guide</p>
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol><li><a href="#meaning">What the status means</a></li><li><a href="#normal">When it is normal</a></li><li><a href="#problem">When it is a problem</a></li><li><a href="#fix">How to clean it up</a></li></ol></nav>
+
+<h2 id="meaning">What the status means</h2>
+<p>A redirecting URL is never indexed itself: Google follows it and evaluates the destination. So this reason only says Google found URLs that redirect. Check the destination separately with URL Inspection if you care about it.</p>
+
+<h2 id="normal">When it is normal</h2>
+<ul>
+<li><code>http://</code> to <code>https://</code>, and <code>www.</code> to the bare domain or the other way round.</li>
+<li>Old URLs redirected after a redesign, a migration or a merged article.</li>
+<li>Trailing-slash or case normalisation, such as <code>/pricing</code> to <code>/pricing/</code>.</li>
+</ul>
+
+<h2 id="problem">When it is a problem</h2>
+<ul>
+<li><b>Your sitemap lists redirecting URLs.</b> A sitemap should list final, canonical URLs that return 200.</li>
+<li><b>Internal links point at redirects</b>, adding a hop on every click and every crawl.</li>
+<li><b>Redirect chains</b>: A → B → C. Point A straight at C.</li>
+<li><b>A page that should rank redirects by mistake</b>, for example a rule that is broader than intended. Google lists broken chains, loops and bad targets separately, as <b>Redirect error</b>.</li>
+</ul>
+
+<h2 id="fix">How to clean it up</h2>
+<ol>
+<li>Export the example URLs from the report and check where each one ends up.</li>
+<li>Replace redirecting URLs in the sitemap with their final URLs.</li>
+<li>Update internal links, menus and canonical tags to the final URLs.</li>
+<li>Collapse chains into single redirects, and keep permanent moves as 301 or 308.</li>
+</ol>
+
+
+<section class="cta" aria-labelledby="h-cta">
+<h2 id="h-cta">Catch this before it costs you traffic</h2>
+<p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
+<div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
+</section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li><li><a href="/search-console/alternate-page-with-proper-canonical-tag/">Alternate page with proper canonical tag</a><p>The page points to another URL as its canonical and Google agreed. Usually fine, unless the tag points somewhere it should not.</p></li><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li><li><a href="/search-console/crawled-currently-not-indexed/">Crawled – currently not indexed</a><p>Google fetched the page and decided not to index it for now. Usually about how useful and distinct the page is.</p></li></ul></section>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://support.google.com/webmasters/answer/7440203" rel="noopener">Page indexing report</a>, Search Console Help</li><li><a href="https://developers.google.com/search/docs/crawling-indexing/http-network-errors" rel="noopener">How HTTP status codes, and network and DNS errors affect Google Search</a>, Google Search Central</li></ul>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="/"><img src="/assets/brand/mark-dark.svg" width="26" height="26" alt=""><span>SEOConsole</span></a>
+    <nav aria-label="Footer">
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/best-claude-plugins-for-seo/">Claude plugins for SEO</a>
+      <a href="/indexnow/">IndexNow</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
+      <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
+      <a href="https://app.seoconsole.app/terms" rel="noopener">Terms of service</a>
+    </nav>
+    <p>© 2026 SEOConsole. Google Search Console, Bing, GA4, Tag Manager, Microsoft Clarity, IndexNow, Claude, Claude Code, ChatGPT, Cursor, Windsurf, Model Context Protocol and the other names here belong to their owners. SEOConsole is not affiliated with or endorsed by them.</p>
+  </div>
+</footer>
+</body>
+</html>

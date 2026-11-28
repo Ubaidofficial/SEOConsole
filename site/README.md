@@ -46,7 +46,7 @@ To turn it on: create the container and GA4 property (SEOConsole's `setup_google
 
 ## Article pages
 
-Besides the one-page home page there are article pages, one folder each with its own `index.html`: `google-search-console-mcp/` (the MCP server and all its tools) and `search-console/` (a hub plus one guide per Page indexing status). They share the home page's header, footer, `styles.css`, Tag Manager container (`gtm-id` meta and noscript frame) and policy, and add `assets/doc.css` for article typography.
+Besides the one-page home page there are article pages, one folder each with its own `index.html`: `google-search-console-mcp/` (the MCP server and all its tools), `search-console/` (a hub plus one guide per Search Console indexing message, grouped by kind), `best-claude-plugins-for-seo/` and `indexnow/`. They share the home page's header, footer, `styles.css`, Tag Manager container (`gtm-id` meta and noscript frame) and policy, and add `assets/doc.css` for article typography.
 
 To add a page:
 
@@ -56,6 +56,10 @@ To add a page:
 4. Link to it from the hub, related pages or the footer.
 
 `tests/site.test.ts` checks each article page: in the sitemap and Dockerfile, its own canonical, title of at most 60 characters and description of at most 160, one `<h1>`, no inline styles or scripts, current `?v=` hashes, the same container as the home page, working local links and anchors, and that the MCP page lists exactly the app's MCP tools. nginx serves `/folder` as a redirect to `/folder/` (`absolute_redirect off`, so the redirect keeps the public host and port).
+
+## IndexNow key
+
+`cf02c3ba21df7f4bf418937e5be5fce9.txt` at the site root is the site's IndexNow key file: its name and its whole content are the key, which SEOConsole created for seoconsole.app (`setup_indexnow`). Bing and the other IndexNow engines fetch it to check that submissions come from the site. Keep it, and keep the `COPY` line for it in the `Dockerfile`; `tests/site.test.ts` checks both. To rotate the key, create a new one in SEOConsole and replace the file.
 
 ## Caching
 

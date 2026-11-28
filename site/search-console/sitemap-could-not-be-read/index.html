@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sitemap Could Not Be Read in Search Console: Fixes</title>
+<meta name="description" content="Why Search Console shows &quot;Couldn&#x27;t fetch&quot; or &quot;Sitemap could not be read&quot; for your sitemap, how to test it like Googlebot, and what to fix.">
+<meta name="theme-color" content="#fafaf9">
+<meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…), the same as on the home page; see site/README.md. -->
+<meta name="gtm-id" content="GTM-PRNK336D">
+<link rel="canonical" href="https://seoconsole.app/search-console/sitemap-could-not-be-read/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SEOConsole">
+<meta property="og:title" content="Sitemap Could Not Be Read in Search Console: Fixes">
+<meta property="og:description" content="Why Search Console shows &quot;Couldn&#x27;t fetch&quot; or &quot;Sitemap could not be read&quot; for your sitemap, how to test it like Googlebot, and what to fix.">
+<meta property="og:url" content="https://seoconsole.app/search-console/sitemap-could-not-be-read/">
+<meta property="og:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="alternate icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
+<link rel="stylesheet" href="/assets/doc.css?v=13e1a32e0b">
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"Sitemap could not be read","item":"https://seoconsole.app/search-console/sitemap-could-not-be-read/"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TechArticle","headline":"Sitemap could not be read","description":"Why Search Console shows \"Couldn't fetch\" or \"Sitemap could not be read\" for your sitemap, how to test it like Googlebot, and what to fix.","url":"https://seoconsole.app/search-console/sitemap-could-not-be-read/","datePublished":"2026-11-28","dateModified":"2026-11-28","inLanguage":"en","publisher":{"@type":"Organization","name":"SEOConsole","url":"https://seoconsole.app/"}}
+</script>
+</head>
+<body class="doc-page">
+<!-- Google Tag Manager (noscript): same container as the gtm-id meta tag; the script part is site/assets/analytics.js -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden title="Google Tag Manager"></iframe></noscript>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar-in">
+    <a class="brand" href="/" aria-label="SEOConsole home"><img src="/assets/brand/mark-dark.svg" width="30" height="30" alt=""><span>SEOConsole</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/#compare">Compare</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="bar-cta">
+      <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
+      <a class="btn small primary" href="/#self-host">Run the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="doc">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">SEOConsole</a></li><li><a href="/search-console/">Search Console guides</a></li><li aria-current="page">Sitemap could not be read</li></ol></nav>
+<h1>Sitemap could not be read</h1>
+<p class="lede">Search Console could not fetch or process your sitemap file. Google's Sitemaps report help lists the usual reasons: the file is blocked by robots.txt, returns an error such as 404, or the server had a temporary problem. Some of these clear up on their own.</p>
+<p class="meta">Updated 28 November 2026 · Search Console guide</p>
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol><li><a href="#meaning">What the status means</a></li><li><a href="#test">Test it like Googlebot</a></li><li><a href="#causes">Common causes</a></li><li><a href="#fix">Fix and resubmit</a></li></ol></nav>
+
+<h2 id="meaning">What the status means</h2>
+<p>In <b>Indexing → Sitemaps</b>, a status of <b>Couldn't fetch</b> on the main list means Google could not retrieve the sitemap file itself. Google's help says it retries for a few days and then stops if the sitemap stays unavailable or has critical errors. It also notes that some of these errors are temporary, so a fresh submission can briefly show this status before Google has processed it.</p>
+
+<h2 id="test">Test it like Googlebot</h2>
+<ol>
+<li>Open the sitemap URL in a private browser window. It should load without a login and show XML.</li>
+<li>Put the sitemap URL into URL Inspection and run <b>Test live URL</b>. Google's help says to look for <b>Crawl allowed: Yes</b> and <b>Page fetch: Successful</b>.</li>
+<li>Check the response: <code>curl -I https://example.com/sitemap.xml</code> should return <code>200</code>.</li>
+</ol>
+
+<h2 id="causes">Common causes</h2>
+<ul>
+<li><b>robots.txt blocks the sitemap path.</b></li>
+<li><b>Wrong address</b>: the submitted URL returns 404, or redirects somewhere unexpected.</li>
+<li><b>Firewall or bot protection</b> that challenges Googlebot, so it gets a challenge page instead of XML.</li>
+<li><b>Invalid XML</b>: an HTML error page served as the sitemap, a stray character before <code>&lt;?xml</code>, or unescaped <code>&amp;</code> in URLs.</li>
+<li><b>URLs from another host</b> than the property, such as a <code>www.</code> sitemap listing bare-domain URLs.</li>
+<li><b>Too large</b>: Google's sitemap limits are 50,000 URLs or 50 MB uncompressed per file; split larger ones with a sitemap index.</li>
+</ul>
+
+<h2 id="fix">Fix and resubmit</h2>
+<p>Fix the cause, confirm the live test passes, then resubmit the sitemap in the Sitemaps report. Submitting is a request: Google reads the file on its own schedule.</p>
+
+<p>SEOConsole's sitemap check fetches each sitemap the way a crawler would and reports whether it is reachable and valid, how many URLs it lists, duplicates, URLs on other hosts, and whether robots.txt mentions it, next to what Google last reported.</p>
+<section class="cta" aria-labelledby="h-cta">
+<h2 id="h-cta">Catch this before it costs you traffic</h2>
+<p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
+<div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
+</section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li><li><a href="/search-console/crawled-currently-not-indexed/">Crawled – currently not indexed</a><p>Google fetched the page and decided not to index it for now. Usually about how useful and distinct the page is.</p></li><li><a href="/search-console/no-referring-sitemaps-detected/">No referring sitemaps detected</a><p>URL Inspection found no processed sitemap that lists this URL. Often only timing, sometimes a URL that differs from the one in the sitemap.</p></li><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li></ul></section>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://support.google.com/webmasters/answer/7451001" rel="noopener">Sitemaps report</a>, Search Console Help</li><li><a href="https://support.google.com/webmasters/answer/9012289" rel="noopener">URL Inspection tool</a>, Search Console Help</li></ul>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="/"><img src="/assets/brand/mark-dark.svg" width="26" height="26" alt=""><span>SEOConsole</span></a>
+    <nav aria-label="Footer">
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/best-claude-plugins-for-seo/">Claude plugins for SEO</a>
+      <a href="/indexnow/">IndexNow</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
+      <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
+      <a href="https://app.seoconsole.app/terms" rel="noopener">Terms of service</a>
+    </nav>
+    <p>© 2026 SEOConsole. Google Search Console, Bing, GA4, Tag Manager, Microsoft Clarity, IndexNow, Claude, Claude Code, ChatGPT, Cursor, Windsurf, Model Context Protocol and the other names here belong to their owners. SEOConsole is not affiliated with or endorsed by them.</p>
+  </div>
+</footer>
+</body>
+</html>

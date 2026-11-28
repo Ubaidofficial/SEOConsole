@@ -26,7 +26,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
-<link rel="stylesheet" href="/assets/doc.css?v=a385b1e1ef">
+<link rel="stylesheet" href="/assets/doc.css?v=13e1a32e0b">
 <script src="/assets/analytics.js?v=0834119ae5" defer></script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"Alternate page with proper canonical tag","item":"https://seoconsole.app/search-console/alternate-page-with-proper-canonical-tag/"}]}
@@ -98,7 +98,7 @@
 <li>Give every page that should rank a <b>self-referencing canonical</b> with its own absolute URL.</li>
 <li>Make sure each canonical target <b>returns 200</b>, is not redirected, is not <code>noindex</code> and is not blocked in robots.txt.</li>
 <li>Keep the <b>sitemap</b> and <b>internal links</b> pointing to the canonical URLs, so every signal agrees.</li>
-<li>Inspect a fixed URL with <b>URL Inspection</b>, then press <b>Validate fix</b> in the report. Google has to recrawl before the status changes, and gives no fixed time for that.</li>
+<li>Inspect a fixed URL with <b>URL Inspection</b>, then press <b>Validate fix</b> in the report. Google's help says validation typically takes up to about two weeks, and sometimes much longer.</li>
 </ol>
 
 <h2 id="related-statuses">Statuses that look similar</h2>
@@ -115,7 +115,7 @@
 <p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
 <div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
 </section>
-<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li></ul></section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li><li><a href="/search-console/page-with-redirect/">Page with redirect</a><p>The URL redirects somewhere else, so Google indexes the target, not this URL. A problem only when your own links and sitemap still use it.</p></li><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li><li><a href="/search-console/crawled-currently-not-indexed/">Crawled – currently not indexed</a><p>Google fetched the page and decided not to index it for now. Usually about how useful and distinct the page is.</p></li></ul></section>
 <h2 id="sources">Sources</h2>
 <ul>
 <li><a href="https://support.google.com/webmasters/answer/7440203" rel="noopener">Page indexing report</a>, Search Console Help</li>
@@ -130,6 +130,8 @@
     <nav aria-label="Footer">
       <a href="/google-search-console-mcp/">MCP server</a>
       <a href="/search-console/">Search Console guides</a>
+      <a href="/best-claude-plugins-for-seo/">Claude plugins for SEO</a>
+      <a href="/indexnow/">IndexNow</a>
       <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
       <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
       <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
