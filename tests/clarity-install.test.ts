@@ -48,6 +48,10 @@ describe('scanHtml', () => {
 		expect(scanHtml(html).gtmIds.sort()).toEqual(['GTM-ABC1234', 'GTM-XYZ9876']);
 		expect(scanHtml('<html><head><title>x</title></head></html>')).toEqual({ clarityIds: [], clarityLoader: false, gtmIds: [] });
 	});
+	it('finds a container from Tag Manager\'s noscript frame alone, for pages that load gtm.js from their own script file', () => {
+		const html = '<body><noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden></iframe></noscript>';
+		expect(scanHtml(html).gtmIds).toEqual(['GTM-PRNK336D']);
+	});
 });
 
 describe('parseClarityId and claritySnippet', () => {
