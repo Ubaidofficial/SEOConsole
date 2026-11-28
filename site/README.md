@@ -37,7 +37,8 @@ Google Tag Manager, with the GA4 Google tag inside the container, is loaded by `
 
 - While that is empty, or not a `GTM-…` ID, nothing is loaded and the page makes no third-party request.
 - Visitors whose browser sends Global Privacy Control are not tracked.
-- `security-headers.conf` allows only `*.googletagmanager.com` (scripts, images, connections), `*.google-analytics.com` (images, connections) and `*.analytics.google.com` (connections), as in Google's guide to Tag Manager with a Content Security Policy.
+- Tag Manager's `<noscript>` frame (`ns.html`) sits right after `<body>`, hidden with the `hidden` attribute (the policy blocks inline styles), with the same container ID as the meta tag; change both together. It only matters for visitors without JavaScript, and GA4's Google tag does not run there. `frame-src` allows `www.googletagmanager.com` for it.
+- `security-headers.conf` allows only `*.googletagmanager.com` (scripts, images, connections), `*.google-analytics.com` (images, connections), `*.analytics.google.com` (connections) and `www.google.com` (images, connections: GA4 also sends hits to `www.google.com/g/collect`, seen in a browser check on 2026-11-28), following Google's guide to Tag Manager with a Content Security Policy.
 - Tags that need inline code or `eval` (Custom HTML tags, custom JavaScript variables) and Tag Manager's preview mode are still blocked by the policy. Use Google's own tag types, or widen the policy on purpose.
 - There is no consent banner. If the site is aimed at visitors in the EU or UK, decide on consent (for example Consent Mode with a banner) before setting the ID.
 

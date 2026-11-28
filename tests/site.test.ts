@@ -48,6 +48,7 @@ describe('site: self-contained and safe under a strict policy', () => {
 	it('loads nothing from another origin: the only absolute links are the repository, its licence and the app\'s own legal pages', () => {
 		for (const m of html.matchAll(/<(?:script|link|img|source|iframe)\b[^>]*\b(?:src|href)="(https?:[^"]+)"/g)) {
 			if (/rel="canonical"/.test(m[0])) continue;
+			if (/^<iframe\b/.test(m[0]) && /^https:\/\/www\.googletagmanager\.com\/ns\.html\?id=GTM-[A-Z0-9]+$/.test(m[1])) continue; // Tag Manager's noscript frame, checked below
 			expect(m[1], m[0].slice(0, 80)).toBe('NOTHING EXTERNAL');
 		}
 		// Links (never loads) may also go to the app's own legal pages: Google's verification needs the website to link to the privacy policy.
@@ -90,7 +91,12 @@ describe('site: self-contained and safe under a strict policy', () => {
 		const conf = readFileSync('site/security-headers.conf', 'utf8');
 		const csp = /Content-Security-Policy "([^"]+)"/.exec(conf)?.[1] ?? '';
 		const hosts = [...csp.matchAll(/https:\/\/[^\s;]+/g)].map((m) => m[0]);
-		for (const h of hosts) expect(['https://*.googletagmanager.com', 'https://*.google-analytics.com', 'https://*.analytics.google.com'], h).toContain(h);
+		for (const h of hosts) expect(['https://*.googletagmanager.com', 'https://www.googletagmanager.com', 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://www.google.com'], h).toContain(h);
+		expect(csp).toMatch(/frame-src https:\/\/www\.googletagmanager\.com;/);
+		// the noscript frame, when present, is hidden and uses the same container as the meta tag
+		const ns = /<noscript><iframe src="https:\/\/www\.googletagmanager\.com\/ns\.html\?id=(GTM-[A-Z0-9]+)"[^>]*\bhidden\b[^>]*><\/iframe><\/noscript>/.exec(html);
+		const metaId = /<meta name="gtm-id" content="([^"]*)">/.exec(html)?.[1];
+		if (ns) expect(ns[1]).toBe(metaId);
 		expect(csp).toMatch(/script-src 'self' https:\/\/\*\.googletagmanager\.com;/);
 	});
 	it('the nginx config includes the headers in every location (nginx drops inherited headers otherwise) and the Dockerfile ships every file the page needs', () => {
