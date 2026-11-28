@@ -4,6 +4,7 @@
 	 * one confirming click, and afterwards the code that has to go on the site (SEOConsole cannot put it there).
 	 */
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import { ago } from '$lib/format';
 	import { gtmSnippet } from '$lib/gtminstall';
 	import type { SetupChoices, SetupPlan, SetupResult } from '$lib/server/setup';
@@ -75,6 +76,34 @@
 	}
 	const canRun = $derived(!!p?.ready);
 	const adding = $derived(p?.tag?.state === 'add');
+	/** GA4 property and container both linked and the Google tag already live: there is nothing left for the button to do. */
+	const allSet = $derived(p?.ga4?.state === 'linked' && p?.gtm?.state === 'linked' && p?.tag?.state === 'present');
+
+	// Most waits here end in another tab: creating a Tag Manager account, granting access, deploying the site. Coming back to this
+	// tab reads the plan again, and while the container is not found on the site yet it also runs "Check my site" again, so the
+	// panel is never left showing an old state that only a reload would fix. Throttled, so switching tabs back and forth is cheap.
+	let checkForm = $state<HTMLFormElement | null>(null);
+	let lastPlan = 0;
+	let lastCheck = 0;
+	$effect(() => {
+		const onBack = () => {
+			if (document.visibilityState !== 'visible' || busy) return;
+			const now = Date.now();
+			if (snippet && onSite && !onSite.seen && checkForm && now - lastCheck > 30_000) {
+				lastCheck = lastPlan = now;
+				checkForm.requestSubmit(); // the check reloads the plan as well
+			} else if (now - lastPlan > 10_000) {
+				lastPlan = now;
+				void invalidateAll();
+			}
+		};
+		document.addEventListener('visibilitychange', onBack);
+		window.addEventListener('focus', onBack);
+		return () => {
+			document.removeEventListener('visibilitychange', onBack);
+			window.removeEventListener('focus', onBack);
+		};
+	});
 </script>
 
 
@@ -223,12 +252,12 @@
 						{/if}
 						<details class="mt-3 border-t pt-2">
 							<summary class="cursor-pointer text-muted-foreground">Want a brand-new Tag Manager account instead?</summary>
-							<p class="mt-1 text-muted-foreground">Google’s API cannot create a Tag Manager account, so make it there: <b>Create account</b>, account name <b>{p.gtm.name}</b>, container name <b>{p.gtm.name}</b>, target platform <b>Web</b>. Then press Try again: SEOConsole finds that container, links it and adds the Google tag.</p>
+							<p class="mt-1 text-muted-foreground">Google’s API cannot create a Tag Manager account, so make it there: <b>Create account</b>, account name <b>{p.gtm.name}</b>, container name <b>{p.gtm.name}</b>, target platform <b>Web</b>. Then come back to this tab (or press Try again): SEOConsole finds that container, links it and adds the Google tag.</p>
 							<a class="btn btn-primary mt-2 text-xs" href="https://tagmanager.google.com/" target="_blank" rel="noreferrer noopener">Open Tag Manager</a>
 							<a class="btn mt-2 text-xs" href={back}>Try again</a>
 						</details>
 					{:else if p.gtm?.state === 'no-account'}
-						<p>You have no Tag Manager account yet. Google’s API cannot create one, so make it yourself (it takes a minute): <b>Create account</b>, container name <b>{site.name}</b>, target platform <b>Web</b>. Then come back: SEOConsole finds the container and links it.</p>
+						<p>You have no Tag Manager account yet. Google’s API cannot create one, so make it yourself (it takes a minute): <b>Create account</b>, container name <b>{site.name}</b>, target platform <b>Web</b>. Then come back to this tab: SEOConsole looks again by itself, finds the container and links it.</p>
 						<a class="btn btn-primary mt-2 text-xs" href="https://tagmanager.google.com/" target="_blank" rel="noreferrer noopener">Open Tag Manager</a>
 						<a class="btn mt-2 text-xs" href={back}>Try again</a>
 					{:else if p.gtm?.state === 'blocked'}
@@ -281,6 +310,8 @@
 					{#if adding}
 						<button class="btn btn-primary text-xs" name="mode" value="publish" disabled={!canRun || !p.tag?.canPublish || !!busy}>{busy === 'run' ? 'Working…' : 'Set up and publish'}</button>
 						<button class="btn text-xs" name="mode" value="workspace" disabled={!canRun || !!busy}>Set up, I’ll review the tag first</button>
+					{:else if allSet}
+						<p class="inline-flex items-center gap-1.5 text-xs" style="color:var(--good)"><Check class="size-3.5" />All set: GA4, Tag Manager and the Google tag are linked. Nothing to change.</p>
 					{:else}
 						<button class="btn btn-primary text-xs" name="mode" value="workspace" disabled={!canRun || !!busy}>{busy === 'run' ? 'Working…' : 'Link them'}</button>
 					{/if}
@@ -315,12 +346,12 @@
 						{#if !onSite}Not checked yet{:else if onSite.seen}The pages load this container{:else if onSite.pagesRead === 0}Could not read the pages{:else}Not found on the pages yet{/if}
 					</span>
 					{#if onSite}<span class="text-muted-foreground">checked {ago(onSite.checkedAt)}</span>{/if}
-					<form method="POST" action="?/setupCheck&setup={site.id}" use:enhance={done('check')}>
+					<form method="POST" action="?/setupCheck&setup={site.id}" use:enhance={done('check')} bind:this={checkForm}>
 						<input type="hidden" name="siteId" value={site.id} />
 						<button class="btn text-xs" disabled={busy === 'check'}>{busy === 'check' ? 'Checking…' : 'Check my site'}</button>
 					</form>
 				</div>
-				<p class="mt-1 text-[11px] text-muted-foreground">The check reads the home page and the two biggest pages. A container that JavaScript adds later is invisible to it.</p>
+				<p class="mt-1 text-[11px] text-muted-foreground">The check reads the home page and the two biggest pages. A container that JavaScript adds later is invisible to it. Until it is found, the check runs again by itself when you come back to this tab.</p>
 			</div>
 		{/if}
 	{/if}

@@ -7,6 +7,7 @@
 	import SiteSetup from '$lib/components/SiteSetup.svelte';
 	import { privacy } from '$lib/privacy.svelte';
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import { ago } from '$lib/format';
 
 	let { data, form } = $props();
@@ -22,6 +23,16 @@
 		};
 	};
 	const msgFor = (s: string) => (form?.section === s ? form : null);
+	// While a site or one of its links is syncing, re-read the page every few seconds (only while the tab is visible), so
+	// "⟳ running" turns into "synced" without a reload, as on the dashboard.
+	const syncingNow = $derived(data.rows.some((r) => r.google === 'running' || r.google === 'queued' || Object.values(r.links).some((l) => l && (l.status === 'running' || l.status === 'queued'))));
+	$effect(() => {
+		if (!syncingNow) return;
+		const t = setInterval(() => {
+			if (document.visibilityState === 'visible') void invalidateAll();
+		}, 3000);
+		return () => clearInterval(t);
+	});
 	let editing = $state(false);
 	/** A source whose setup is finished folds down to one line; it opens again on click, and stays open while it has a message to show. */
 	const full = (k: keyof typeof done) => data.total > 0 && done[k] === data.total;
@@ -153,11 +164,12 @@
 										<form method="POST" action="?/manual" use:enhance class="mt-1.5 flex gap-1"><input type="hidden" name="siteId" value={r.id} /><input type="hidden" name="kind" value="openseo" />
 											<select class="input pii w-44 !py-0.5 text-xs" name="externalId" aria-label="OpenSEO project for {r.name}">{#each r.openseoChoices as p}<option value={p.id} selected={p.suggested}>{p.name}{p.domain ? ` (${p.domain})` : ''}{p.suggested ? ' · suggested' : ''}</option>{/each}</select><button class="btn btn-xs btn-primary">Link</button></form>
 									</details>
+									{#if data.openseo.status === 'error'}<div class="mt-1 text-[11px]" style="color:var(--warn)">OpenSEO sign-in expired: this list may be out of date. <a class="underline" href="#openseo-source" onclick={() => { const d = document.getElementById('openseo-source'); if (d instanceof HTMLDetailsElement) d.open = true; }}>Sign in again</a></div>{/if}
 									{#if !r.openseoChoices[0]?.suggested}<form method="POST" action="?/openseoCreate" use:enhance class="mt-1"><input type="hidden" name="siteId" value={r.id} /><button class="btn btn-ghost btn-xs" title="Creates a project named after this site, with its domain, in OpenSEO (no credits) and links it"><Plus class="size-3.5" />Create project</button></form>{/if}
 									{#if r.skipped.includes(k)}<div class="mt-1 text-[11px] text-muted-foreground">unlinked on purpose</div>{/if}
 								{:else if k === 'openseo' && data.openseo && !data.readOnly}
 									<form method="POST" action="?/openseoCreate" use:enhance><input type="hidden" name="siteId" value={r.id} /><button class="btn btn-xs" title="Creates a project named after this site, with its domain, in OpenSEO (no credits) and links it"><Plus class="size-3.5" />Create project</button></form>
-								{:else if k === 'openseo' && data.openseo}<span class="text-[11px] text-muted-foreground" title="OpenSEO links a site to the project on its domain, automatically (also nightly). Create a project for this domain in OpenSEO and it links on its own.">no project for this domain</span>
+								{:else if k === 'openseo' && data.openseo}<span class="text-[11px] text-muted-foreground" title="OpenSEO links a site to the project on its domain, automatically (also hourly). Create a project for this domain in OpenSEO and it links on its own.">no project for this domain</span>
 								{:else if r.skipped.includes(k)}<span class="text-muted-foreground" title="Unlinked on purpose: automatic matching leaves it alone.">– unlinked</span>
 								{:else}<span class="text-muted-foreground">–</span>{/if}
 							</td>
