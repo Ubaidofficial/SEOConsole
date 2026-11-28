@@ -20,7 +20,9 @@ const Q = String.raw`\\*["']`;
 const SNIPPET_ID = new RegExp(`${Q}clarity${Q}\\s*,\\s*${Q}script${Q}\\s*,\\s*${Q}([a-z0-9]{6,16})${Q}`, 'gi');
 const TAG_URL_ID = /clarity\.ms\/tag\/([a-z0-9]{6,16})(?![a-z0-9])/gi;
 const LOADER = /clarity\.ms\/tag\//i;
-const GTM_URL = /googletagmanager\.com\/gtm\.js\?id=(GTM-[A-Z0-9]{4,12})/gi;
+// gtm.js is the script part of Tag Manager's install code; ns.html is its <noscript> part, which stays in the HTML even when
+// the script is added by a separate file (as on a page whose Content-Security-Policy blocks inline scripts).
+const GTM_URL = /googletagmanager\.com\/(?:gtm\.js|ns\.html)\?id=(GTM-[A-Z0-9]{4,12})/gi;
 const GTM_SNIPPET = new RegExp(`${Q}dataLayer${Q}\\s*,\\s*${Q}(GTM-[A-Z0-9]{4,12})${Q}`, 'gi');
 
 const all = (re: RegExp, s: string, up = false) => [...s.matchAll(re)].map((m) => (up ? m[1].toUpperCase() : m[1].toLowerCase()));
