@@ -44,9 +44,22 @@ Google Tag Manager, with the GA4 Google tag inside the container, is loaded by `
 
 To turn it on: create the container and GA4 property (SEOConsole's `setup_google_tag` does both once the site is in Search Console), put the `GTM-…` ID in the meta tag, and redeploy. `index.html` is never cached, so the change is live on the next load.
 
+## Article pages
+
+Besides the one-page home page there are article pages, one folder each with its own `index.html`: `google-search-console-mcp/` (the MCP server and all its tools) and `search-console/` (a hub plus one guide per Page indexing status). They share the home page's header, footer, `styles.css`, Tag Manager container (`gtm-id` meta and noscript frame) and policy, and add `assets/doc.css` for article typography.
+
+To add a page:
+
+1. Create `site/<folder>/index.html` (copy an existing article page for the head, header and footer).
+2. Add the URL to `sitemap.xml`.
+3. If it is a new top-level folder, add a `COPY <folder> /usr/share/nginx/html/<folder>` line to the `Dockerfile`, or it is not deployed.
+4. Link to it from the hub, related pages or the footer.
+
+`tests/site.test.ts` checks each article page: in the sitemap and Dockerfile, its own canonical, title of at most 60 characters and description of at most 160, one `<h1>`, no inline styles or scripts, current `?v=` hashes, the same container as the home page, working local links and anchors, and that the MCP page lists exactly the app's MCP tools. nginx serves `/folder` as a redirect to `/folder/` (`absolute_redirect off`, so the redirect keeps the public host and port).
+
 ## Caching
 
-`index.html` is never cached (`no-cache`); everything under `assets/` is cached for a day. The stylesheet and script are linked as `styles.css?v=…` and `main.js?v=…`, where the value is the first 10 hex characters of the file's SHA-256, so visitors get a changed file as soon as the new page is deployed. After editing either file, update its `?v=` (`tests/site.test.ts` fails and prints the new value).
+`index.html` is never cached (`no-cache`); everything under `assets/` is cached for a day. The stylesheets and scripts are linked as `styles.css?v=…`, `doc.css?v=…`, `main.js?v=…` and `analytics.js?v=…`, where the value is the first 10 hex characters of the file's SHA-256, so visitors get a changed file as soon as the new page is deployed. After editing either file, update its `?v=` (`tests/site.test.ts` fails and prints the new value).
 
 ## Refreshing the screenshots
 

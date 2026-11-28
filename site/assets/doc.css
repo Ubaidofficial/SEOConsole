@@ -1,0 +1,52 @@
+/* Article pages (guides, the MCP page): loaded after styles.css, which supplies the variables, header, buttons and footer.
+   No inline styles anywhere: the policy (style-src 'self') blocks them. */
+.doc-page .top { background: rgba(250, 250, 249, 0.92); border-bottom-color: var(--line); }
+.doc { max-width: 760px; margin: 0 auto; padding: clamp(28px, 5vw, 56px) clamp(20px, 4vw, 40px) clamp(56px, 7vw, 96px); }
+.crumbs { font-size: 14px; color: var(--dim); margin: 0 0 22px; }
+.crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.crumbs li + li::before { content: '/'; margin-right: 6px; color: var(--line2); }
+.crumbs a { color: var(--mut); text-decoration: underline; text-underline-offset: 3px; }
+.doc h1 { font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.05; letter-spacing: -0.045em; font-weight: 700; margin: 0 0 18px; }
+.doc .lede { font-size: clamp(1.08rem, 1.7vw, 1.25rem); color: var(--mut); margin: 0 0 14px; }
+.doc .meta { font-size: 13.5px; color: var(--dim); margin: 0 0 34px; }
+.doc h2 { font-size: clamp(1.45rem, 2.6vw, 1.9rem); letter-spacing: -0.035em; line-height: 1.15; margin: 48px 0 14px; scroll-margin-top: 84px; }
+.doc h3 { font-size: 1.15rem; letter-spacing: -0.02em; margin: 30px 0 8px; }
+.doc p, .doc li { color: #2b2b31; }
+.doc p { margin: 0 0 16px; }
+.doc ul, .doc ol { margin: 0 0 18px; padding-left: 22px; }
+.doc li { margin-bottom: 8px; }
+.doc a { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line2); }
+.doc a:hover { text-decoration-color: var(--fg); }
+.doc a.btn { text-decoration: none; }
+.doc code { background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 0.88em; }
+.doc pre { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.6; margin: 0 0 18px; }
+.doc pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+.doc .tl { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--line2); border-radius: 12px; background: var(--card); }
+.doc table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.doc th, .doc td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.doc thead th { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--mut); background: var(--bg2); }
+.doc tbody tr:last-child td, .doc tbody tr:last-child th { border-bottom: 0; }
+.doc td code { white-space: nowrap; }
+.doc .callout { border: 1px solid var(--line2); border-left: 4px solid var(--acc-ink); border-radius: 12px; background: var(--card); padding: 16px 18px; margin: 0 0 22px; }
+.doc .callout p:last-child { margin-bottom: 0; }
+.doc .callout.warn { border-left-color: #b54708; }
+.doc .toc { border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin: 0 0 30px; background: var(--card); font-size: 15px; }
+.doc .toc p { margin: 0 0 6px; font-weight: 600; }
+.doc .toc ol { margin: 0; }
+.doc .toc li { margin-bottom: 4px; }
+.doc .cta { margin: 44px 0 0; border: 1px solid var(--line2); border-radius: 18px; padding: 24px; background: var(--card); box-shadow: var(--shadow); }
+.doc .cta h2 { margin-top: 0; }
+.doc .cta .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.doc .tools { columns: 2; column-gap: 28px; padding-left: 0; list-style: none; }
+.doc .tools li { break-inside: avoid; margin-bottom: 4px; font-size: 14.5px; }
+.doc .cards { list-style: none; padding: 0; display: grid; gap: 12px; }
+.doc .cards li { border: 1px solid var(--line2); border-radius: 14px; padding: 16px 18px; background: var(--card); margin: 0; }
+.doc .cards a { font-weight: 600; }
+.doc .cards p { margin: 4px 0 0; font-size: 15px; color: var(--mut); }
+.doc .related { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); }
+@media (max-width: 560px) { .doc .tools { columns: 1; } .doc th, .doc td { padding: 9px 10px; } }
+.doc details { border-bottom: 1px solid var(--line); padding: 12px 0; }
+.doc details summary { cursor: pointer; font-weight: 600; }
+.doc details p { margin: 8px 0 0; color: var(--mut); }
+.doc h3 small, .doc .tools small { color: var(--dim); font-weight: 500; }
+.doc .crumbs ol { padding: 0; margin: 0; } .doc .crumbs li { margin: 0; color: var(--dim); }

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alternate Page With Proper Canonical Tag: Is It a Problem?</title>
+<meta name="description" content="What &quot;Alternate page with proper canonical tag&quot; means in Search Console, why it is usually fine, and the template mistakes that make it a problem.">
+<meta name="theme-color" content="#fafaf9">
+<meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…), the same as on the home page; see site/README.md. -->
+<meta name="gtm-id" content="GTM-PRNK336D">
+<link rel="canonical" href="https://seoconsole.app/search-console/alternate-page-with-proper-canonical-tag/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SEOConsole">
+<meta property="og:title" content="Alternate Page With Proper Canonical Tag: Is It a Problem?">
+<meta property="og:description" content="What &quot;Alternate page with proper canonical tag&quot; means in Search Console, why it is usually fine, and the template mistakes that make it a problem.">
+<meta property="og:url" content="https://seoconsole.app/search-console/alternate-page-with-proper-canonical-tag/">
+<meta property="og:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="alternate icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
+<link rel="stylesheet" href="/assets/doc.css?v=a385b1e1ef">
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"Alternate page with proper canonical tag","item":"https://seoconsole.app/search-console/alternate-page-with-proper-canonical-tag/"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TechArticle","headline":"Alternate page with proper canonical tag","description":"What \"Alternate page with proper canonical tag\" means in Search Console, why it is usually fine, and the template mistakes that make it a problem.","url":"https://seoconsole.app/search-console/alternate-page-with-proper-canonical-tag/","datePublished":"2026-11-28","dateModified":"2026-11-28","inLanguage":"en","publisher":{"@type":"Organization","name":"SEOConsole","url":"https://seoconsole.app/"}}
+</script>
+</head>
+<body class="doc-page">
+<!-- Google Tag Manager (noscript): same container as the gtm-id meta tag; the script part is site/assets/analytics.js -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden title="Google Tag Manager"></iframe></noscript>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar-in">
+    <a class="brand" href="/" aria-label="SEOConsole home"><img src="/assets/brand/mark-dark.svg" width="30" height="30" alt=""><span>SEOConsole</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/#compare">Compare</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="bar-cta">
+      <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
+      <a class="btn small primary" href="/#self-host">Run the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="doc">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">SEOConsole</a></li><li><a href="/search-console/">Search Console guides</a></li><li aria-current="page">Alternate page with proper canonical tag</li></ol></nav>
+<h1>Alternate page with proper canonical tag</h1>
+<p class="lede">This page has a <code>rel="canonical"</code> tag pointing to another URL, and Google agreed with it, so Google indexes the other URL instead. Google's own help calls this usually a good sign. It is only a problem when the canonical tag points somewhere it should not.</p>
+<p class="meta">Updated 28 November 2026 · Search Console guide</p>
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol>
+<li><a href="#meaning">What the status means</a></li>
+<li><a href="#normal">When it is normal</a></li>
+<li><a href="#problem">When it is a problem</a></li>
+<li><a href="#fix">How to fix a wrong canonical</a></li>
+<li><a href="#related-statuses">Statuses that look similar</a></li>
+</ol></nav>
+
+<h2 id="meaning">What the status means</h2>
+<p>In Search Console's <b>Indexing → Pages</b> report, this reason means the page declares another URL as its canonical, Google followed that, and so this alternate URL is not indexed on its own. The canonical URL is the one that appears in search.</p>
+<div class="callout"><p>The question to ask is not "why isn't this page indexed?" but "<b>should this page point somewhere else at all?</b>" If yes, you can ignore the entry. If no, the canonical tag is wrong.</p></div>
+
+<h2 id="normal">When it is normal</h2>
+<ul>
+<li>URLs with tracking, sorting or filter parameters that point to the clean URL.</li>
+<li>AMP pages or a separate mobile site (<code>m.example.com</code>) pointing to the main version.</li>
+<li>Product variants (colour, size) that point to one main product page.</li>
+<li>Content you republished on purpose with a canonical to the original.</li>
+</ul>
+<p>A steady number of these entries on a site with parameters or variants is expected. It does not hold the canonical pages back.</p>
+
+<h2 id="problem">When it is a problem</h2>
+<p>Watch for pages that <b>should rank on their own</b> showing up here. Usual causes:</p>
+<ul>
+<li><b>A template sends every page's canonical to the home page</b> or to one category page, often after a theme, plugin or framework change.</li>
+<li><b>Paginated pages all point to page 1</b>, so products or posts linked only from page 2 onward lose their path into the index.</li>
+<li><b>The canonical uses the wrong host or protocol</b>, such as a staging domain or <code>http://</code>, left over from a migration.</li>
+<li><b>Language versions point to one language</b> instead of to themselves (with hreflang between them).</li>
+</ul>
+<p>A sudden jump in this count right after a release is the clearest sign of a template bug. Open a few example URLs and look at the canonical in the page source.</p>
+
+<h2 id="fix">How to fix a wrong canonical</h2>
+<ol>
+<li>Give every page that should rank a <b>self-referencing canonical</b> with its own absolute URL.</li>
+<li>Make sure each canonical target <b>returns 200</b>, is not redirected, is not <code>noindex</code> and is not blocked in robots.txt.</li>
+<li>Keep the <b>sitemap</b> and <b>internal links</b> pointing to the canonical URLs, so every signal agrees.</li>
+<li>Inspect a fixed URL with <b>URL Inspection</b>, then press <b>Validate fix</b> in the report. Google has to recrawl before the status changes, and gives no fixed time for that.</li>
+</ol>
+
+<h2 id="related-statuses">Statuses that look similar</h2>
+<div class="tl"><table>
+<thead><tr><th scope="col">Status</th><th scope="col">What happened</th></tr></thead>
+<tbody>
+<tr><th scope="row">Alternate page with proper canonical tag</th><td>You declared another URL as canonical, and Google agreed.</td></tr>
+<tr><th scope="row"><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a></th><td>You declared no canonical; Google picked another URL itself.</td></tr>
+<tr><th scope="row">Duplicate, Google chose different canonical than user</th><td>You declared a canonical, but Google preferred a different URL.</td></tr>
+</tbody></table></div>
+
+<section class="cta" aria-labelledby="h-cta">
+<h2 id="h-cta">Catch this before it costs you traffic</h2>
+<p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
+<div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
+</section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li></ul></section>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://support.google.com/webmasters/answer/7440203" rel="noopener">Page indexing report</a>, Search Console Help</li>
+<li><a href="https://support.google.com/webmasters/answer/9012289" rel="noopener">URL Inspection tool</a>, Search Console Help</li>
+<li><a href="https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls" rel="noopener">How to specify a canonical with rel="canonical" and other methods</a>, Google Search Central</li>
+</ul>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="/"><img src="/assets/brand/mark-dark.svg" width="26" height="26" alt=""><span>SEOConsole</span></a>
+    <nav aria-label="Footer">
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
+      <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
+      <a href="https://app.seoconsole.app/terms" rel="noopener">Terms of service</a>
+    </nav>
+    <p>© 2026 SEOConsole. Google Search Console, Bing, GA4, Tag Manager, Microsoft Clarity, IndexNow, Claude, Claude Code, ChatGPT, Cursor, Windsurf, Model Context Protocol and the other names here belong to their owners. SEOConsole is not affiliated with or endorsed by them.</p>
+  </div>
+</footer>
+</body>
+</html>

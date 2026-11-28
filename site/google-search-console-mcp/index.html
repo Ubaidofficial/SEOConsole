@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Search Console MCP Server (Free, Open Source)</title>
+<meta name="description" content="Connect Claude, ChatGPT, Claude Code or Cursor to Google Search Console, Bing and GA4 for every site you run. 81 tools, read-only until you allow changes.">
+<meta name="theme-color" content="#fafaf9">
+<meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…), the same as on the home page; see site/README.md. -->
+<meta name="gtm-id" content="GTM-PRNK336D">
+<link rel="canonical" href="https://seoconsole.app/google-search-console-mcp/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SEOConsole">
+<meta property="og:title" content="Google Search Console MCP Server (Free, Open Source)">
+<meta property="og:description" content="Connect Claude, ChatGPT, Claude Code or Cursor to Google Search Console, Bing and GA4 for every site you run. 81 tools, read-only until you allow changes.">
+<meta property="og:url" content="https://seoconsole.app/google-search-console-mcp/">
+<meta property="og:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="alternate icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
+<link rel="stylesheet" href="/assets/doc.css?v=a385b1e1ef">
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"MCP server","item":"https://seoconsole.app/google-search-console-mcp/"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"SEOConsole","applicationCategory":"BusinessApplication","operatingSystem":"Linux, macOS, Docker","url":"https://seoconsole.app/google-search-console-mcp/","codeRepository":"https://github.com/Ubaidofficial/OpenSiteConsole","license":"https://www.gnu.org/licenses/agpl-3.0.html","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"Connect Claude, ChatGPT, Claude Code or Cursor to Google Search Console, Bing and GA4 for every site you run. 81 tools, read-only until you allow changes."}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is the Search Console MCP server free?","acceptedAnswer":{"@type":"Answer","text":"Yes. It is part of SEOConsole, which is open source under the AGPL-3.0 licence and free to self-host with every feature. A hosted plan at $9 a month is planned but not open yet."}},{"@type":"Question","name":"Which AI clients work with it?","acceptedAnswer":{"@type":"Answer","text":"Claude’s custom connector works with one-click sign-in, and Claude Code works with a single command. Any MCP client that speaks HTTP with a bearer token or OAuth should work, but only Claude has been confirmed."}},{"@type":"Question","name":"Can the agent change my sites?","acceptedAnswer":{"@type":"Answer","text":"Only if you allow it. A connection reads by default. A key needs the submit level before it can send URLs or sitemaps, and deleting is a separate level. Every change is written to an audit log."}},{"@type":"Question","name":"Where does my data go?","acceptedAnswer":{"@type":"Answer","text":"Your search data stays in a SQLite file on the server you run SEOConsole on. Whatever an agent reads is sent to that agent’s provider, so connect only agents you trust with that data."}},{"@type":"Question","name":"Does it need my Search Console password?","acceptedAnswer":{"@type":"Answer","text":"No. You connect Google once in SEOConsole with Google’s own sign-in, and the AI app signs in to your SEOConsole with OAuth or a key you create. The agent never sees your Google credentials."}}]}
+</script>
+</head>
+<body class="doc-page">
+<!-- Google Tag Manager (noscript): same container as the gtm-id meta tag; the script part is site/assets/analytics.js -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden title="Google Tag Manager"></iframe></noscript>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar-in">
+    <a class="brand" href="/" aria-label="SEOConsole home"><img src="/assets/brand/mark-dark.svg" width="30" height="30" alt=""><span>SEOConsole</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/#compare">Compare</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="bar-cta">
+      <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
+      <a class="btn small primary" href="/#self-host">Run the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="doc">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">SEOConsole</a></li><li aria-current="page">MCP server</li></ol></nav>
+<h1>Google Search Console MCP server</h1>
+<p class="lede">SEOConsole includes a Model Context Protocol server, so Claude, ChatGPT, Claude Code, Cursor and other MCP apps can answer questions from your own Search Console data, for every property and Google account you connect, with Bing, GA4, Tag Manager and Clarity beside it. It is free and open source, and it reads until you allow it to change anything.</p>
+<p class="meta">Updated 28 November 2026</p>
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol>
+<li><a href="#ask">What you can ask</a></li>
+<li><a href="#different">How it differs from calling the API live</a></li>
+<li><a href="#connect">Connect your AI app</a></li>
+<li><a href="#permissions">Permissions and safety</a></li>
+<li><a href="#tools">All 81 tools</a></li>
+<li><a href="#faq">FAQ</a></li>
+</ol></nav>
+
+<h2 id="ask">What you can ask</h2>
+<ul>
+<li>“What should I fix first across all my sites?” (<code>get_action_queue</code>)</li>
+<li>“Why did clicks drop on this site last week?” (<code>get_drop_diagnosis</code>, <code>get_trends</code>)</li>
+<li>“Which searches sit just off page one, and what would moving them up be worth?” (<code>get_opportunities</code>)</li>
+<li>“Which sitemap pages have never appeared in search, and why?” (<code>get_sitemap_coverage</code>, <code>get_indexing_status</code>)</li>
+<li>“Does Tag Manager send to the right GA4 property?” (<code>get_tracking_health</code>)</li>
+<li>“How much traffic do AI assistants send us?” (<code>get_ai_traffic</code>)</li>
+</ul>
+
+<h2 id="different">How it differs from calling the API live</h2>
+<p>A server that passes every question straight to the Search Console API is limited to what that API returns on the spot. SEOConsole syncs your data first and the agent reads from that store:</p>
+<ul>
+<li><b>History past 16 months:</b> Search Console keeps about 16 months; SEOConsole keeps everything it has synced from the day you connect. It cannot recover data Google no longer has.</li>
+<li><b>Every site at once:</b> all properties and Google accounts in one place, so one question can cover your whole portfolio.</li>
+<li><b>Findings, not only rows:</b> a ranked to-do list, opportunities sized on each site's own click curve, drop diagnosis, alerts and a weekly digest.</li>
+<li><b>More than Google:</b> Bing Webmaster data, GA4, Tag Manager, Clarity and Core Web Vitals beside Search Console.</li>
+<li><b>An indexing toolkit:</b> stored URL Inspection results, sitemap checks, IndexNow and Bing submission, and a request list for the pages worth asking Google about.</li>
+</ul>
+
+<h2 id="connect">Connect your AI app</h2>
+<p>Your MCP address is your SEOConsole address plus <code>/api/mcp</code>, for example <code>https://app.seoconsole.app/api/mcp</code>. The MCP page in your dashboard shows yours.</p>
+<h3>Claude</h3>
+<ol>
+<li>In Claude, open <b>Settings → Connectors</b> and choose <b>Add custom connector</b>.</li>
+<li>Name it <b>SEOConsole</b> and paste your MCP address.</li>
+<li>Click Add, then Connect. Sign in on your SEOConsole, pick the sites Claude may read, and Allow.</li>
+</ol>
+<h3>Claude Code</h3>
+<pre><code>claude mcp add --scope user --transport http \
+  seoconsole https://app.seoconsole.app/api/mcp</code></pre>
+<p>Use your own address, then type <code>/mcp</code> in Claude Code and sign in.</p>
+<h3>ChatGPT</h3>
+<ol>
+<li>Once, on your server: add ChatGPT's callback address to <code>MCP_OAUTH_REDIRECTS</code> (the MCP page explains how).</li>
+<li>In ChatGPT, turn on <b>Developer mode</b> under Settings → Apps &amp; Connectors → Advanced, then create a connector.</li>
+<li>Paste your MCP address, choose <b>OAuth</b>, then sign in on your SEOConsole and Allow.</li>
+</ol>
+<p>This needs a paid ChatGPT plan with developer mode. OpenAI moves these menus often, so check their help if a label differs.</p>
+<h3>Cursor, Codex, Windsurf and others</h3>
+<pre><code>{
+  "mcpServers": {
+    "seoconsole": {
+      "url": "https://app.seoconsole.app/api/mcp",
+      "headers": { "Authorization": "Bearer osc_YOUR_KEY" }
+    }
+  }
+}</code></pre>
+<p>Sign in if the app offers it, or create a key on the MCP page and use this shape.</p>
+
+<h2 id="permissions">Permissions and safety</h2>
+<ul>
+<li><b>Reads by default.</b> The 26 tools that change things refuse unless you gave that connection the <b>submit</b> level, which is off by default.</li>
+<li><b>Deleting is a separate level</b>, also off by default. It adds only two things: removing a sitemap from Search Console and discarding queued submissions, each after a second, confirming call.</li>
+<li><b>What nothing can do:</b> delete your search data, connect accounts, or touch keys and passwords.</li>
+<li><b>Audit log and limits:</b> every change is logged; live URL inspections are rate-limited and have a daily budget per key.</li>
+<li><b>Scoped per site:</b> when you connect with OAuth you choose which sites the app may read.</li>
+</ul>
+
+<h2 id="tools">All 81 tools</h2>
+<p>55 tools read your stored data. 26 act, only with the submit level; two of those need the delete level as well. The same tools are also a plain REST API with the same keys and permissions.</p>
+<h3 class="kicker mono">Read (55)</h3>
+<h3>Performance and history <small>(14)</small></h3><ul class="tools"><li><code>list_sites</code></li><li><code>get_overview</code></li><li><code>get_last_24_hours</code></li><li><code>get_search_types</code></li><li><code>get_top_queries</code></li><li><code>get_top_pages</code></li><li><code>get_page_insights</code></li><li><code>get_performance</code></li><li><code>get_trends</code></li><li><code>get_history</code></li><li><code>get_portfolio</code></li><li><code>get_content_groups</code></li><li><code>get_keyword_buckets</code></li><li><code>get_rank_tracking</code></li></ul><h3>Findings and to-dos <small>(18)</small></h3><ul class="tools"><li><code>get_action_queue</code></li><li><code>get_opportunities</code></li><li><code>get_quick_wins</code></li><li><code>get_drop_diagnosis</code></li><li><code>get_digest</code></li><li><code>get_alerts</code></li><li><code>get_research_findings</code></li><li><code>get_niche_fit</code></li><li><code>get_publishing_health</code></li><li><code>get_google_updates</code></li><li><code>get_update_impact</code></li><li><code>create_content_brief</code></li><li><code>get_internal_link_suggestions</code></li><li><code>get_link_health</code></li><li><code>get_not_found_pages</code></li><li><code>get_onpage_check</code></li><li><code>get_seo_tests</code></li><li><code>get_change_log</code></li></ul><h3>Indexing and sitemaps <small>(11)</small></h3><ul class="tools"><li><code>get_indexing_status</code></li><li><code>inspect_url</code></li><li><code>get_sitemaps</code></li><li><code>check_sitemap</code></li><li><code>get_sitemap_coverage</code></li><li><code>get_sitemap_lastmod_health</code></li><li><code>suggest_indexing_candidates</code></li><li><code>get_submission_status</code></li><li><code>get_indexing_quotas</code></li><li><code>get_request_indexing_queue</code></li><li><code>get_indexnow_status</code></li></ul><h3>Bing, GA4, Tag Manager, Clarity and more <small>(9)</small></h3><ul class="tools"><li><code>get_bing_performance</code></li><li><code>get_ga4_summary</code></li><li><code>get_gtm_container</code></li><li><code>get_tracking_health</code></li><li><code>get_clarity_snapshot</code></li><li><code>get_web_vitals</code></li><li><code>get_ai_traffic</code></li><li><code>get_ai_visibility</code></li><li><code>get_openseo_project</code></li></ul><h3>Settings <small>(3)</small></h3><ul class="tools"><li><code>get_connections</code></li><li><code>get_automation</code></li><li><code>get_site_settings</code></li></ul>
+<h3 class="kicker mono">Act, with the submit level (26)</h3>
+<h3>Indexing and sitemaps <small>(12)</small></h3><ul class="tools"><li><code>submit_urls_for_indexing</code></li><li><code>inspect_and_submit_urls</code></li><li><code>submit_indexnow</code></li><li><code>setup_indexnow</code></li><li><code>submit_sitemap</code></li><li><code>read_sitemaps</code></li><li><code>run_indexing_check</code></li><li><code>watch_urls</code></li><li><code>build_request_indexing_queue</code></li><li><code>mark_indexing_requested</code></li><li><code>delete_sitemap</code> <small>(delete level)</small></li><li><code>cancel_indexing_queue</code> <small>(delete level)</small></li></ul><h3>Workflow <small>(9)</small></h3><ul class="tools"><li><code>mark_action</code></li><li><code>log_change</code></li><li><code>start_seo_test</code></li><li><code>set_brand_terms</code></li><li><code>set_automation</code></li><li><code>sync_site</code></li><li><code>run_onpage_check</code></li><li><code>track_queries</code></li><li><code>close_alert</code></li></ul><h3>Tracking setup <small>(3)</small></h3><ul class="tools"><li><code>setup_google_tag</code></li><li><code>track_key_event</code></li><li><code>fix_duplicate_google_tag</code></li></ul><h3>Site ownership (off unless the server enables it) <small>(2)</small></h3><ul class="tools"><li><code>get_site_verification_token</code></li><li><code>verify_site_ownership</code></li></ul>
+
+<h2 id="faq">FAQ</h2>
+<details><summary>Is the Search Console MCP server free?</summary><p>Yes. It is part of SEOConsole, which is open source under the AGPL-3.0 licence and free to self-host with every feature. A hosted plan at $9 a month is planned but not open yet.</p></details><details><summary>Which AI clients work with it?</summary><p>Claude’s custom connector works with one-click sign-in, and Claude Code works with a single command. Any MCP client that speaks HTTP with a bearer token or OAuth should work, but only Claude has been confirmed.</p></details><details><summary>Can the agent change my sites?</summary><p>Only if you allow it. A connection reads by default. A key needs the submit level before it can send URLs or sitemaps, and deleting is a separate level. Every change is written to an audit log.</p></details><details><summary>Where does my data go?</summary><p>Your search data stays in a SQLite file on the server you run SEOConsole on. Whatever an agent reads is sent to that agent’s provider, so connect only agents you trust with that data.</p></details><details><summary>Does it need my Search Console password?</summary><p>No. You connect Google once in SEOConsole with Google’s own sign-in, and the AI app signs in to your SEOConsole with OAuth or a key you create. The agent never sees your Google credentials.</p></details>
+
+<section class="cta" aria-labelledby="h-cta">
+<h2 id="h-cta">Run it on demo data first</h2>
+<p>Start SEOConsole with its built-in demo data in three commands, connect your AI app to it and ask away. When you like what you see, connect your own Google account.</p>
+<div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
+</section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Search Console guides</h2><ul class="cards"><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li><li><a href="/search-console/alternate-page-with-proper-canonical-tag/">Alternate page with proper canonical tag</a><p>The page points to another URL as its canonical and Google agreed. Usually fine, unless the tag points somewhere it should not.</p></li><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li></ul></section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="/"><img src="/assets/brand/mark-dark.svg" width="26" height="26" alt=""><span>SEOConsole</span></a>
+    <nav aria-label="Footer">
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
+      <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
+      <a href="https://app.seoconsole.app/terms" rel="noopener">Terms of service</a>
+    </nav>
+    <p>© 2026 SEOConsole. Google Search Console, Bing, GA4, Tag Manager, Microsoft Clarity, IndexNow, Claude, Claude Code, ChatGPT, Cursor, Windsurf, Model Context Protocol and the other names here belong to their owners. SEOConsole is not affiliated with or endorsed by them.</p>
+  </div>
+</footer>
+</body>
+</html>

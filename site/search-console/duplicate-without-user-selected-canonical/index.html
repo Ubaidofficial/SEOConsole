@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duplicate Without User-Selected Canonical: Meaning &amp; Fix</title>
+<meta name="description" content="What the Search Console status &quot;Duplicate without user-selected canonical&quot; means, when it is fine, when it is a problem, and how to fix it.">
+<meta name="theme-color" content="#fafaf9">
+<meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…), the same as on the home page; see site/README.md. -->
+<meta name="gtm-id" content="GTM-PRNK336D">
+<link rel="canonical" href="https://seoconsole.app/search-console/duplicate-without-user-selected-canonical/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SEOConsole">
+<meta property="og:title" content="Duplicate Without User-Selected Canonical: Meaning &amp; Fix">
+<meta property="og:description" content="What the Search Console status &quot;Duplicate without user-selected canonical&quot; means, when it is fine, when it is a problem, and how to fix it.">
+<meta property="og:url" content="https://seoconsole.app/search-console/duplicate-without-user-selected-canonical/">
+<meta property="og:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="alternate icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
+<link rel="stylesheet" href="/assets/doc.css?v=a385b1e1ef">
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"Duplicate without user-selected canonical","item":"https://seoconsole.app/search-console/duplicate-without-user-selected-canonical/"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TechArticle","headline":"Duplicate without user-selected canonical","description":"What the Search Console status \"Duplicate without user-selected canonical\" means, when it is fine, when it is a problem, and how to fix it.","url":"https://seoconsole.app/search-console/duplicate-without-user-selected-canonical/","datePublished":"2026-11-28","dateModified":"2026-11-28","inLanguage":"en","publisher":{"@type":"Organization","name":"SEOConsole","url":"https://seoconsole.app/"}}
+</script>
+</head>
+<body class="doc-page">
+<!-- Google Tag Manager (noscript): same container as the gtm-id meta tag; the script part is site/assets/analytics.js -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden title="Google Tag Manager"></iframe></noscript>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar-in">
+    <a class="brand" href="/" aria-label="SEOConsole home"><img src="/assets/brand/mark-dark.svg" width="30" height="30" alt=""><span>SEOConsole</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/#compare">Compare</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="bar-cta">
+      <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
+      <a class="btn small primary" href="/#self-host">Run the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="doc">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">SEOConsole</a></li><li><a href="/search-console/">Search Console guides</a></li><li aria-current="page">Duplicate without user-selected canonical</li></ol></nav>
+<h1>Duplicate without user-selected canonical</h1>
+<p class="lede">Google decided this page is a copy of another URL, found no canonical tag saying which version you prefer, and chose the other one to show in search. Most of the time that is Google working as intended. It becomes a problem when Google picks the wrong page.</p>
+<p class="meta">Updated 28 November 2026 · Search Console guide</p>
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol>
+<li><a href="#meaning">What the status means</a></li>
+<li><a href="#check">Check which URL Google chose</a></li>
+<li><a href="#causes">Common causes</a></li>
+<li><a href="#fix">How to fix it</a></li>
+<li><a href="#avoid">What not to do</a></li>
+<li><a href="#after">After the fix</a></li>
+</ol></nav>
+
+<h2 id="meaning">What the status means</h2>
+<p>You find this status in Search Console under <b>Indexing → Pages</b>, in the list of reasons why pages are not indexed. Google's help page describes it this way: the page is a duplicate of another page, it does not declare a canonical, and Google has chosen the other page as the canonical. Google does not show this URL in search; it shows the canonical instead.</p>
+<p>That is not a penalty. If two URLs carry the same content, you want one of them in search, not both. The status only tells you that Google made the choice for you.</p>
+<div class="callout"><p><b>Fine:</b> Google chose the URL you would have chosen, such as the clean URL over one with tracking parameters.<br><b>A problem:</b> Google chose a URL you do not want people to land on, or it merged two pages that are meant to rank separately.</p></div>
+
+<h2 id="check">Check which URL Google chose</h2>
+<ol>
+<li>In the Pages report, open <b>Duplicate without user-selected canonical</b> and click an example URL.</li>
+<li>Choose <b>Inspect URL</b>. In the URL Inspection result, open <b>Page indexing</b>.</li>
+<li>Compare <b>User-declared canonical</b> (here it is empty, which is why the page has this status) with <b>Google-selected canonical</b>.</li>
+</ol>
+<p>Google's help notes that the live test does not check duplicate status, so read the indexed result, not only the live test.</p>
+
+<h2 id="causes">Common causes</h2>
+<ul>
+<li><b>URL parameters:</b> the same page reachable with <code>?utm_source=</code>, <code>?sort=</code>, <code>?ref=</code> or session IDs.</li>
+<li><b>Host and protocol variants:</b> both <code>http://</code> and <code>https://</code>, or both <code>www.</code> and the bare domain, answer with the page instead of redirecting.</li>
+<li><b>Trailing slashes and case:</b> <code>/pricing</code> and <code>/pricing/</code>, or <code>/Blog</code> and <code>/blog</code>, both return the page.</li>
+<li><b>Near-identical templates:</b> product variants, location pages or tag archives with little text of their own.</li>
+<li><b>Print, AMP or feed versions</b> without a canonical back to the main page.</li>
+</ul>
+
+<h2 id="fix">How to fix it</h2>
+<p>If Google's choice is right, you can leave it: nothing is broken. Declaring the canonical yourself still helps, because it turns Google's guess into your instruction. If the choice is wrong, use these signals, which Google's canonical documentation lists from strong to weak:</p>
+<ol>
+<li><b>301 redirects</b> from the duplicate to the preferred URL, when the duplicate does not need to exist (old URLs, host and protocol variants).</li>
+<li><b>A <code>rel="canonical"</code> link</b> in the <code>&lt;head&gt;</code> of each duplicate, with the absolute preferred URL, plus a self-referencing canonical on the preferred page.</li>
+<li><b>Consistent internal links:</b> link to the preferred URL everywhere, without parameters.</li>
+<li><b>A sitemap that lists only the preferred URLs</b>. Google calls sitemap inclusion a weak signal on its own, so use it together with the two above.</li>
+</ol>
+<p>If two pages are meant to rank on their own, the fix is the opposite: make them clearly different, with their own title, main text and purpose, and give each a self-referencing canonical.</p>
+<pre><code>&lt;!-- on https://example.com/shoes?sort=price --&gt;
+&lt;link rel="canonical" href="https://example.com/shoes"&gt;</code></pre>
+
+<h2 id="avoid">What not to do</h2>
+<ul>
+<li><b>Do not block duplicates in robots.txt.</b> Google's documentation says not to use robots.txt for canonicalization: a blocked URL cannot show its canonical tag, and it can still be indexed without its content.</li>
+<li><b>Do not use <code>noindex</code> to pick the canonical.</b> Google advises against it; use the signals above.</li>
+<li><b>Do not use the URL removal tool</b> for this. It hides every version of the URL from search, not just the duplicate.</li>
+<li><b>Do not keep pressing Request Indexing</b> on the duplicate. Google will index the canonical, not the copy.</li>
+</ul>
+
+<h2 id="after">After the fix</h2>
+<p>Google has to recrawl the pages before the report changes, which can take days or weeks; Google gives no fixed time. You can press <b>Validate fix</b> in the report to ask Google to check the listed URLs, then watch the count fall. Spot-check a few URLs with URL Inspection to confirm the Google-selected canonical is now the one you declared. Google still chooses the canonical from all its signals, so it can occasionally keep a different one.</p>
+
+<section class="cta" aria-labelledby="h-cta">
+<h2 id="h-cta">Catch this before it costs you traffic</h2>
+<p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
+<div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
+</section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/alternate-page-with-proper-canonical-tag/">Alternate page with proper canonical tag</a><p>The page points to another URL as its canonical and Google agreed. Usually fine, unless the tag points somewhere it should not.</p></li><li><a href="/search-console/discovered-currently-not-indexed/">Discovered – currently not indexed</a><p>Google knows the URL exists but has not crawled it yet. Common on new sites, large sites and pages with few internal links.</p></li></ul></section>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://support.google.com/webmasters/answer/7440203" rel="noopener">Page indexing report</a>, Search Console Help</li>
+<li><a href="https://support.google.com/webmasters/answer/9012289" rel="noopener">URL Inspection tool</a>, Search Console Help</li>
+<li><a href="https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls" rel="noopener">How to specify a canonical with rel="canonical" and other methods</a>, Google Search Central</li>
+</ul>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="/"><img src="/assets/brand/mark-dark.svg" width="26" height="26" alt=""><span>SEOConsole</span></a>
+    <nav aria-label="Footer">
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
+      <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
+      <a href="https://app.seoconsole.app/terms" rel="noopener">Terms of service</a>
+    </nav>
+    <p>© 2026 SEOConsole. Google Search Console, Bing, GA4, Tag Manager, Microsoft Clarity, IndexNow, Claude, Claude Code, ChatGPT, Cursor, Windsurf, Model Context Protocol and the other names here belong to their owners. SEOConsole is not affiliated with or endorsed by them.</p>
+  </div>
+</footer>
+</body>
+</html>
