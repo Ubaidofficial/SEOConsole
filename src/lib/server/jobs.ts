@@ -329,8 +329,10 @@ export function startScheduler() {
 	setTimeout(schedulerTick, 3000);
 	globalThis.__openSiteConsoleScheduler = setInterval(() => {
 		schedulerTick();
-		// Once a night: the tick runs four times in hour 3, so the day it last ran is remembered.
-		if (new Date().getUTCHours() === 3 && kvOlderThan('properties_refreshed', 20 * 3600_000)) void refreshAllAccountSites();
+		// Once an hour (the tick runs every 15 minutes, so the last run is remembered): a property added in Search Console shows up,
+		// and gets its Bing, GA4, Tag Manager and OpenSEO links, within the hour instead of the next night. It is one property-list
+		// call per Google account; the link matching only calls the other APIs while a site still has a source to link.
+		if (kvOlderThan('properties_refreshed', 55 * 60_000)) void refreshAllAccountSites();
 	}, 15 * 60_000);
 	globalThis.__openSiteConsoleScheduler.unref?.();
 }
