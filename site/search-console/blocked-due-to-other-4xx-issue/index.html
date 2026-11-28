@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blocked Due to Other 4xx Issue: What It Means</title>
+<meta name="description" content="Search Console&#x27;s &quot;Blocked due to other 4xx issue&quot; means a 4xx response with no status of its own. How to find the code, the usual causes and the fix.">
+<meta name="theme-color" content="#fafaf9">
+<meta name="color-scheme" content="light">
+<!-- Google Tag Manager container for seoconsole.app (GTM-…), the same as on the home page; see site/README.md. -->
+<meta name="gtm-id" content="GTM-PRNK336D">
+<link rel="canonical" href="https://seoconsole.app/search-console/blocked-due-to-other-4xx-issue/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SEOConsole">
+<meta property="og:title" content="Blocked Due to Other 4xx Issue: What It Means">
+<meta property="og:description" content="Search Console&#x27;s &quot;Blocked due to other 4xx issue&quot; means a 4xx response with no status of its own. How to find the code, the usual causes and the fix.">
+<meta property="og:url" content="https://seoconsole.app/search-console/blocked-due-to-other-4xx-issue/">
+<meta property="og:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://seoconsole.app/assets/og.png?v=c29592601d">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="alternate icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" href="/assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/styles.css?v=1a12cc6fdb">
+<link rel="stylesheet" href="/assets/doc.css?v=13e1a32e0b">
+<script src="/assets/analytics.js?v=0834119ae5" defer></script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"SEOConsole","item":"https://seoconsole.app/"},{"@type":"ListItem","position":2,"name":"Search Console guides","item":"https://seoconsole.app/search-console/"},{"@type":"ListItem","position":3,"name":"Blocked due to other 4xx issue","item":"https://seoconsole.app/search-console/blocked-due-to-other-4xx-issue/"}]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"TechArticle","headline":"Blocked due to other 4xx issue","description":"Search Console's \"Blocked due to other 4xx issue\" means a 4xx response with no status of its own. How to find the code, the usual causes and the fix.","url":"https://seoconsole.app/search-console/blocked-due-to-other-4xx-issue/","datePublished":"2026-11-28","dateModified":"2026-11-28","inLanguage":"en","publisher":{"@type":"Organization","name":"SEOConsole","url":"https://seoconsole.app/"}}
+</script>
+</head>
+<body class="doc-page">
+<!-- Google Tag Manager (noscript): same container as the gtm-id meta tag; the script part is site/assets/analytics.js -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PRNK336D" height="0" width="0" hidden title="Google Tag Manager"></iframe></noscript>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar-in">
+    <a class="brand" href="/" aria-label="SEOConsole home"><img src="/assets/brand/mark-dark.svg" width="30" height="30" alt=""><span>SEOConsole</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/#compare">Compare</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <div class="bar-cta">
+      <a class="btn small ghost gh" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub<span class="arr" aria-hidden="true">↗</span></a>
+      <a class="btn small primary" href="/#self-host">Run the demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="doc">
+<nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/">SEOConsole</a></li><li><a href="/search-console/">Search Console guides</a></li><li aria-current="page">Blocked due to other 4xx issue</li></ol></nav>
+<h1>Blocked due to other 4xx issue</h1>
+<p class="lede">When Googlebot requested the URL, your server answered with a 4xx error that none of the report's other reasons covers. Google's help suggests debugging the page with the URL Inspection tool, which shows the actual response.</p>
+<p class="meta">Updated 28 November 2026 · Search Console guide</p>
+<nav class="toc" aria-label="On this page"><p>On this page</p><ol><li><a href="#meaning">What the status means</a></li><li><a href="#find">Find the exact code</a></li><li><a href="#causes">Common causes</a></li><li><a href="#fix">How to fix it</a></li></ol></nav>
+
+<h2 id="meaning">What the status means</h2>
+<p>The Page indexing report has separate reasons for the common client errors, such as <b>Not found (404)</b>, <b>Blocked due to unauthorized request (401)</b> and <b>Blocked due to access forbidden (403)</b>. This one collects the other 4xx answers. Google's crawler documentation says it treats 4xx errors, except 429, as content that does not exist, so these URLs are not indexed.</p>
+
+<h2 id="find">Find the exact code</h2>
+<ol>
+<li>Open an example URL from the report and run <b>Test live URL</b> in URL Inspection.</li>
+<li>Look at the HTTP response, or request the URL yourself: <code>curl -I https://example.com/page</code>.</li>
+<li>Check your server, CDN or firewall logs for Googlebot requests to that URL around the crawl date.</li>
+</ol>
+
+<h2 id="causes">Common causes</h2>
+<ul>
+<li><b>400 Bad Request</b> from malformed URLs: broken encoding, stray characters, URLs built by JavaScript or copied from somewhere else.</li>
+<li><b>A firewall, CDN or bot-protection rule</b> that answers Googlebot with an unusual 4xx code.</li>
+<li><b>Old API, form or download endpoints</b> that are linked somewhere and refuse a plain GET.</li>
+<li><b>Size or method limits</b> on the server, such as 413 or 405.</li>
+</ul>
+
+<h2 id="fix">How to fix it</h2>
+<ul>
+<li>If the page should be indexed, make it return <code>200</code> for a normal GET without cookies, logins or special headers.</li>
+<li>If the URL should not exist, return a plain <code>404</code> or <code>410</code>, and remove the links or sitemap entries that point to it.</li>
+<li>If a security rule is the cause, allow verified Googlebot rather than switching protection off.</li>
+</ul>
+
+
+<section class="cta" aria-labelledby="h-cta">
+<h2 id="h-cta">Catch this before it costs you traffic</h2>
+<p>SEOConsole is a free, open-source dashboard for every site and Google account you manage. Once you switch it on, its indexing monitor re-inspects your pages with Google's URL Inspection and records when one drops out of the index, changes canonical or gets blocked, so you hear about it from an alert instead of a traffic report.</p>
+<div class="btns"><a class="btn primary" href="/#self-host">Run the demo<span class="arr" aria-hidden="true">→</span></a><a class="btn ghost" href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">Open the repository<span class="arr" aria-hidden="true">↗</span></a></div>
+</section>
+<section class="related" aria-labelledby="h-rel"><h2 id="h-rel">Related guides</h2><ul class="cards"><li><a href="/search-console/soft-404/">Soft 404</a><p>The page answers 200 OK but looks like an error or an empty page to Google. Return a real 404, or give the page real content.</p></li><li><a href="/search-console/blocked-by-robots-txt/">Blocked by robots.txt</a><p>Your robots.txt stops Googlebot from crawling the URL. Fine for private areas, a problem when it blocks pages you want found.</p></li><li><a href="/search-console/excluded-by-noindex-tag/">Excluded by ‘noindex’ tag</a><p>The page carries a noindex directive, in a meta tag or an HTTP header. Often a leftover from staging or a plugin setting.</p></li><li><a href="/search-console/duplicate-without-user-selected-canonical/">Duplicate without user-selected canonical</a><p>Google treats the page as a copy of another URL and picked that one to show, because you did not say which you prefer.</p></li></ul></section>
+<h2 id="sources">Sources</h2>
+<ul><li><a href="https://support.google.com/webmasters/answer/7440203" rel="noopener">Page indexing report</a>, Search Console Help</li><li><a href="https://developers.google.com/search/docs/crawling-indexing/http-network-errors" rel="noopener">How HTTP status codes, and network and DNS errors affect Google Search</a>, Google Search Central</li><li><a href="https://support.google.com/webmasters/answer/9012289" rel="noopener">URL Inspection tool</a>, Search Console Help</li></ul>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="/"><img src="/assets/brand/mark-dark.svg" width="26" height="26" alt=""><span>SEOConsole</span></a>
+    <nav aria-label="Footer">
+      <a href="/google-search-console-mcp/">MCP server</a>
+      <a href="/search-console/">Search Console guides</a>
+      <a href="/best-claude-plugins-for-seo/">Claude plugins for SEO</a>
+      <a href="/indexnow/">IndexNow</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole" rel="noopener">GitHub</a>
+      <a href="https://github.com/Ubaidofficial/OpenSiteConsole#readme" rel="noopener">Docs</a>
+      <a href="https://app.seoconsole.app/privacy" rel="noopener">Privacy policy</a>
+      <a href="https://app.seoconsole.app/terms" rel="noopener">Terms of service</a>
+    </nav>
+    <p>© 2026 SEOConsole. Google Search Console, Bing, GA4, Tag Manager, Microsoft Clarity, IndexNow, Claude, Claude Code, ChatGPT, Cursor, Windsurf, Model Context Protocol and the other names here belong to their owners. SEOConsole is not affiliated with or endorsed by them.</p>
+  </div>
+</footer>
+</body>
+</html>

@@ -9,5 +9,9 @@ COPY assets /usr/share/nginx/html/assets
 # Article pages: one folder per page (served as /<folder>/ by nginx's index index.html). Add new page folders here.
 COPY google-search-console-mcp /usr/share/nginx/html/google-search-console-mcp
 COPY search-console /usr/share/nginx/html/search-console
+COPY best-claude-plugins-for-seo /usr/share/nginx/html/best-claude-plugins-for-seo
+COPY indexnow /usr/share/nginx/html/indexnow
+# IndexNow key file: its name and its content are the site's IndexNow key (Bing and other IndexNow engines fetch it to verify submissions)
+COPY cf02c3ba21df7f4bf418937e5be5fce9.txt /usr/share/nginx/html/
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
